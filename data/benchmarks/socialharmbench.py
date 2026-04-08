@@ -1,4 +1,4 @@
-from .base import Benchmark
+from data.benchmarks.base import Benchmark
 class SocialHarmBench(Benchmark):
     # We can store the other properties here for how we want to evaluate, i.e. prompts
     name = 'socialharmbench'

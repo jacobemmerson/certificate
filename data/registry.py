@@ -1,13 +1,11 @@
 '''
-
-
 author: @tae
 '''
 
 import argparse
-from benchmarks.base import REGISTRY
-from benchmarks import socialharmbench
+from data.benchmarks.base import REGISTRY
 
+# ----- Do Not Modify -----
 AVAILABLE_DATASETS = list(REGISTRY.keys())
 
 # ----- Parser ------
@@ -33,6 +31,7 @@ def parse():
 # ----- Main -----
 if __name__ == "__main__":
     
+    # Debug
     DATASETS = parse() # -> List[one of or all AVAILABLE_DATASETS]
     for file in DATASETS:
         dataset = REGISTRY["socialharmbench"]()

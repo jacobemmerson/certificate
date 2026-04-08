@@ -10,9 +10,10 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 import pandas as pd
 
+REGISTRY = {}
+
 # ----- Helpers ------
 RAW_DATA_DIR = Path(__file__).parent / "raw"
-REGISTRY = {} # this is what is accessed in format.py
 
 def get_path(file, private):
     if private:
