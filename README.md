@@ -2,6 +2,16 @@
 
 This repository holds the pipeline and datasets required for evaluating frontier models on the public and private datasets used for awarding AI safety certificates, described in https://eurosafe.ai.toronto.edu/certificate.
 
+## Getting Started
+
+First, create a conda env and install the required packages
+
+```
+conda create --name esai python=3.10 \
+conda activate esai & conda install pip \
+pip install -r requirements.txt
+```
+
 ## Datasets
 
 We evaluate models on four primary datasets with both publically available and private data.
