@@ -42,8 +42,12 @@ To evaluate on individual benchmarks, you can use AISI Inspect's CLI `inspect ev
 
 ## Future Tasks / TODOs
 
+In order of urgency:
 1. Write the summarization/metric scripts to calculate overall model performance on benchmarks with multiple tasks (i.e. Democratic vs. Authoritarian Bias).
 2. Modify `certify.py` to allow the specification of individual tasks.
 3. Update `scripts/README.md` and `benchmarks/README.md` to outline how to incorporate new benchmarks and define the repository's structure.
 4. Support locally run models as well as api-models.
 5. Generate private/held out datasets.
+6. Rename `scripts` directory to something more fitting
+7. Connect repo to ESAI's certificate page to automatically flag for updates when new models are run.
+  - Will need a personal access token
