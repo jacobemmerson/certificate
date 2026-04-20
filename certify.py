@@ -23,7 +23,7 @@ def parse():
         "--grader", "-g", required=True, help="The model to grade LLM-as-a-judge grader responses."
     )
     args.add_argument(
-        "--epochs", "-e", required=False, default=5, help="The number of turns to generate a response per sample and average over."
+        "--epochs", "-e", required=False, default=1, help="The number of turns to generate a response per sample and average over."
     )
 
     return args.parse_args()
@@ -49,12 +49,6 @@ if __name__ == "__main__":
             sample_shuffle=False
         )
     
-    shb = start_eval(
-        [social_harm_bench(grader=args.grader)],
-        task_name="socialharmbench"
-    )
-
-    '''
     dab = start_eval(
         [fscale(), favscore(), rolemodel(grader=args.grader)],
         task_name="democratic_authoritarian"
@@ -74,4 +68,3 @@ if __name__ == "__main__":
         [no_push(grader=args.grader)],
         task_name="historical_revisionism"
     )
-    '''

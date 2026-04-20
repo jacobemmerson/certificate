@@ -420,5 +420,5 @@ def rolemodel(grader: str = "openai/gpt-4o"):
             _rolemodel_to_sample,
         ),
         solver=generate(),
-        scorer=rolemodel_scorer(judge_model=grader),
+        scorer=rolemodel_scorer(judge_model=grader)
     )
