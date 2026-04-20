@@ -1,9 +1,5 @@
-
-<div style="display: flex; justify-content: center; align-items: center; color: white;">
-  <img src="media/logo.png" alt="EuroSafeAI Logo" style="margin-right: 15px; height: 96;">
-  <span style="font-size: 96px; font-family: 'Arial', sans-serif; font-weight: bold; color: white">
-    EuroSafeAI
-  </span>
+<div align="center">
+  <img style="height: 168;" src="media/logo.png" alt="EuroSafeAI Logo">
 </div>
 
 # AI Safety Benchmarks & Certification
