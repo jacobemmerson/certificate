@@ -9,9 +9,8 @@ This repository holds the pipeline and datasets required for evaluating frontier
 ## Getting Started
 
 ```
-uv init --python 3.10
-uv add -r requirements.txt
-uv sync
+uv venv --python 3.10
+uv pip install -r requirements.txt
 uv run certify.py --model {MODEL_NAME} --grader {GRADER_NAME}
 ```
 
