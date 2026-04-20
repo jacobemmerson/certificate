@@ -1,4 +1,12 @@
-# EuroSafeAI: Safety Certificate
+
+<div style="display: flex; justify-content: center; align-items: center; color: white;">
+  <img src="media/logo.png" alt="EuroSafeAI Logo" style="margin-right: 15px; height: 96;">
+  <span style="font-size: 96px; font-family: 'Arial', sans-serif; font-weight: bold; color: white">
+    EuroSafeAI
+  </span>
+</div>
+
+# AI Safety Benchmarks & Certification
 
 This repository holds the pipeline and datasets required for evaluating frontier models on the public and private datasets used for awarding AI safety certificates, described in https://eurosafe.ai.toronto.edu/certificate.
 
