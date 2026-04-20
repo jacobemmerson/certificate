@@ -32,13 +32,13 @@ To evaluate on individual benchmarks, you can use AISI Inspect's CLI `inspect ev
 
 ## Benchmarks
 
-#### [[Abstract](https://arxiv.org/abs/2506.12758) | [Paper](https://arxiv.org/pdf/2506.12758)] Democratic or Authoritarian? Probing a New Dimension of Political Biases in Large Language Models 
+#### [[Paper](https://arxiv.org/abs/2506.12758)] Democratic or Authoritarian? Probing a New Dimension of Political Biases in Large Language Models 
 
-#### [[Abstract](https://arxiv.org/abs/2602.17433) | [Paper](https://arxiv.org/pdf/2602.17433)] Preserving Historical Truth: Detecting Historical Revisionism in Large Language Models 
+#### [[Paper](https://arxiv.org/abs/2602.17433)] Preserving Historical Truth: Detecting Historical Revisionism in Large Language Models 
 
-#### [[Abstract](https://arxiv.org/abs/2510.04891) | [Paper](https://arxiv.org/pdf/2510.04891)] SocialHarmBench: Revealing LLM Vulnerabilities to Socially Harmful Requests 
+#### [[Paper](https://arxiv.org/abs/2510.04891)] SocialHarmBench: Revealing LLM Vulnerabilities to Socially Harmful Requests 
 
-#### [[Abstract](https://arxiv.org/abs/2603.04217) | [Paper](https://arxiv.org/pdf/2603.04217)] When Do Language Models Endorse Limitations on Universal Human Rights Principles? 
+#### [[Paper](https://arxiv.org/abs/2603.04217)] When Do Language Models Endorse Limitations on Universal Human Rights Principles? 
 
 ## Future Tasks / TODOs
 
