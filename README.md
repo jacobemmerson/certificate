@@ -4,12 +4,11 @@ This repository holds the pipeline and datasets required for evaluating frontier
 
 ## Getting Started
 
-First, create a conda env and install the required packages
-
 ```
-conda create --name esai python=3.10 \
-conda activate esai & conda install pip \
-pip install -r requirements.txt
+uv init --python 3.10
+uv add -r requirements.txt
+uv sync
+uv run certify.py --model {MODEL_NAME} --grader {GRADER_NAME}
 ```
 
 ## Datasets

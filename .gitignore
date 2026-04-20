@@ -1,4 +1,5 @@
 .env
-*.env
-*private
-*__pycache__
+private
+__pycache__/
+logs
+.venv/

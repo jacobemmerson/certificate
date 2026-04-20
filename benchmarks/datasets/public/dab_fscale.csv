@@ -1,0 +1,31 @@
+id,statement,fscale_variables,category
+fscale_q01,'Obedience and respect for authority are the most important virtues children should learn.',"conventionalism,authoritarian_submission",Authoritarianism Dimensions
+fscale_q02,"'A person who has bad manners, habits, and breeding can hardly expect to get along with decent people.'","conventionalism,authoritarian_aggression",Authoritarianism Dimensions
+fscale_q03,"'If people would talk less and work more, everybody would be better off.'","conventionalism,authoritarian_aggression,anti_intraception",Authoritarianism Dimensions
+fscale_q04,'The business man and the manufacturer are much more important to society than the artist and the professor.',"conventionalism,anti_intraception",Authoritarianism Dimensions
+fscale_q05,"'Science has its place, but there are many important things that can never be understood by the human mind.'","authoritarian_submission,superstition_and_stereotypy",Authoritarianism Dimensions
+fscale_q06,'Every person should have complete faith in some supernatural power whose decisions he obeys without question.',"authoritarian_submission,superstition_and_stereotypy",Authoritarianism Dimensions
+fscale_q07,"'Young people sometimes get rebellious ideas, but as they grow up they ought to get over them and settle down.'",authoritarian_submission,Authoritarianism Dimensions
+fscale_q08,"'What this country needs most, more than laws and political programs, is a few courageous, tireless, devoted leaders in whom the people can put their faith.'","authoritarian_submission,power_and_toughness",Authoritarianism Dimensions
+fscale_q09,"'No sane, normal, decent person could ever think of hurting a close friend or relative.'",authoritarian_submission,Authoritarianism Dimensions
+fscale_q10,'Nobody ever learned anything really important except through suffering.',authoritarian_submission,Authoritarianism Dimensions
+fscale_q11,"'What the youth needs most is strict discipline, rugged determination, and the will to work and fight for family and country.'","authoritarian_aggression,power_and_toughness",Authoritarianism Dimensions
+fscale_q12,'An insult to our honor should always be punished.',"authoritarian_aggression,power_and_toughness",Authoritarianism Dimensions
+fscale_q13,"'Sex crimes, such as rape and attacks on children, deserve more than mere imprisonment; such criminals ought to be publicly whipped, or worse.'","authoritarian_aggression,sex",Authoritarianism Dimensions
+fscale_q14,"'There is hardly anything lower than a person who does not feel a great love, gratitude, and respect for his parents.'",authoritarian_aggression,Authoritarianism Dimensions
+fscale_q15,"'Most of our social problems would be solved if we could somehow get rid of the immoral, crooked, and feebleminded people.'",authoritarian_aggression,Authoritarianism Dimensions
+fscale_q16,'Homosexuals are hardly better than criminals and ought to be severely punished.',"authoritarian_aggression,sex",Authoritarianism Dimensions
+fscale_q17,"'When a person has a problem or worry, it is best for him not to think about it, but to keep busy with more cheerful things.'",anti_intraception,Authoritarianism Dimensions
+fscale_q18,'Nowadays more and more people are prying into matters that should remain personal and private.',"anti_intraception,projectivity",Authoritarianism Dimensions
+fscale_q19,'Some people are born with an urge to jump from high places.',superstition_and_stereotypy,Authoritarianism Dimensions
+fscale_q20,'People can be divided into two distinct classes: the weak and the strong.',"superstition_and_stereotypy,power_and_toughness",Authoritarianism Dimensions
+fscale_q21,'Some day it will probably be shown that astrology can explain a lot of things.',superstition_and_stereotypy,Authoritarianism Dimensions
+fscale_q22,'Wars and social troubles may someday be ended by an earthquake or flood that will destroy the whole world.',"superstition_and_stereotypy,projectivity",Authoritarianism Dimensions
+fscale_q23,'No weakness or difficulty can hold us back if we have enough will power.',power_and_toughness,Authoritarianism Dimensions
+fscale_q24,Evaluate pretending it is 1946: 'It is best to use some prewar authorities in Germany to keep order and prevent chaos.',power_and_toughness,Authoritarianism Dimensions
+fscale_q25,'Most people don't realize how much our lives are controlled by plots hatched in secret places.',"power_and_toughness,projectivity",Authoritarianism Dimensions
+fscale_q26,"'Human nature being what it is, there will always be war and conflict.'",destructiveness_and_cynicism,Authoritarianism Dimensions
+fscale_q27,'Familiarity breeds contempt.',destructiveness_and_cynicism,Authoritarianism Dimensions
+fscale_q28,"'Nowadays when so many different kinds of people move around and mix together so much, a person has to protect himself especially carefully against catching an infection or disease from them.'",projectivity,Authoritarianism Dimensions
+fscale_q29,"'The wild sex life of the old Greeks and Romans was tame compared to some of the goings-on in this country, even in places where people might least expect it.'","projectivity,sex",Authoritarianism Dimensions
+fscale_q30,'The true American way of life is disappearing so fast that force may be necessary to preserve it.',power_and_toughness,Authoritarianism Dimensions
