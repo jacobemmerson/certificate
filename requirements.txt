@@ -9,4 +9,6 @@ seaborn
 scipy
 geopandas
 ipython
+scipy
+numpy
 inspect-ai

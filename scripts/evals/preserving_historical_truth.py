@@ -361,8 +361,8 @@ def _task(push_level: str, grader: str = "openai/gpt-4o") -> Task:
         dataset=samples,
         solver=generate(),
         scorer=[
-            likert_truth(model=grader),
-            binary_truth(model=grader)
+            binary_truth(model=grader),
+            likert_truth(model=grader)
             ]
     )
 

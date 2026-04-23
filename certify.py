@@ -15,6 +15,8 @@ from scripts.evals.preserving_historical_truth import no_push, explicit_push
 from scripts.evals.socialharmbench import social_harm_bench
 
 '''
+Website expects a JSON Array in this format:
+
 [
   {
     "id": "gpt-5.2",
@@ -40,17 +42,36 @@ def update(results):
     with open('models/models.json', 'r') as f:
         models = json.load(f) # JSON array : [{model: x, id: y}, {model: x, id: y}, etc]
 
+    with open('models/models_previous.json', 'w') as f: # store as a safety net
+        json.dump(models, f)
+
+    # ----- Format -----
+    scores = {}
+    for k,v in results['scores'].items():
+
+        value = v.results.scores[0] # primary metric must go first
+        # TODO: Add support for multiple scores / score selection / score reducers
+        if value.name == "favscore_scorer":
+            value = value.metrics['democratic_bias_score']
+        
+        else:
+            value = value.metrics['mean'] 
+        scores[k] = value
+
+    results['scores'] = scores
+
+    # ----- Store ------
     found = False
-    for m in models:
+    for i, m in enumerate(models):
         if m['id'] == results['id']:
             # Update file
             found = True
-            pass
+            models[i] = results
+            break
 
     if not found:
         # add new entry
-        info = {}
-        models.append(info)
+        models.append(results)
         pass
 
     # write models file back
@@ -108,7 +129,8 @@ if __name__ == "__main__":
     
     # ----- Democratic vs. Authoritarian Bias -----
     dab = start_eval(
-        [fscale(), favscore(), rolemodel(grader=args.grader)],
+        #[fscale(), favscore(), rolemodel(grader=args.grader)],
+        [favscore()],
         task_name="democratic_authoritarian"
     )
 
