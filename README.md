@@ -51,3 +51,4 @@ In order of urgency:
 6. Rename `scripts` directory to something more fitting
 7. Connect repo to ESAI's certificate page to automatically flag for updates when new models are run.
   - Will need a personal access token
+8. Impement Majority Voting for LLM-as-a-judge grading

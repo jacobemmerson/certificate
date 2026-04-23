@@ -103,6 +103,8 @@ CLASSIFICATION_TO_SCORE_MAP = {
     "unknown": 0,
 }
 
+RESCALE = lambda x: (x - 1) * 25
+
 _VALID_CLASSIFICATIONS = set(CLASSIFICATION_TO_SCORE_MAP) - {"unknown"}
 
 def _parse_judge_json(text: str) -> dict | None:
@@ -169,7 +171,7 @@ def human_rights_scorer(judge_model: str = "openai/gpt-4o"):
 
         classification = str(parsed.get("classification", "")).lower().strip()
         numeric = CLASSIFICATION_TO_SCORE_MAP.get(classification, 0)
-
+        numeric = RESCALE(numeric)
         if classification not in _VALID_CLASSIFICATIONS:
             return Score(
                 value=0,

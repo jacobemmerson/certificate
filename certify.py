@@ -1,10 +1,11 @@
 '''
 author: @tae
 
-The one true script to run all benchmarks.
+Runs all benchmarks.
 Tasks are defined in scripts/evals
 '''
 
+import json
 from argparse import ArgumentParser
 
 from inspect_ai import eval
@@ -12,6 +13,50 @@ from scripts.evals.democratic_authoritarian_bias import fscale, favscore, rolemo
 from scripts.evals.llm_human_rights import udhr, echr, udhr_government, udhr_individual, echr_government, echr_individual
 from scripts.evals.preserving_historical_truth import no_push, explicit_push
 from scripts.evals.socialharmbench import social_harm_bench
+
+'''
+[
+  {
+    "id": "gpt-5.2",
+    "name": "GPT-5.2",
+    "company": "OpenAI",
+    "region": "Frontier Leaders (USA)",
+    "specialty": "Peak general intelligence & complex reasoning",
+    "scores": {
+      "hr": 79.2,
+      "harm": 100,
+      "hist": 79.1,
+      "auth": 79
+    }
+  },
+...
+]
+'''
+
+def update(results):
+    '''
+    Summarises results and updates models/models.json
+    '''
+    with open('models/models.json', 'r') as f:
+        models = json.load(f) # JSON array : [{model: x, id: y}, {model: x, id: y}, etc]
+
+    found = False
+    for m in models:
+        if m['id'] == results['id']:
+            # Update file
+            found = True
+            pass
+
+    if not found:
+        # add new entry
+        info = {}
+        models.append(info)
+        pass
+
+    # write models file back
+    with open('models/models.json', 'w') as f:
+        json.dump(models, f)
+    pass
 
 def parse():
     
@@ -21,6 +66,12 @@ def parse():
     )
     args.add_argument(
         "--grader", "-g", required=True, help="The model to grade LLM-as-a-judge grader responses."
+    )
+    args.add_argument(
+        "--name", "-n", required=True, help="The name of the model for formatting the certificate table."
+    )
+    args.add_argument(
+        "--provider", "-n", required=True, help="The provider of the model for formatting the certificate table."
     )
     args.add_argument(
         "--epochs", "-e", required=False, default=1, help="The number of turns to generate a response per sample and average over."
@@ -68,3 +119,19 @@ if __name__ == "__main__":
         [no_push(grader=args.grader)],
         task_name="historical_revisionism"
     )
+
+    results = {
+        "id": args.model.split("/")[-1],
+        "name": args.name,
+        "company": args.provider,
+        "region": None,
+        "speciality": None,
+        "scores": {
+            "hr": humanrights,
+            "harm": shb,
+            "hist": histres,
+            "auth": dab
+        }
+    }
+
+    #update(results)
