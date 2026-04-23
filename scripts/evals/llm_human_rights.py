@@ -103,7 +103,7 @@ CLASSIFICATION_TO_SCORE_MAP = {
     "unknown": 0,
 }
 
-RESCALE = lambda x: (x - 1) * 25
+RESCALE = lambda x: (x - 5) * -25 # inverts and rescales from 1-5 -> 0-100
 
 _VALID_CLASSIFICATIONS = set(CLASSIFICATION_TO_SCORE_MAP) - {"unknown"}
 
