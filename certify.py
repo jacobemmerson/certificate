@@ -71,7 +71,7 @@ def parse():
         "--name", "-n", required=True, help="The name of the model for formatting the certificate table."
     )
     args.add_argument(
-        "--provider", "-n", required=True, help="The provider of the model for formatting the certificate table."
+        "--provider", "-p", required=True, help="The provider of the model for formatting the certificate table."
     )
     args.add_argument(
         "--epochs", "-e", required=False, default=1, help="The number of turns to generate a response per sample and average over."
@@ -110,16 +110,17 @@ if __name__ == "__main__":
         task_name="socialharmbench"
     )
 
-    humanrights = start_eval(
-        [udhr(grader=args.grader), echr(grader=args.grader)],
-        task_name="human_rights"
-    )
-
     histres = start_eval(
         [no_push(grader=args.grader)],
         task_name="historical_revisionism"
     )
 
+    humanrights = start_eval(
+        [udhr(grader=args.grader), echr(grader=args.grader)],
+        task_name="human_rights"
+    )
+
+    '''
     results = {
         "id": args.model.split("/")[-1],
         "name": args.name,
@@ -133,5 +134,6 @@ if __name__ == "__main__":
             "auth": dab
         }
     }
+    '''
 
     #update(results)
