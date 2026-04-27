@@ -39,11 +39,16 @@ def update(results):
     '''
     Summarises results and updates models/models.json
     '''
-    with open('models/models.json', 'r') as f:
-        models = json.load(f) # JSON array : [{model: x, id: y}, {model: x, id: y}, etc]
 
-    with open('models/models_previous.json', 'w') as f: # store as a safety net
-        json.dump(models, f)
+    try:
+        with open('models/models.json', 'r') as f:
+            models = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        models = []
+
+    if models: # store previous only if previous results exist
+        with open('models/models_previous.json', 'w') as f: # store as a safety net
+            json.dump(models, f, indent=3)
 
     # ----- Format -----
     scores = {}
@@ -51,12 +56,24 @@ def update(results):
 
         value = v.results.scores[0] # primary metric must go first
         # TODO: Add support for multiple scores / score selection / score reducers
-        if value.name == "favscore_scorer":
-            value = value.metrics['democratic_bias_score']
-        
-        else:
-            value = value.metrics['mean'] 
-        scores[k] = value
+        try:
+            if value.name == "favscore_scorer":
+                value = value.metrics['democratic_bias_score']
+
+            elif 'accuracy' in value.metrics:
+                value = value.metrics['accuracy'] 
+
+            elif 'mean' in value.metrics:
+                value = value.metrics['mean']
+
+            else:
+                value = next(iter(value.metrics.values()))
+
+        except Exception as e:
+            print(f"Error occured on {k}: {e}")
+            value = 0
+
+        scores[k] = value.value
 
     results['scores'] = scores
 
@@ -76,8 +93,7 @@ def update(results):
 
     # write models file back
     with open('models/models.json', 'w') as f:
-        json.dump(models, f)
-    pass
+        json.dump(models, f, indent=3)
 
 def parse():
     
@@ -127,17 +143,17 @@ if __name__ == "__main__":
             sample_shuffle=False
         )
     
+    # ----- SocialHarmBench -----
+    shb = start_eval(
+        [social_harm_bench(grader=args.grader)],
+        task_name="socialharmbench"
+    )
+
     # ----- Democratic vs. Authoritarian Bias -----
     dab = start_eval(
         #[fscale(), favscore(), rolemodel(grader=args.grader)],
         [favscore()],
         task_name="democratic_authoritarian"
-    )
-
-    # ----- SocialHarmBench -----
-    shb = start_eval(
-        [social_harm_bench(grader=args.grader)],
-        task_name="socialharmbench"
     )
 
     # ----- Historical Revisionism -----
@@ -156,14 +172,14 @@ if __name__ == "__main__":
         "id": args.model.split("/")[-1],
         "name": args.name,
         "company": args.provider,
-        "region": None,
-        "speciality": None,
+        "region": args.region,
+        "speciality": args.speciality,
         "scores": {
-            "hr": humanrights,
-            "harm": shb,
-            "hist": histres,
-            "auth": dab
+            "hr": humanrights[0], # TODO: Incorporate ECHR
+            "harm": shb[0],
+            "hist": histres[0],
+            "auth": dab[0] # TODO: Incorporate F-Scale and Role Model Probing
         }
     }
 
-    #update(results)
+    update(results)
