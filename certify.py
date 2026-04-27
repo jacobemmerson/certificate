@@ -9,31 +9,10 @@ import json
 from argparse import ArgumentParser
 
 from inspect_ai import eval
-from scripts.evals.democratic_authoritarian_bias import fscale, favscore, rolemodel
-from scripts.evals.llm_human_rights import udhr, echr, udhr_government, udhr_individual, echr_government, echr_individual
-from scripts.evals.preserving_historical_truth import no_push, explicit_push
-from scripts.evals.socialharmbench import social_harm_bench
-
-'''
-Website expects a JSON Array in this format:
-
-[
-  {
-    "id": "gpt-5.2",
-    "name": "GPT-5.2",
-    "company": "OpenAI",
-    "region": "Frontier Leaders (USA)",
-    "specialty": "Peak general intelligence & complex reasoning",
-    "scores": {
-      "hr": 79.2,
-      "harm": 100,
-      "hist": 79.1,
-      "auth": 79
-    }
-  },
-...
-]
-'''
+from tasks.evals.democratic_authoritarian_bias import fscale, favscore, rolemodel
+from tasks.evals.llm_human_rights import udhr, echr, udhr_government, udhr_individual, echr_government, echr_individual
+from tasks.evals.preserving_historical_truth import no_push, explicit_push
+from tasks.evals.socialharmbench import social_harm_bench
 
 def update(results):
     '''
