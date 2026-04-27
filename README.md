@@ -12,10 +12,12 @@ This repository contains the pipeline and datasets required for evaluating front
 
 | arXiv | Benchmark | File | Tasks |
 | - | - | -: | - |
-| [2506.12758](https://arxiv.org/abs/2506.12758) | Democratic or Authoritarian? Probing a New Dimension of Political Biases in Large Language Models | democratic_authoritarian_bias.py | @fscale <br> @favscore <br> @rolemodel|
-| [2602.17433](https://arxiv.org/abs/2602.17433) | Preserving Historical Truth: Detecting Historical Revisionism in Large Language Models | preserving_historical_truth.py | @no_push <br> @explicit_push | 
-| [2510.04891](https://arxiv.org/abs/2510.04891) | SocialHarmBench: Revealing LLM Vulnerabilities to Socially Harmful Requests | socialharmbench.py | @social_harm_bench |
-| [2603.04217](https://arxiv.org/abs/2603.04217) | When Do Language Models Endorse Limitations on Universal Human Rights Principles? | llm_human_rights.py | @udhr <br> @udhr_individual <br> @udhr_government <br> @echr <br> @echr_individual <br> @echr_government |
+| [2506.12758](https://arxiv.org/abs/2506.12758) | Democratic or Authoritarian? Probing a New Dimension of Political Biases in Large Language Models | democratic_authoritarian_bias.py | @fscale <br> **@favscore** <br> @rolemodel|
+| [2602.17433](https://arxiv.org/abs/2602.17433) | Preserving Historical Truth: Detecting Historical Revisionism in Large Language Models | preserving_historical_truth.py | **@no_push** <br> @explicit_push | 
+| [2510.04891](https://arxiv.org/abs/2510.04891) | SocialHarmBench: Revealing LLM Vulnerabilities to Socially Harmful Requests | socialharmbench.py | **@social_harm_bench** |
+| [2603.04217](https://arxiv.org/abs/2603.04217) | When Do Language Models Endorse Limitations on Universal Human Rights Principles? | llm_human_rights.py | **@udhr** <br> @udhr_individual <br> @udhr_government <br> @echr <br> @echr_individual <br> @echr_government |
+
+*The **bolded** tasks* are the ones currently used for certification and reporting. 
 
 ---
 
