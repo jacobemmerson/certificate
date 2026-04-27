@@ -38,7 +38,7 @@ from pathlib import Path
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample, csv_dataset
 from inspect_ai.model import get_model
-from inspect_ai.scorer import Score, mean, scorer, stderr, CORRECT, INCORRECT
+from inspect_ai.scorer import Score, mean, scorer, stderr, CORRECT, INCORRECT, multi_scorer, mean_score, mode_score
 from inspect_ai.solver import generate
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -302,51 +302,56 @@ def parse_binary(text):
 
 
 @scorer(metrics=[mean(), stderr()])
-def likert_truth(model: str = 'openai/gpt-4o'):
-    async def score(state, target):
-        meta = state.metadata
-        likert_prompt = PHT_JUDGE_TEMPLATE.format(
-            prompt=state.input_text,
-            true_version=meta.get('True Version', ''),
-            false_version=meta.get('False Version', ''),
-            response=state.output.completion,
-        )
+def likert_truth(model: str | list[str] = 'openai/gpt-4o'):
+    def get_scorer(m: str):
+        async def score(state, target):
+            meta = state.metadata
+            likert_prompt = PHT_JUDGE_TEMPLATE.format(
+                prompt=state.input_text,
+                true_version=meta.get('True Version', ''),
+                false_version=meta.get('False Version', ''),
+                response=state.output.completion,
+            )
+            grader = get_model(m)
+            likert_result = await grader.generate(likert_prompt)
+            s, just = parse_likert(likert_result.completion)
+            return Score(
+                value=s,
+                answer=str(s),
+                explanation=just,
+            )
+        return score
 
-        grader = get_model(model)
-        likert_result = await grader.generate(likert_prompt)
-        s, just = parse_likert(likert_result.completion)
-        return Score(
-            value=s,
-            answer=str(s),
-            explanation=just,
-        )
-
-    return score
+    if isinstance(model, list):
+        return multi_scorer([get_scorer(m) for m in model], mean_score())
+    return get_scorer(model)
 
 
 @scorer(metrics=[mean(), stderr()])
-def binary_truth(model: str = 'openai/gpt-4o'):
-    async def score(state, target):
-        meta = state.metadata
+def binary_truth(model: str | list[str] = 'openai/gpt-4o'):
+    def get_scorer(m: str):
+        async def score(state, target):
+            meta = state.metadata
+            binary_prompt = BINARY_TEMPLATE.format(
+                scenario=meta.get('Scenario', ''),
+                true_version=meta.get('True Version', ''),
+                false_version=meta.get('False Version', ''),
+                prompt=state.input_text,
+                response=state.output.completion
+            )
+            grader = get_model(m)
+            binary_result = await grader.generate(binary_prompt)
+            s, just = parse_binary(binary_result.completion)
+            return Score(
+                value=CORRECT if int(s) == 1 else INCORRECT,
+                answer=str(s),
+                explanation=just,
+            )
+        return score
 
-        binary_prompt = BINARY_TEMPLATE.format(
-            scenario=meta.get('Scenario', ''),
-            true_version=meta.get('True Version', ''),
-            false_version=meta.get('False Version', ''),
-            prompt=state.input_text,
-            response=state.output.completion
-        )
-
-        grader = get_model(model)
-        binary_result = await grader.generate(binary_prompt)
-        s, just = parse_binary(binary_result.completion)
-        return Score(
-            value=CORRECT if int(s) == 1 else INCORRECT,
-            answer=str(s),
-            explanation=just,
-        )
-
-    return score
+    if isinstance(model, list):
+        return multi_scorer([get_scorer(m) for m in model], mode_score())
+    return get_scorer(model)
 
 
 full_dataset = csv_dataset(
@@ -355,23 +360,23 @@ full_dataset = csv_dataset(
 )
 
 
-def _task(push_level: str, grader: str = "openai/gpt-4o") -> Task:
+def _task(push_level: str, grader: str | list[str] = "openai/gpt-4o") -> Task:
     samples = [s for s in full_dataset if s.metadata.get('Push Level') == push_level]
     return Task(
         dataset=samples,
         solver=generate(),
         scorer=[
             binary_truth(model=grader),
-            likert_truth(model=grader)
-            ]
+            likert_truth(model=grader),
+        ]
     )
 
 
 @task
-def no_push(grader: str = "openai/gpt-4o"):
+def no_push(grader: str | list[str] = "openai/gpt-4o"):
     return _task('no_push', grader=grader)
 
 
 @task
-def explicit_push(grader: str = "openai/gpt-4o"):
+def explicit_push(grader: str | list[str] = "openai/gpt-4o"):
     return _task('explicit_push', grader=grader)
