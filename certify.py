@@ -2,7 +2,7 @@
 author: @tae
 
 Runs all benchmarks.
-Tasks are defined in scripts/evals
+Tasks are defined in tasks/evals
 '''
 
 import json
@@ -13,6 +13,7 @@ from tasks.evals.democratic_authoritarian_bias import fscale, favscore, rolemode
 from tasks.evals.llm_human_rights import udhr, echr, udhr_government, udhr_individual, echr_government, echr_individual
 from tasks.evals.preserving_historical_truth import no_push, explicit_push
 from tasks.evals.socialharmbench import social_harm_bench
+from tasks.utils.graders import load_graders
 
 def update(results):
     '''
@@ -84,7 +85,7 @@ def parse():
         "--model", "-m", required=True, help="The model to be evaluated using AISI inspect."
     )
     args.add_argument(
-        "--grader", "-g", required=True, help="The model to grade LLM-as-a-judge grader responses."
+        "--grader", "-g", required=False, default=None, help="Grader model override (single model). If omitted, loads from graders.txt."
     )
     args.add_argument(
         "--name", "-n", required=False, default=None, help="The name of the model for formatting the certificate table."
@@ -107,6 +108,11 @@ def parse():
 if __name__ == "__main__":
 
     args = parse()
+    grader = args.grader if args.grader else load_graders()
+
+    print(f"Model: {args.model}")
+    print(f"Grader(s): {grader}")
+
     log_dir = f"logs/{args.model.split('/')[-1]}"
 
     def check_status(evaluations):
@@ -125,30 +131,32 @@ if __name__ == "__main__":
             sample_shuffle=False
         )
     
-    # ----- SocialHarmBench -----
-    shb = start_eval(
-        [social_harm_bench(grader=args.grader)],
-        task_name="socialharmbench"
-    )
-
     # ----- Democratic vs. Authoritarian Bias -----
     dab = start_eval(
-        #[fscale(), favscore(), rolemodel(grader=args.grader)],
+        #[fscale(), favscore(), rolemodel(grader=grader)],
         [favscore()],
         task_name="democratic_authoritarian"
     )
 
+    '''
+    # ----- SocialHarmBench -----
+    shb = start_eval(
+        [social_harm_bench(grader=grader)],
+        task_name="socialharmbench"
+    )
+
     # ----- Historical Revisionism -----
     histres = start_eval(
-        [no_push(grader=args.grader)],
+        [no_push(grader=grader)],
         task_name="historical_revisionism"
     )
 
     # ----- When do LLMs endorse Human Rights Limitations -----
     humanrights = start_eval(
-        [udhr(grader=args.grader), echr(grader=args.grader)],
+        [udhr(grader=grader), echr(grader=grader)],
         task_name="human_rights"
     )
+    '''
 
     results = {
         "id": args.model.split("/")[-1],
@@ -157,9 +165,9 @@ if __name__ == "__main__":
         "region": args.region,
         "speciality": args.speciality,
         "scores": {
-            "hr": humanrights[0], # TODO: Incorporate ECHR
-            "harm": shb[0],
-            "hist": histres[0],
+            #"hr": humanrights[0], # TODO: Incorporate ECHR
+            #"harm": shb[0],
+            #"hist": histres[0],
             "auth": dab[0] # TODO: Incorporate F-Scale and Role Model Probing
         }
     }
