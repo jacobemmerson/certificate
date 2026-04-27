@@ -83,6 +83,9 @@ def update(results):
         if m['id'] == results['id']:
             # Update file
             found = True
+
+            results['scores'] = m['scores'] | results['scores'] # take values from overlapping keys from the new results (right side of pipe operator)
+
             models[i] = results
             break
 
