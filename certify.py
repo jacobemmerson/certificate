@@ -13,70 +13,9 @@ from tasks.evals.democratic_authoritarian_bias import fscale, favscore, rolemode
 from tasks.evals.llm_human_rights import udhr, echr, udhr_government, udhr_individual, echr_government, echr_individual
 from tasks.evals.preserving_historical_truth import no_push, explicit_push
 from tasks.evals.socialharmbench import social_harm_bench
-from tasks.utils.graders import load_graders
+from tasks.utils.graders import load_graders, load_models_with_check, aggregate_score
 
-def update(results):
-    '''
-    Summarises results and updates models/models.json
-    '''
-
-    try:
-        with open('models/models.json', 'r') as f:
-            models = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        models = []
-
-    if models: # store previous only if previous results exist
-        with open('models/models_previous.json', 'w') as f: # store as a safety net
-            json.dump(models, f, indent=3)
-
-    # ----- Format -----
-    scores = {}
-    for k,v in results['scores'].items():
-
-        value = v.results.scores[0] # primary metric must go first
-        # TODO: Add support for multiple scores / score selection / score reducers
-        try:
-            if value.name == "favscore_scorer":
-                value = value.metrics['democratic_bias_score']
-
-            elif 'accuracy' in value.metrics:
-                value = value.metrics['accuracy'] 
-
-            elif 'mean' in value.metrics:
-                value = value.metrics['mean']
-
-            else:
-                value = next(iter(value.metrics.values()))
-
-        except Exception as e:
-            print(f"Error occured on {k}: {e}")
-            value = 0
-
-        scores[k] = value.value
-
-    results['scores'] = scores
-
-    # ----- Store ------
-    found = False
-    for i, m in enumerate(models):
-        if m['id'] == results['id']:
-            # Update file
-            found = True
-
-            results['scores'] = m['scores'] | results['scores'] # take values from overlapping keys from the new results (right side of pipe operator)
-
-            models[i] = results
-            break
-
-    if not found:
-        # add new entry
-        models.append(results)
-        pass
-
-    # write models file back
-    with open('models/models.json', 'w') as f:
-        json.dump(models, f, indent=3)
+# ----- Argument Parser -----
 
 def parse():
     
@@ -85,7 +24,7 @@ def parse():
         "--model", "-m", required=True, help="The model to be evaluated using AISI inspect."
     )
     args.add_argument(
-        "--grader", "-g", required=False, default=None, help="Grader model override (single model). If omitted, loads from graders.txt."
+        "--grader", "-g", required=False, default=None, help="Grader model override (single model). If omitted, loads from GRADERS.md"
     )
     args.add_argument(
         "--name", "-n", required=False, default=None, help="The name of the model for formatting the certificate table."
@@ -103,17 +42,87 @@ def parse():
         "--epochs", "-e", required=False, default=1, help="The number of turns to generate a response per sample and average over."
     )
 
+    args.add_argument(
+        "--rerun", required=False, action='store_true', help="Reruns all results regardless of whether they are present in an existing file."
+    )
+
     return args.parse_args()
+
+# ----- Updates models/models.json -----
+
+def update(results, models, idx):
+    '''
+    Summarises results and updates models/models.json
+    '''
+
+    if models: # store previous only if previous results exist
+        with open('models/models_previous.json', 'w') as f: # store as a safety net
+            json.dump(models, f, indent=4)
+
+    # ----- store ------
+    # if idx != -1, model results already exist
+    if idx != -1:
+        # take values from overlapping keys from the new results (right side of pipe operator)
+        results['scores'] = models[idx].get('scores', {}) | results['scores'] 
+        results['scores_meta'] = models[idx].get('scores_meta', {}) | results['scores_meta']
+        models[idx] = results
+    else:
+        # add new entry
+        models.append(results)
+
+    # write models file back
+    with open('models/models.json', 'w') as f:
+        json.dump(models, f, indent=4)
+
+
+# ----- main ------
 
 if __name__ == "__main__":
 
     args = parse()
     grader = args.grader if args.grader else load_graders()
+    model_id = args.model.split("/")[-1]
+    log_dir = f"logs/{model_id}"
 
-    print(f"Model: {args.model}")
+    print(f"Model: {model_id}")
     print(f"Grader(s): {grader}")
+    print(f"Log Directory: {log_dir}")
 
-    log_dir = f"logs/{args.model.split('/')[-1]}"
+    # ----- task master list -----
+    BENCHMARKS = {
+        'auth': {
+            'tasks': [
+                fscale(), 
+                favscore(), 
+                rolemodel(grader=grader)
+            ],
+            'name': 'democratic_authoritarian_bias'
+        },
+        'harm': {
+            'tasks': [
+                social_harm_bench(grader=grader)
+            ],
+            'name': 'socialharmbench'
+        },
+        'hist': {
+            'tasks': [
+                no_push(grader=grader),
+                explicit_push(grader=grader)
+            ],
+            'name': 'historical_revisionism'
+        },
+        'hr': {
+            'tasks': [
+                udhr(grader=grader),
+                udhr_individual(grader=grader),
+                udhr_government(grader=grader),
+                echr(grader=grader),
+                echr_individual(grader=grader),
+                echr_government(grader=grader)
+            ],
+            'name': 'human_rights'
+        }
+    }
 
     def check_status(evaluations):
         if evaluations['status'] != 'success':
@@ -130,46 +139,45 @@ if __name__ == "__main__":
             epochs=args.epochs,
             sample_shuffle=False
         )
-    
-    # ----- Democratic vs. Authoritarian Bias -----
-    dab = start_eval(
-        #[fscale(), favscore(), rolemodel(grader=grader)],
-        [favscore()],
-        task_name="democratic_authoritarian"
-    )
 
-    '''
-    # ----- SocialHarmBench -----
-    shb = start_eval(
-        [social_harm_bench(grader=grader)],
-        task_name="socialharmbench"
-    )
+    # check for existing model results
+    models, idx = load_models_with_check()
 
-    # ----- Historical Revisionism -----
-    histres = start_eval(
-        [no_push(grader=grader)],
-        task_name="historical_revisionism"
-    )
+    tasks_to_skip = {}
+    # if results exist AND we want to rerun all tasks
+    if idx != -1 and not args.rerun: 
+        tasks_to_skip = set(models[idx]['scores'].keys())
 
-    # ----- When do LLMs endorse Human Rights Limitations -----
-    humanrights = start_eval(
-        [udhr(grader=grader), echr(grader=grader)],
-        task_name="human_rights"
-    )
-    '''
+    # temporary for debugging
+    tasks_to_skip = {'harm', 'hist', 'hr'}
 
+    # ----- main loop -----
+    scores = {}
+    scores_meta = {}
+    for benchmark, tasks in BENCHMARKS.items():
+        
+        if benchmark in tasks_to_skip:
+            continue
+
+        res = start_eval(
+            tasks=tasks['tasks'],
+            task_name=tasks['name']
+        )
+        
+        if res: 
+            average, meta = aggregate_score(res)
+            scores[benchmark] = average
+            scores_meta[benchmark] = meta
+
+    # ----- format and store results -----
     results = {
-        "id": args.model.split("/")[-1],
+        "id": model_id,
         "name": args.name,
         "company": args.provider,
         "region": args.region,
         "speciality": args.speciality,
-        "scores": {
-            #"hr": humanrights[0], # TODO: Incorporate ECHR
-            #"harm": shb[0],
-            #"hist": histres[0],
-            "auth": dab[0] # TODO: Incorporate F-Scale and Role Model Probing
-        }
+        "scores": scores,
+        "scores_meta": scores_meta
     }
 
-    update(results)
+    update(results, models, idx)
