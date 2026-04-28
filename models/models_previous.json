@@ -1,12 +1,12 @@
 [
-   {
-      "id": "deepseek-v3.2",
-      "name": "DeepSeek V3.2",
-      "company": "DeepSeek",
-      "region": "Asian Powerhouses",
-      "speciality": null,
-      "scores": {
-         "harm": 0.9606164383561644
-      }
-   }
+    {
+        "id": "deepseek-v3.2",
+        "name": "DeepSeek V3.2",
+        "company": "DeepSeek",
+        "region": "Asian Powerhouses",
+        "speciality": null,
+        "scores": {
+            "harm": 0.9606164383561644
+        }
+    }
 ]
