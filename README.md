@@ -43,7 +43,7 @@ uv run certify.py \
   --speciality  {OPTIONAL: the model's primary task (i.e. coding, math)} \
   --epochs      {OPTIONAL: the number of epochs to run, default=1} \
 ```
-If a grader model is not specified with `--grader`, a group of models is used for LLM-as-a-judge grading as specified in `graders.txt`.
+If a grader model is not specified with `--grader`, a group of models is used for LLM-as-a-judge grading as specified in `GRADERS.md`.
 
 **You can also use any package manager of your choice** (i.e. anaconda); install the requirements by omitting `uv` and execute the pipeline using `python certify.py` with the appropriate arguments.
 
@@ -63,3 +63,4 @@ In order of urgency:
 8. Impement Majority Voting for LLM-as-a-judge grading
 9. Combine UDHR and ECHR datasets for the human rights limitations; currently benchmarking on UDHR.
 10. Use the UDHR and ECHR individual and government steering in evaluations.
+11. Add file to process results from logs incase of a crash --- avoiding crashes with try, except, but logs are always stored and can be used as a fallback
