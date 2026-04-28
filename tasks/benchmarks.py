@@ -1,16 +1,16 @@
-from evals.democratic_authoritarian_bias import fscale, favscore, rolemodel
-from evals.llm_human_rights import udhr, echr, udhr_government, udhr_individual, echr_government, echr_individual
-from evals.preserving_historical_truth import no_push, explicit_push
-from evals.socialharmbench import social_harm_bench
+from tasks.evals.democratic_authoritarian_bias import fscale, favscore, rolemodel
+from tasks.evals.llm_human_rights import udhr, echr, udhr_government, udhr_individual, echr_government, echr_individual
+from tasks.evals.preserving_historical_truth import no_push, explicit_push
+from tasks.evals.socialharmbench import social_harm_bench
 
 def init_benchmarks(grader):
-    
+
     # ----- task master list -----
     BENCHMARKS = {
         'auth': {
             'tasks': [
                 fscale(), 
-                favscore(), 
+                #favscore(), 
                 rolemodel(grader=grader)
             ],
             'name': 'democratic_authoritarian_bias'
