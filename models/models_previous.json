@@ -8,5 +8,21 @@
         "scores": {
             "harm": 0.9606164383561644
         }
+    },
+    {
+        "id": "gpt-4o-mini",
+        "name": null,
+        "company": null,
+        "region": null,
+        "speciality": null,
+        "scores": {
+            "auth": 71.28453453453453
+        },
+        "scores_meta": {
+            "auth": {
+                "fscale": 69.33333333333333,
+                "rolemodel": 73.23573573573573
+            }
+        }
     }
 ]
