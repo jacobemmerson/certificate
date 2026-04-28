@@ -42,8 +42,11 @@ uv run certify.py \
   --region      {OPTIONAL: a description of the model's origin (i.e. US, Asia)} \
   --speciality  {OPTIONAL: the model's primary task (i.e. coding, math)} \
   --epochs      {OPTIONAL: the number of epochs to run, default=1} \
+  --rerun       {OPTIONAL: rerun results that are already present for the model}
 ```
 If a grader model is not specified with `--grader`, a group of models is used for LLM-as-a-judge grading as specified in `GRADERS.md`.
+
+All results are stored in `models/models.json` which will automatically be updated with new models or replace previously run models. By default, the script will skip benchmarks that have already been processed; however, you can override this with by adding `--rerun` argument to `certify.py`. All logs will be in `logs/{benchmark_name}`; these can be accessed to use unreported metrics or other metadata about the samples. 
 
 **You can also use any package manager of your choice** (i.e. anaconda); install the requirements by omitting `uv` and execute the pipeline using `python certify.py` with the appropriate arguments.
 
