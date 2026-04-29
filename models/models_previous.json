@@ -24,5 +24,30 @@
                 "rolemodel": 73.23573573573573
             }
         }
+    },
+    {
+        "id": "gpt-5.3-chat",
+        "name": null,
+        "company": null,
+        "region": null,
+        "speciality": null,
+        "scores": {
+            "auth": 70.67292292292292
+        },
+        "scores_meta": {
+            "auth": {
+                "fscale": 78.0,
+                "rolemodel": 63.345845845845844
+            }
+        }
+    },
+    {
+        "id": "gemini-2.5-flash-lite",
+        "name": "Gemini 2.5 Flash Lite",
+        "company": "Google",
+        "region": "USA Frontier Models",
+        "speciality": "High-throughput, low-latency, and cost efficiency",
+        "scores": {},
+        "scores_meta": {}
     }
 ]

@@ -105,7 +105,9 @@ if __name__ == "__main__":
         )
 
     # check for existing model results
-    models, idx = load_models_with_check()
+    models, idx = load_models_with_check(model_id)
+    if idx != -1:
+        print(f"Results Found: Model index at {idx}")
 
     tasks_to_skip = {}
     # if results exist AND we want to rerun all tasks
