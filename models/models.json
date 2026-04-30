@@ -40,5 +40,22 @@
                 "rolemodel": 63.345845845845844
             }
         }
+    },
+    {
+        "id": "gemini-2.5-flash",
+        "name": "Gemini 2.5 Flash",
+        "company": "Google",
+        "region": "USA Frontier Models",
+        "speciality": "High-throughput, low-latency, and cost efficiency",
+        "scores": {
+            "auth": 68.01847936731657
+        },
+        "scores_meta": {
+            "auth": {
+                "fscale": 85.33333333333333,
+                "favscore": 54.833215879727504,
+                "rolemodel": 63.888888888888886
+            }
+        }
     }
 ]
