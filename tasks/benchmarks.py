@@ -41,4 +41,6 @@ def init_benchmarks(grader):
         }
     }
 
+    del BENCHMARKS['hist']
+
     return BENCHMARKS
