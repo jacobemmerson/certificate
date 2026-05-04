@@ -10,7 +10,7 @@ def init_benchmarks(grader):
         'auth': {
             'tasks': [
                 fscale(), 
-                #favscore(), 
+                favscore(), 
                 rolemodel(grader=grader)
             ],
             'name': 'democratic_authoritarian_bias'
@@ -40,5 +40,7 @@ def init_benchmarks(grader):
             'name': 'human_rights'
         }
     }
+
+    del BENCHMARKS['hist']
 
     return BENCHMARKS

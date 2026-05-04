@@ -33,7 +33,7 @@ def parse():
         "--region", "-r", required=False, default=None, help="The region of the world where the model is developed and data is sourced."
     )
     args.add_argument(
-        "--speciality", "-s", required=False, default=None, help="What the model has been tuned or designated to do (i.e. coding, math, etc)."
+        "--specialty", "-s", required=False, default=None, help="What the model has been tuned or designated to do (i.e. coding, math, etc)."
     )
     args.add_argument(
         "--epochs", "-e", required=False, default=1, help="The number of turns to generate a response per sample and average over."
@@ -105,15 +105,16 @@ if __name__ == "__main__":
         )
 
     # check for existing model results
-    models, idx = load_models_with_check()
+    models, idx = load_models_with_check(model_id)
+    if idx != -1:
+        print(f"Results Found: Model index at {idx}")
 
     tasks_to_skip = {}
     # if results exist AND we want to rerun all tasks
     if idx != -1 and not args.rerun: 
         tasks_to_skip = set(models[idx]['scores'].keys())
 
-    # temporary for debugging
-    tasks_to_skip = {'harm', 'hist', 'hr'}
+    #tasks_to_skip = {'harm', 'hist', 'hr'} # temporary for debugging
 
     # ----- main loop -----
     scores = {}
@@ -123,15 +124,20 @@ if __name__ == "__main__":
         if benchmark in tasks_to_skip:
             continue
 
-        res = start_eval(
-            tasks=tasks['tasks'],
-            task_name=tasks['name']
-        )
-        
-        if res: 
-            average, meta = aggregate_score(res)
-            scores[benchmark] = average
-            scores_meta[benchmark] = meta
+        try:
+            res = start_eval(
+                tasks=tasks['tasks'],
+                task_name=tasks['name']
+            )
+            
+            if res: 
+                average, meta = aggregate_score(res)
+                scores[benchmark] = average
+                scores_meta[benchmark] = meta
+
+        except Exception as e:
+            print(f"[ERROR] on {benchmark}: {e}")
+            
 
     # ----- format and store results -----
     results = {
@@ -139,7 +145,7 @@ if __name__ == "__main__":
         "name": args.name,
         "company": args.provider,
         "region": args.region,
-        "speciality": args.speciality,
+        "specialty": args.specialty,
         "scores": scores,
         "scores_meta": scores_meta
     }
