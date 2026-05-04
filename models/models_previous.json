@@ -4,7 +4,7 @@
         "name": "Gemini 2.5 Flash Lite",
         "company": "Google",
         "region": "USA Frontier Models",
-        "speciality": "High-throughput, low-latency, and cost efficiency",
+        "specialty": "High-throughput, low-latency, and cost efficiency",
         "scores": {
             "auth": 65.12232909035235,
             "harm": 92.63698630136986,
@@ -34,7 +34,7 @@
         "name": "Gemini 2.5 Flash",
         "company": "Google",
         "region": "USA Frontier Models",
-        "speciality": "High-throughput, low-latency, and cost efficiency",
+        "specialty": "High-throughput, low-latency, and cost efficiency",
         "scores": {
             "auth": 68.01847936731657,
             "harm": 95.2054794520548,
@@ -64,7 +64,7 @@
         "name": "DeepSeek V4 Pro",
         "company": "DeepSeek",
         "region": "USA Frontier Models",
-        "speciality": "Advanced code generation and reasoning",
+        "specialty": "Advanced code generation and reasoning",
         "scores": {
             "auth": 68.47742149777032,
             "harm": 92.63698630136986,
@@ -94,7 +94,7 @@
         "name": "DeepSeek V4 Flash",
         "company": "DeepSeek",
         "region": "USA Frontier Models",
-        "speciality": "Fast code generation and reasoning",
+        "specialty": "Fast code generation and reasoning",
         "scores": {
             "auth": 67.51218358679598,
             "harm": 96.23287671232876,
@@ -124,7 +124,7 @@
         "name": "DeepSeek V3.2",
         "company": "DeepSeek",
         "region": "USA Frontier Models",
-        "speciality": "Code generation and reasoning",
+        "specialty": "Code generation and reasoning",
         "scores": {
             "auth": 67.9161140895637,
             "harm": 96.23287671232876,
@@ -154,7 +154,7 @@
         "name": "DeepSeek V3.2 Speciale",
         "company": "DeepSeek",
         "region": "USA Frontier Models",
-        "speciality": "Specialized code generation and reasoning",
+        "specialty": "Specialized code generation and reasoning",
         "scores": {
             "auth": 66.76368877822365,
             "harm": 78.25342465753424,
@@ -184,7 +184,7 @@
         "name": "Gemini 3 Flash",
         "company": "Google",
         "region": "USA Frontier Models",
-        "speciality": "Fast multimodal reasoning",
+        "specialty": "Fast multimodal reasoning",
         "scores": {
             "auth": 62.11944263882248,
             "harm": 87.32876712328768,
@@ -214,7 +214,7 @@
         "name": "Gemini 3.1 Pro",
         "company": "Google",
         "region": "USA Frontier Models",
-        "speciality": "Multimodal understanding and reasoning",
+        "specialty": "Multimodal understanding and reasoning",
         "scores": {
             "auth": 70.64567293346363,
             "harm": 96.06164383561644,
@@ -244,7 +244,7 @@
         "name": "Grok 4.20 Multi-Agent",
         "company": "xAI",
         "region": "USA Frontier Models",
-        "speciality": "Multi-agent reasoning and coordination",
+        "specialty": "Multi-agent reasoning and coordination",
         "scores": {
             "auth": 62.83557431522548,
             "harm": 67.63698630136986,
@@ -274,7 +274,7 @@
         "name": "Grok 4.20",
         "company": "xAI",
         "region": "USA Frontier Models",
-        "speciality": "Advanced reasoning and knowledge synthesis",
+        "specialty": "Advanced reasoning and knowledge synthesis",
         "scores": {
             "auth": 62.523078019202046,
             "harm": 96.23287671232876,
@@ -304,7 +304,7 @@
         "name": "Grok 4.1 Fast",
         "company": "xAI",
         "region": "USA Frontier Models",
-        "speciality": "Fast reasoning and knowledge synthesis",
+        "specialty": "Fast reasoning and knowledge synthesis",
         "scores": {
             "auth": 63.627959802378406,
             "harm": 87.15753424657534,
@@ -334,7 +334,7 @@
         "name": "GPT-5.5",
         "company": "OpenAI",
         "region": "USA Frontier Models",
-        "speciality": "Advanced reasoning and multimodal capabilities",
+        "specialty": "Advanced reasoning and multimodal capabilities",
         "scores": {
             "auth": 68.04638928379238,
             "harm": 99.82876712328768,
@@ -364,7 +364,7 @@
         "name": "GPT-5.4",
         "company": "OpenAI",
         "region": "USA Frontier Models",
-        "speciality": "Advanced language understanding and generation",
+        "specialty": "Advanced language understanding and generation",
         "scores": {
             "auth": 64.17970872622034,
             "harm": 100.0,
@@ -394,7 +394,7 @@
         "name": "GPT-5.4 Mini",
         "company": "OpenAI",
         "region": "USA Frontier Models",
-        "speciality": "Efficient language understanding and generation",
+        "specialty": "Efficient language understanding and generation",
         "scores": {
             "auth": 64.39647402050502,
             "harm": 100.0,
@@ -424,7 +424,7 @@
         "name": "GPT-5.3 Chat",
         "company": "OpenAI",
         "region": "USA Frontier Models",
-        "speciality": "Conversational AI and dialogue",
+        "specialty": "Conversational AI and dialogue",
         "scores": {
             "auth": 65.43661301703938,
             "harm": 99.31506849315068,
@@ -454,7 +454,7 @@
         "name": "Claude Sonnet 4.6",
         "company": "Anthropic",
         "region": "USA Frontier Models",
-        "speciality": "Balanced performance and efficiency",
+        "specialty": "Balanced performance and efficiency",
         "scores": {
             "auth": 67.6649405748243,
             "harm": 100.0,
@@ -484,7 +484,7 @@
         "name": null,
         "company": null,
         "region": null,
-        "speciality": null,
+        "specialty": null,
         "scores": {
             "auth": 70.67292292292292
         },

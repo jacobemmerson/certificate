@@ -514,7 +514,7 @@
         "name": "Gemini 2.5 Flash",
         "company": "Google",
         "region": "USA Frontier Models",
-        "speciality": "High-throughput, low-latency, and cost efficiency",
+        "specialty": "High-throughput, low-latency, and cost efficiency",
         "scores": {
             "auth": 68.01847936731657
         },

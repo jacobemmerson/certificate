@@ -4,25 +4,25 @@ uv run certify.py \
 	--name "GPT-5.5" \
 	--provider "OpenAI" \
 	--region "USA Frontier Models" \
-	--speciality "Advanced reasoning and multimodal capabilities"
+	--specialty "Advanced reasoning and multimodal capabilities"
 
 uv run certify.py \
 	--model "openrouter/openai/gpt-5.4" \
 	--name "GPT-5.4" \
 	--provider "OpenAI" \
 	--region "USA Frontier Models" \
-	--speciality "Advanced language understanding and generation"
+	--specialty "Advanced language understanding and generation"
 
 uv run certify.py \
 	--model "openrouter/openai/gpt-5.4-mini" \
 	--name "GPT-5.4 Mini" \
 	--provider "OpenAI" \
 	--region "USA Frontier Models" \
-	--speciality "Efficient language understanding and generation"
+	--specialty "Efficient language understanding and generation"
 
 uv run certify.py \
 	--model "openrouter/openai/gpt-5.3-chat" \
 	--name "GPT-5.3 Chat" \
 	--provider "OpenAI" \
 	--region "USA Frontier Models" \
-	--speciality "Conversational AI and dialogue"
+	--specialty "Conversational AI and dialogue"

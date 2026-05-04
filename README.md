@@ -38,7 +38,7 @@ uv run certify.py \
   --name        {OPTIONAL: the name stored in models/models.json} \
   --proivder    {OPTIONAL: the model provider, stored in models/models.json} \
   --region      {OPTIONAL: a description of the model's origin (i.e. US, Asia)} \
-  --speciality  {OPTIONAL: the model's primary task (i.e. coding, math)} \
+  --specialty  {OPTIONAL: the model's primary task (i.e. coding, math)} \
   --epochs      {OPTIONAL: the number of epochs to run, default=1} \
   --rerun       {OPTIONAL: rerun results that are already present for the model}
 ```
