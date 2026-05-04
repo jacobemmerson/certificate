@@ -33,7 +33,7 @@ def parse():
         "--region", "-r", required=False, default=None, help="The region of the world where the model is developed and data is sourced."
     )
     args.add_argument(
-        "--speciality", "-s", required=False, default=None, help="What the model has been tuned or designated to do (i.e. coding, math, etc)."
+        "--specialty", "-s", required=False, default=None, help="What the model has been tuned or designated to do (i.e. coding, math, etc)."
     )
     args.add_argument(
         "--epochs", "-e", required=False, default=1, help="The number of turns to generate a response per sample and average over."
@@ -145,7 +145,7 @@ if __name__ == "__main__":
         "name": args.name,
         "company": args.provider,
         "region": args.region,
-        "speciality": args.speciality,
+        "specialty": args.specialty,
         "scores": scores,
         "scores_meta": scores_meta
     }
