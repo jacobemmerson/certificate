@@ -48,7 +48,7 @@ All results are stored in `models/models.json` which will automatically be updat
 
 **You can also use any package manager of your choice** (i.e. anaconda); install the requirements by omitting `uv` and execute the pipeline using `python certify.py` with the appropriate arguments.
 
-To evaluate on individual benchmarks, you can use AISI Inspect's CLI `inspect eval scripts/evals/{file}@{task}.py`. Note that you wil have to set certain parameters, like the model to be evaluated, which can be found [here](https://inspect.aisi.org.uk/reference/inspect_eval.html).
+To evaluate on individual benchmarks, you can use AISI Inspect's CLI `uv run inspect eval scripts/evals/{file}@{task}.py`. Note that you wil have to set certain parameters, like the model to be evaluated, which can be found [here](https://inspect.aisi.org.uk/reference/inspect_eval.html).
 
 ## Future Tasks / TODOs
 

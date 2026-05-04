@@ -1,7 +1,7 @@
 .env
 private
 __pycache__/
-logs
+logs/
 .venv/
 .DS_Store
 testing/

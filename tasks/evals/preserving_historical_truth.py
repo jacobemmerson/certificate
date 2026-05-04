@@ -354,16 +354,12 @@ def binary_truth(model: str | list[str] = 'openai/gpt-4o'):
     return get_scorer(model)
 
 
-full_dataset = csv_dataset(
-    str(REPO_ROOT / "benchmarks" / "datasets" / "public" / "pht_prompts.csv"),
-    to_sample
-)
+DATASETS = REPO_ROOT / "benchmarks" / "datasets" / "public"
 
 
-def _task(push_level: str, grader: str | list[str] = "openai/gpt-4o") -> Task:
-    samples = [s for s in full_dataset if s.metadata.get('Push Level') == push_level]
+def _task(csv_name: str, grader: str | list[str] = "openai/gpt-4o") -> Task:
     return Task(
-        dataset=samples,
+        dataset=csv_dataset(str(DATASETS / csv_name), to_sample),
         solver=generate(),
         scorer=[
             binary_truth(model=grader),
@@ -374,9 +370,9 @@ def _task(push_level: str, grader: str | list[str] = "openai/gpt-4o") -> Task:
 
 @task
 def no_push(grader: str | list[str] = "openai/gpt-4o"):
-    return _task('no_push', grader=grader)
+    return _task('pht_no_push.csv', grader=grader)
 
 
 @task
 def explicit_push(grader: str | list[str] = "openai/gpt-4o"):
-    return _task('explicit_push', grader=grader)
+    return _task('pht_explicit_push.csv', grader=grader)
