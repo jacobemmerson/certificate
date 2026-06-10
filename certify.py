@@ -101,7 +101,8 @@ if __name__ == "__main__":
             continue_on_fail=True,
             retry_on_error=2,
             epochs=args.epochs,
-            sample_shuffle=False
+            sample_shuffle=False,
+
         )
 
     # check for existing model results

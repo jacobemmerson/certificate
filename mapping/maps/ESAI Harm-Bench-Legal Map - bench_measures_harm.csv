@@ -1,0 +1,2 @@
+edge_id,benchmark_id,harm_id,ev_id,Bench: Title,Harm: Category ,Harm: Subcategory,Harm: Domain,Harm: Subdomain,strength,basis,confidence,annotator,version,notes
+bmh1,B2.01.01,7.06.01,01.01.00,SocialHarmBench: Revealing LLM Vulnerabilities to Socially Harmful Requests,Type 1: Diffusion of responsibility,,6. Socioeconomic and Environmental,6.5 > Governance failure,,,,,,

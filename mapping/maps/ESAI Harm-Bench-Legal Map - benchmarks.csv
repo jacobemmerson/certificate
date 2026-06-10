@@ -1,0 +1,8 @@
+benchmark_id,quick ref,title,description,task,metric,communicated_metric,modality,interaction horizon,aggregation scale,version,notes
+B1.01.01,Yadav2025,Revealing Hidden Mechanisms of Cross-Country Content Moderation with Natural Language Processing,,,,,,,,,
+B2.01.01,Pandey2026,SocialHarmBench: Revealing LLM Vulnerabilities to Socially Harmful Requests,,,,,,,,,
+B3.01.01,Samway2025,When Do Language Models Endorse Limitations on Universal Human Rights Principles?,,,,,,,,,
+B4.01.01,Ortu2026,Preserving Historical Truth: Detecting Historical Revisionism in Large Language Models,,,,,,,,,
+B5.01.01,Guzman2026,"Democratic or Authoritarian? Probing a New Dimension of Political Biases in Large Language Models
+
+",,,,,,,,,

@@ -1,0 +1,14 @@
+edge_id,provision_id,provision_version,harm_id,coverage,justification,annotator,date,notes
+A-1,P.EU.CoP.SS.A1.4.2,v1,7.06.01,explicit,systemic-risk definition references 'fundamental rights',ann1,2026-06-01,
+A-2,P.EU.CoP.SS.A1.4.2,v1,7.06.02,explicit,"systemic-risk def, 'society as a whole'",ann1,2026-06-01,
+A-3,P.EU.CoP.SS.A1.4.2,v1,7.06.03,interpretive,'society as a whole' read to include democratic processes,ann1,2026-06-01,
+A-4,P-R110,v1,7.06.02,explicit,recital lists facilitation of disinformation,ann1,2026-06-01,
+A-5,P-R110,v1,7.06.03,explicit,recital lists threats to democratic values,ann1,2026-06-01,
+A-6,P-R110,v1,7.06.01,explicit,recital lists threats to human rights,ann1,2026-06-01,
+A-7,P-CoP11,v1,7.06.01,explicit,"CoP fundamental-rights risk, society as a whole",ann1,2026-06-01,
+A-8,P-CoP14,v1,7.06.02,explicit,CoP harmful manipulation (distortion of beliefs),ann1,2026-06-01,
+A-9,P-CoP14,v1,7.06.03,explicit,CoP harmful manipulation (undermining democratic processes),ann1,2026-06-01,
+A-10,P-Charter,v1,7.06.01,explicit,Charter protects the fundamental right; provider bindingness indirect,ann1,2026-06-01,
+A-11,P-27,v1,7.06.03,interpretive,FRIA covers democratic-process risks,ann1,2026-06-01,OUT OF SCOPE (high-risk regime)
+A-12,P-AnnexIII,v1,7.06.03,explicit,'administration of justice and democratic processes' listed,ann1,2026-06-01,OUT OF SCOPE (high-risk regime)
+A-13,P-R62,v1,7.06.03,explicit,systems used to influence elections,ann1,2026-06-01,OUT OF SCOPE (high-risk regime)
