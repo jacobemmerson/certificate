@@ -101,7 +101,9 @@ if __name__ == "__main__":
             continue_on_fail=True,
             retry_on_error=2,
             epochs=args.epochs,
-            sample_shuffle=False
+            sample_shuffle=False,
+            max_connections=50,
+            cache=True
         )
 
     # check for existing model results
@@ -137,8 +139,7 @@ if __name__ == "__main__":
 
         except Exception as e:
             print(f"[ERROR] on {benchmark}: {e}")
-            
-
+        
     # ----- format and store results -----
     results = {
         "id": model_id,
