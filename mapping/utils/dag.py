@@ -21,7 +21,7 @@ def build(columns=None):
     # merge benchmark --measures--> harm
     out = (
         bmh
-        .merge(harms[["parent_id", "harm_id"]], on="harm_id")
+        .merge(harms[["parent_id", "harm_id", "label"]], on="harm_id")
         .rename(columns={"label": "ev_label", "parent_id": "parent_harm_id"})
         .assign(
             parent_harm_id=lambda df: df["parent_harm_id"].astype(str).str[:-2],
@@ -50,7 +50,7 @@ def build(columns=None):
     # merge provisions + provision parents + citations
     out = (
         out
-        .merge(pah[["provision_id", "harm_id"]], on="harm_id")
+        .merge(pah[["provision_id", "harm_id", "coverage", "justification"]], on="harm_id")
         .merge(provisions, on="provision_id").rename(columns={"parent_id": "parent_prov_id"})
         .merge(
             provisions[["provision_id", "citation"]].rename(columns={"provision_id" : "parent_prov_id", "citation" : "parent_citation"}),

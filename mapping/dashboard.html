@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EuroSafeAI &mdash; Model Risk &amp; Compliance Dashboard</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --border: #e3e6ea;
+    --text: #1a1d23;
+    --text-muted: #6b7280;
+    --accent: #3b5bdb;
+    --accent-soft: #eef1fd;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+  }
+  .app { display: flex; flex-direction: column; height: 100vh; }
+
+  /* Topbar */
+  .topbar {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex: none;
+  }
+  .topbar h1 { margin: 0; font-size: 18px; font-weight: 700; }
+  .topbar p { margin: 4px 0 0; color: var(--text-muted); font-size: 12.5px; }
+
+  /* Layout */
+  .layout { flex: 1; display: flex; min-height: 0; }
+
+  /* Sidebar: risk domains */
+  .sidebar {
+    width: 290px;
+    flex: none;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar-header {
+    padding: 14px 16px; border-bottom: 1px solid var(--border); flex: none;
+  }
+  .sidebar-header .label {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-muted); font-weight: 700;
+  }
+  .domain-list { flex: 1; overflow-y: auto; padding: 8px; }
+  .domain-item {
+    padding: 10px 12px; border-radius: 8px; cursor: pointer;
+    border: 1px solid transparent; margin-bottom: 4px;
+  }
+  .domain-item:hover { background: var(--accent-soft); }
+  .domain-item.active { background: var(--accent-soft); border-color: var(--accent); }
+  .domain-item .name { font-size: 13px; font-weight: 600; line-height: 1.35; }
+  .domain-item .meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  /* Content */
+  .content { flex: 1; overflow-y: auto; padding: 24px; }
+  .content h2 { margin: 0 0 2px; font-size: 20px; }
+  .content-sub { color: var(--text-muted); font-size: 12.5px; margin-top: 4px; }
+
+  .pill {
+    display: inline-block; padding: 2px 9px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; background: var(--accent-soft); color: var(--accent);
+  }
+
+  /* Evidence picker */
+  .evidence-picker { margin-top: 18px; }
+  .evidence-picker label {
+    display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-muted); font-weight: 700; margin-bottom: 6px;
+  }
+  .evidence-picker select {
+    width: 100%; max-width: 480px; padding: 9px 12px; border: 1px solid var(--border);
+    border-radius: 8px; font-size: 13.5px; background: var(--surface); color: var(--text);
+  }
+  .evidence-picker select:focus { border-color: var(--accent); outline: none; }
+
+  /* Evidence detail card */
+  .evidence-card {
+    margin-top: 18px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px;
+  }
+  .evidence-card .harm-path { font-size: 12px; color: var(--text-muted); }
+  .evidence-card .harm-path strong { color: var(--text); }
+  .evidence-card h3 { margin: 4px 0 10px; font-size: 17px; }
+  .tag-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+
+  .benchmark-box {
+    margin-top: 14px; padding: 12px 14px; background: var(--accent-soft);
+    border-radius: 8px; font-size: 12.5px;
+  }
+  .benchmark-box .ref { font-style: italic; color: var(--text-muted); }
+
+  /* Score table */
+  .section-title { margin: 24px 0 10px; font-size: 14px; font-weight: 700; }
+  .section-sub { font-size: 12px; color: var(--text-muted); margin: -6px 0 10px; }
+  .table-tools { margin-bottom: 8px; }
+  .table-tools input {
+    width: 100%; max-width: 280px; padding: 7px 10px; border: 1px solid var(--border);
+    border-radius: 8px; font-size: 13px; outline: none;
+  }
+  .table-tools input:focus { border-color: var(--accent); }
+
+  table.score-table {
+    width: 100%; border-collapse: collapse; background: var(--surface);
+    border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border);
+  }
+  table.score-table th, table.score-table td {
+    padding: 9px 14px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  table.score-table th {
+    cursor: pointer; user-select: none; color: var(--text-muted);
+    font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+    background: #fafbfc;
+  }
+  table.score-table th.sorted { color: var(--accent); }
+  table.score-table tbody tr:last-child td { border-bottom: none; }
+  table.score-table tbody tr:hover td { background: var(--accent-soft); }
+
+  .score-cell { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .score-num { font-variant-numeric: tabular-nums; min-width: 38px; text-align: right; }
+  .score-bar-track { width: 80px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+  .score-bar-fill { height: 100%; background: var(--accent); }
+  .na { color: var(--text-muted); }
+
+  /* Legal risk panel */
+  .risk-block { margin-top: 12px; }
+  .provision {
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+    margin-top: 8px; font-size: 12.5px; background: #fafbfc;
+  }
+  .provision .citation { font-weight: 600; }
+  .provision .parent-citation { color: var(--text-muted); font-size: 11px; margin-top: 2px; }
+  .justification { margin-top: 6px; color: var(--text-muted); font-style: italic; font-size: 11.5px; }
+
+  .badges { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .badge {
+    padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .03em; white-space: nowrap;
+  }
+  .badge.binding-hard-law { background: #fee2e2; color: #b91c1c; }
+  .badge.binding-guidance { background: #fef3c7; color: #b45309; }
+  .badge.binding-soft-law { background: #dbeafe; color: #1d4ed8; }
+  .badge.coverage-explicit { background: #dcfce7; color: #15803d; }
+  .badge.coverage-interpretive { background: #ede9fe; color: #6d28d9; }
+  .badge.neutral { background: #f1f5f9; color: #475569; }
+
+  .empty-note { color: var(--text-muted); font-size: 12px; font-style: italic; margin-top: 6px; }
+
+  .legend {
+    margin-top: 20px; padding: 12px 16px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-size: 11.5px; color: var(--text-muted); display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
+  }
+  .legend strong { color: var(--text); }
+  .legend .badge { margin-left: 4px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <h1>EuroSafeAI &mdash; Model Risk &amp; Compliance Dashboard</h1>
+    <p>Risks mapped to benchmarks, model results, and EU legal provisions, via <code>mapping/utils/dag.py</code></p>
+  </div>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header"><span class="label">Risk Domains</span></div>
+      <div class="domain-list" id="domain-list"></div>
+    </aside>
+    <main class="content" id="content"></main>
+  </div>
+</div>
+
+<script>
+let DATA = null;
+let currentDomainIdx = 0;
+let currentEvidenceIdx = 0;
+let sortState = { key: "score", dir: -1 };
+
+function esc(s) {
+  if (s === null || s === undefined) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function fmtScore(v) {
+  return (v === undefined || v === null) ? null : Math.round(v * 10) / 10;
+}
+
+async function init() {
+  const res = await fetch("./dashboard_data.json");
+  DATA = await res.json();
+  renderSidebar();
+  renderContent();
+}
+
+function renderSidebar() {
+  const list = document.getElementById("domain-list");
+  list.innerHTML = DATA.domains.map((d, i) => `
+    <div class="domain-item ${i === currentDomainIdx ? "active" : ""}" data-idx="${i}">
+      <div class="name">${esc(d.parent_harm_label)}</div>
+      <div class="meta">${d.evidences.length} mapped risk${d.evidences.length === 1 ? "" : "s"}</div>
+    </div>
+  `).join("");
+
+  list.querySelectorAll(".domain-item").forEach(el => {
+    el.addEventListener("click", () => {
+      currentDomainIdx = Number(el.dataset.idx);
+      currentEvidenceIdx = 0;
+      sortState = { key: "score", dir: -1 };
+      renderSidebar();
+      renderContent();
+    });
+  });
+}
+
+function riskPanelHtml(evidence) {
+  if (!evidence.provisions.length) {
+    return `<div class="empty-note">No legal provisions have been mapped to this risk yet.</div>`;
+  }
+  return evidence.provisions.map(p => `
+    <div class="provision">
+      <div class="citation">${esc(p.citation)}</div>
+      ${p.parent_citation ? `<div class="parent-citation">${esc(p.parent_citation)}</div>` : ""}
+      <div class="badges">
+        ${p.jurisdiction ? `<span class="badge neutral">${esc(p.jurisdiction)}</span>` : ""}
+        ${p.instrument_type ? `<span class="badge neutral">${esc(p.instrument_type)}</span>` : ""}
+        ${p.binding_force ? `<span class="badge binding-${esc(p.binding_force)}">${esc(p.binding_force)}</span>` : ""}
+        ${p.coverage ? `<span class="badge coverage-${esc(p.coverage)}">${esc(p.coverage)} coverage</span>` : ""}
+      </div>
+      ${p.justification ? `<div class="justification">${esc(p.justification)}</div>` : ""}
+    </div>
+  `).join("");
+}
+
+function renderContent() {
+  const content = document.getElementById("content");
+  const domain = DATA.domains[currentDomainIdx];
+
+  if (!domain) {
+    content.innerHTML = `<div class="empty-note">No risk domains have benchmark mappings yet.</div>`;
+    return;
+  }
+
+  const evidence = domain.evidences[currentEvidenceIdx] || domain.evidences[0];
+
+  content.innerHTML = `
+    <h2>${esc(domain.parent_harm_label)}</h2>
+    <div class="content-sub">Risk domain &middot; ${domain.evidences.length} mapped risk${domain.evidences.length === 1 ? "" : "s"}</div>
+
+    <div class="evidence-picker">
+      <label for="evidence-select">Evidence</label>
+      <select id="evidence-select">
+        ${domain.evidences.map((e, i) => `<option value="${i}" ${i === currentEvidenceIdx ? "selected" : ""}>${esc(e.ev_label)} (${esc(e.harm_id)})</option>`).join("")}
+      </select>
+    </div>
+
+    <div class="evidence-card" id="evidence-card"></div>
+
+    <div class="section-title">Model Results</div>
+    <div class="section-sub" id="score-section-sub"></div>
+    <div class="table-tools">
+      <input type="search" id="model-search" placeholder="Filter models or companies&hellip;">
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="score-table">
+        <thead><tr id="score-head"></tr></thead>
+        <tbody id="score-body"></tbody>
+      </table>
+    </div>
+
+    <div class="legend">
+      <span><strong>Binding force:</strong>
+        <span class="badge binding-hard-law">hard-law</span>
+        <span class="badge binding-soft-law">soft-law</span>
+        <span class="badge binding-guidance">guidance</span>
+      </span>
+      <span><strong>Coverage:</strong>
+        <span class="badge coverage-explicit">explicit</span>
+        <span class="badge coverage-interpretive">interpretive</span>
+      </span>
+    </div>
+  `;
+
+  document.getElementById("evidence-select").addEventListener("change", (e) => {
+    currentEvidenceIdx = Number(e.target.value);
+    sortState = { key: "score", dir: -1 };
+    renderContent();
+  });
+
+  document.getElementById("model-search").addEventListener("input", () => renderScoreTable(domain, evidence));
+
+  renderEvidenceCard(domain, evidence);
+  renderScoreTable(domain, evidence);
+}
+
+function renderEvidenceCard(domain, evidence) {
+  const card = document.getElementById("evidence-card");
+  card.innerHTML = `
+    <div class="harm-path"><strong>${esc(domain.parent_harm_label)}</strong> &rsaquo; ${esc(evidence.harm_label)}</div>
+    <h3>${esc(evidence.ev_label)}</h3>
+    <div class="tag-row">
+      ${evidence.evidence_category ? `<span class="badge neutral">${esc(evidence.evidence_category)}</span>` : ""}
+      ${evidence.evidence_domain ? `<span class="badge neutral">${esc(evidence.evidence_domain)}</span>` : ""}
+      ${evidence.evidence_subdomain ? `<span class="badge neutral">${esc(evidence.evidence_subdomain)}</span>` : ""}
+    </div>
+    <div class="benchmark-box">
+      <strong>Measured by:</strong> ${esc(evidence.benchmark.title)} <span class="ref">(${esc(evidence.benchmark.ref)})</span>
+    </div>
+    <div class="risk-block">
+      <div class="section-title" style="margin-top:14px;">Legal Provisions &amp; Citations</div>
+      ${riskPanelHtml(evidence)}
+    </div>
+  `;
+}
+
+function renderScoreTable(domain, evidence) {
+  document.getElementById("score-section-sub").textContent =
+    `Scores from ${evidence.benchmark.title} (${evidence.benchmark.ref}), via models[].scores.${evidence.score_key}`;
+
+  const head = document.getElementById("score-head");
+  const body = document.getElementById("score-body");
+
+  const columns = [
+    { key: "name", label: "Model" },
+    { key: "company", label: "Company" },
+    { key: "specialty", label: "Specialty" },
+    { key: "score", label: "Score" },
+  ];
+
+  head.innerHTML = columns.map(c => `
+    <th data-key="${c.key}" class="${sortState.key === c.key ? "sorted" : ""}">
+      ${esc(c.label)} ${sortState.key === c.key ? (sortState.dir === 1 ? "&#9650;" : "&#9660;") : ""}
+    </th>
+  `).join("");
+
+  head.querySelectorAll("th").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.key;
+      if (sortState.key === key) sortState.dir *= -1;
+      else sortState = { key, dir: key === "score" ? -1 : 1 };
+      renderScoreTable(domain, evidence);
+    });
+  });
+
+  const filter = document.getElementById("model-search").value.trim().toLowerCase();
+  let rows = DATA.models
+    .filter(m => !filter || m.name.toLowerCase().includes(filter) || m.company.toLowerCase().includes(filter))
+    .map(m => ({ ...m, score: m.scores[evidence.score_key] }));
+
+  rows.sort((a, b) => {
+    let av, bv;
+    if (sortState.key === "score") {
+      av = a.score; bv = b.score;
+      if (av === undefined || av === null) return 1;
+      if (bv === undefined || bv === null) return -1;
+    } else {
+      av = a[sortState.key]; bv = b[sortState.key];
+    }
+    if (av < bv) return -1 * sortState.dir;
+    if (av > bv) return 1 * sortState.dir;
+    return 0;
+  });
+
+  body.innerHTML = rows.map(m => {
+    const score = fmtScore(m.score);
+    const bar = score === null
+      ? `<div class="score-cell"><span class="score-num na">&mdash;</span><div class="score-bar-track"></div></div>`
+      : `<div class="score-cell"><span class="score-num">${score}</span>
+          <div class="score-bar-track"><div class="score-bar-fill" style="width:${Math.max(0, Math.min(100, score))}%"></div></div></div>`;
+    return `
+      <tr>
+        <td><strong>${esc(m.name)}</strong></td>
+        <td>${esc(m.company)}</td>
+        <td>${esc(m.specialty)}</td>
+        <td>${bar}</td>
+      </tr>
+    `;
+  }).join("") || `<tr><td colspan="4" class="empty-note">No models match &ldquo;${esc(filter)}&rdquo;.</td></tr>`;
+}
+
+init();
+</script>
+</body>
+</html>
