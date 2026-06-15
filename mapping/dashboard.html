@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EuroSafeAI &mdash; Model Risk &amp; Compliance Dashboard</title>
+<title>EuroSafeAI &mdash; Harm / Benchmark / Legal Provision Crosswalk</title>
 <style>
   :root {
     --bg: #f5f6f8;
@@ -37,113 +37,95 @@
   .topbar p { margin: 4px 0 0; color: var(--text-muted); font-size: 12.5px; }
 
   /* Layout */
-  .layout { flex: 1; display: flex; min-height: 0; }
+  .layout { flex: 1; overflow-y: auto; padding: 20px 24px; }
 
-  /* Sidebar: risk domains */
-  .sidebar {
-    width: 290px;
-    flex: none;
-    border-right: 1px solid var(--border);
-    background: var(--surface);
-    display: flex;
-    flex-direction: column;
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 14px; }
+  .tab {
+    padding: 8px 16px; border: 1px solid var(--border); background: var(--surface);
+    border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--text-muted);
+    cursor: pointer;
   }
-  .sidebar-header {
-    padding: 14px 16px; border-bottom: 1px solid var(--border); flex: none;
+  .tab:hover { color: var(--text); }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* Tree table */
+  .table-wrap {
+    overflow: auto; max-height: calc(100vh - 175px);
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
   }
-  .sidebar-header .label {
-    font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em;
+  table.tree-table { width: 100%; border-collapse: collapse; }
+  table.tree-table th, table.tree-table td {
+    padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border);
+    font-size: 13px; vertical-align: top;
+  }
+  table.tree-table th {
+    position: sticky; top: 0; z-index: 1;
+    color: var(--text-muted); font-weight: 700; font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: .05em; background: #fafbfc;
+    border-bottom: 1px solid var(--border);
+  }
+  table.tree-table tbody tr:last-child td { border-bottom: none; }
+  table.tree-table col.col-label { width: auto; }
+
+  tr.tree-row.expandable { cursor: pointer; }
+  tr.tree-row.expandable:hover td { background: var(--accent-soft); }
+  tr.tree-row.expanded td { background: #fafbfc; }
+
+  .col-ev, .col-count, .col-meta { white-space: nowrap; }
+  .col-count { text-align: center; }
+
+  /* Expand indicator (chevron) */
+  .expand-indicator, .expand-spacer {
+    display: inline-block; width: 6px; height: 6px; margin-right: 8px; margin-bottom: 1px;
+    vertical-align: middle;
+  }
+  .expand-indicator {
+    border-right: 1.5px solid var(--text-muted); border-bottom: 1.5px solid var(--text-muted);
+    transform: rotate(45deg); transition: transform .15s ease;
+  }
+  tr.tree-row.expanded > td .expand-indicator,
+  .harm-entry.expanded > .harm-entry-head .expand-indicator {
+    transform: rotate(-135deg); margin-bottom: -2px;
+  }
+
+  .node-label { font-weight: 600; }
+  .node-count { color: var(--text-muted); font-size: 11px; font-weight: 400; margin-left: 8px; }
+
+  code.ev-id, code.bench-id, code.harm-id {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px; background: var(--accent-soft); color: var(--accent);
+    border-radius: 4px; padding: 1px 5px;
+  }
+
+  .count-badge {
+    display: inline-block; min-width: 22px; padding: 2px 7px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 700;
+    text-align: center;
+  }
+  .count-badge.zero { background: #f1f5f9; color: var(--text-muted); }
+
+  /* Detail rows */
+  tr.detail-row td { background: #fafbfc; padding: 14px 16px 16px 40px; }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .detail-col h4 {
+    margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
     color: var(--text-muted); font-weight: 700;
   }
-  .domain-list { flex: 1; overflow-y: auto; padding: 8px; }
-  .domain-item {
-    padding: 10px 12px; border-radius: 8px; cursor: pointer;
-    border: 1px solid transparent; margin-bottom: 4px;
-  }
-  .domain-item:hover { background: var(--accent-soft); }
-  .domain-item.active { background: var(--accent-soft); border-color: var(--accent); }
-  .domain-item .name { font-size: 13px; font-weight: 600; line-height: 1.35; }
-  .domain-item .meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
-  /* Content */
-  .content { flex: 1; overflow-y: auto; padding: 24px; }
-  .content h2 { margin: 0 0 2px; font-size: 20px; }
-  .content-sub { color: var(--text-muted); font-size: 12.5px; margin-top: 4px; }
-
-  .pill {
-    display: inline-block; padding: 2px 9px; border-radius: 999px;
-    font-size: 11px; font-weight: 600; background: var(--accent-soft); color: var(--accent);
-  }
-
-  /* Evidence picker */
-  .evidence-picker { margin-top: 18px; }
-  .evidence-picker label {
-    display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em;
-    color: var(--text-muted); font-weight: 700; margin-bottom: 6px;
-  }
-  .evidence-picker select {
-    width: 100%; max-width: 480px; padding: 9px 12px; border: 1px solid var(--border);
-    border-radius: 8px; font-size: 13.5px; background: var(--surface); color: var(--text);
-  }
-  .evidence-picker select:focus { border-color: var(--accent); outline: none; }
-
-  /* Evidence detail card */
-  .evidence-card {
-    margin-top: 18px; background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 18px;
-  }
-  .evidence-card .harm-path { font-size: 12px; color: var(--text-muted); }
-  .evidence-card .harm-path strong { color: var(--text); }
-  .evidence-card h3 { margin: 4px 0 10px; font-size: 17px; }
-  .tag-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-
-  .benchmark-box {
-    margin-top: 14px; padding: 12px 14px; background: var(--accent-soft);
-    border-radius: 8px; font-size: 12.5px;
-  }
-  .benchmark-box .ref { font-style: italic; color: var(--text-muted); }
-
-  /* Score table */
-  .section-title { margin: 24px 0 10px; font-size: 14px; font-weight: 700; }
-  .section-sub { font-size: 12px; color: var(--text-muted); margin: -6px 0 10px; }
-  .table-tools { margin-bottom: 8px; }
-  .table-tools input {
-    width: 100%; max-width: 280px; padding: 7px 10px; border: 1px solid var(--border);
-    border-radius: 8px; font-size: 13px; outline: none;
-  }
-  .table-tools input:focus { border-color: var(--accent); }
-
-  table.score-table {
-    width: 100%; border-collapse: collapse; background: var(--surface);
-    border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border);
-  }
-  table.score-table th, table.score-table td {
-    padding: 9px 14px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px;
-  }
-  table.score-table th {
-    cursor: pointer; user-select: none; color: var(--text-muted);
-    font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
-    background: #fafbfc;
-  }
-  table.score-table th.sorted { color: var(--accent); }
-  table.score-table tbody tr:last-child td { border-bottom: none; }
-  table.score-table tbody tr:hover td { background: var(--accent-soft); }
-
-  .score-cell { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-  .score-num { font-variant-numeric: tabular-nums; min-width: 38px; text-align: right; }
-  .score-bar-track { width: 80px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
-  .score-bar-fill { height: 100%; background: var(--accent); }
-  .na { color: var(--text-muted); }
-
-  /* Legal risk panel */
-  .risk-block { margin-top: 12px; }
-  .provision {
+  .entry {
     border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
-    margin-top: 8px; font-size: 12.5px; background: #fafbfc;
+    margin-bottom: 8px; font-size: 12.5px; background: var(--surface);
   }
-  .provision .citation { font-weight: 600; }
-  .provision .parent-citation { color: var(--text-muted); font-size: 11px; margin-top: 2px; }
-  .justification { margin-top: 6px; color: var(--text-muted); font-style: italic; font-size: 11.5px; }
+  .entry:last-child { margin-bottom: 0; }
+  .entry-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+  .entry-title { font-weight: 600; }
+  .entry-sub, .entry-breadcrumb { color: var(--text-muted); font-size: 11px; margin-top: 2px; }
+  .entry-just { margin-top: 6px; color: var(--text-muted); font-style: italic; font-size: 11.5px; }
+  .quick-ref { color: var(--text-muted); font-size: 11px; font-style: italic; }
 
   .badges { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
   .badge {
@@ -157,10 +139,23 @@
   .badge.coverage-interpretive { background: #ede9fe; color: #6d28d9; }
   .badge.neutral { background: #f1f5f9; color: #475569; }
 
-  .empty-note { color: var(--text-muted); font-size: 12px; font-style: italic; margin-top: 6px; }
+  .empty-note { color: var(--text-muted); font-size: 12px; font-style: italic; }
+
+  /* Harms-addressed list (provision view detail) */
+  .harms-list .harm-entry {
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+    margin-bottom: 8px; font-size: 12.5px; background: var(--surface);
+  }
+  .harms-list .harm-entry:last-child { margin-bottom: 0; }
+  .harm-entry.expandable { cursor: pointer; }
+  .harm-entry.expandable:hover { background: var(--accent-soft); }
+  .harm-entry-head { display: flex; align-items: flex-start; gap: 8px; }
+  .harm-entry-head > div:nth-child(2) { flex: 1; }
+  .harm-entry-head .badge { margin-left: auto; flex: none; }
+  .nested-benchmarks { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 
   .legend {
-    margin-top: 20px; padding: 12px 16px; background: var(--surface);
+    margin-top: 14px; padding: 12px 16px; background: var(--surface);
     border: 1px solid var(--border); border-radius: var(--radius);
     font-size: 11.5px; color: var(--text-muted); display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
   }
@@ -171,117 +166,60 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <h1>EuroSafeAI &mdash; Model Risk &amp; Compliance Dashboard</h1>
-    <p>Risks mapped to benchmarks, model results, and EU legal provisions, via <code>mapping/utils/dag.py</code></p>
+    <h1>EuroSafeAI &mdash; Harm / Benchmark / Legal Provision Crosswalk</h1>
+    <p>
+      Browse the harm taxonomy or the legal-provision taxonomy. Each leaf harm lists the
+      benchmarks that measure it and the legal provisions that address it &mdash;
+      via <code>mapping/utils/dag.py</code>. Benchmark IDs are shown for future model-score
+      wiring; results are not yet displayed.
+    </p>
   </div>
   <div class="layout">
-    <aside class="sidebar">
-      <div class="sidebar-header"><span class="label">Risk Domains</span></div>
-      <div class="domain-list" id="domain-list"></div>
-    </aside>
-    <main class="content" id="content"></main>
-  </div>
-</div>
-
-<script>
-let DATA = null;
-let currentDomainIdx = 0;
-let currentEvidenceIdx = 0;
-let sortState = { key: "score", dir: -1 };
-
-function esc(s) {
-  if (s === null || s === undefined) return "";
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function fmtScore(v) {
-  return (v === undefined || v === null) ? null : Math.round(v * 10) / 10;
-}
-
-async function init() {
-  const res = await fetch("./dashboard_data.json");
-  DATA = await res.json();
-  renderSidebar();
-  renderContent();
-}
-
-function renderSidebar() {
-  const list = document.getElementById("domain-list");
-  list.innerHTML = DATA.domains.map((d, i) => `
-    <div class="domain-item ${i === currentDomainIdx ? "active" : ""}" data-idx="${i}">
-      <div class="name">${esc(d.parent_harm_label)}</div>
-      <div class="meta">${d.evidences.length} mapped risk${d.evidences.length === 1 ? "" : "s"}</div>
+    <div class="tabs">
+      <button class="tab active" data-view="harm">By Harm</button>
+      <button class="tab" data-view="provision">By Legal Provision</button>
     </div>
-  `).join("");
 
-  list.querySelectorAll(".domain-item").forEach(el => {
-    el.addEventListener("click", () => {
-      currentDomainIdx = Number(el.dataset.idx);
-      currentEvidenceIdx = 0;
-      sortState = { key: "score", dir: -1 };
-      renderSidebar();
-      renderContent();
-    });
-  });
-}
-
-function riskPanelHtml(evidence) {
-  if (!evidence.provisions.length) {
-    return `<div class="empty-note">No legal provisions have been mapped to this risk yet.</div>`;
-  }
-  return evidence.provisions.map(p => `
-    <div class="provision">
-      <div class="citation">${esc(p.citation)}</div>
-      ${p.parent_citation ? `<div class="parent-citation">${esc(p.parent_citation)}</div>` : ""}
-      <div class="badges">
-        ${p.jurisdiction ? `<span class="badge neutral">${esc(p.jurisdiction)}</span>` : ""}
-        ${p.instrument_type ? `<span class="badge neutral">${esc(p.instrument_type)}</span>` : ""}
-        ${p.binding_force ? `<span class="badge binding-${esc(p.binding_force)}">${esc(p.binding_force)}</span>` : ""}
-        ${p.coverage ? `<span class="badge coverage-${esc(p.coverage)}">${esc(p.coverage)} coverage</span>` : ""}
+    <div class="view active" id="view-harm">
+      <div class="table-wrap">
+        <table class="tree-table">
+          <colgroup>
+            <col class="col-label">
+            <col style="width:110px">
+            <col style="width:120px">
+            <col style="width:130px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Label</th>
+              <th>Evidence ID</th>
+              <th>Benchmarks</th>
+              <th>Legal Provisions</th>
+            </tr>
+          </thead>
+          <tbody id="harm-body"></tbody>
+        </table>
       </div>
-      ${p.justification ? `<div class="justification">${esc(p.justification)}</div>` : ""}
-    </div>
-  `).join("");
-}
-
-function renderContent() {
-  const content = document.getElementById("content");
-  const domain = DATA.domains[currentDomainIdx];
-
-  if (!domain) {
-    content.innerHTML = `<div class="empty-note">No risk domains have benchmark mappings yet.</div>`;
-    return;
-  }
-
-  const evidence = domain.evidences[currentEvidenceIdx] || domain.evidences[0];
-
-  content.innerHTML = `
-    <h2>${esc(domain.parent_harm_label)}</h2>
-    <div class="content-sub">Risk domain &middot; ${domain.evidences.length} mapped risk${domain.evidences.length === 1 ? "" : "s"}</div>
-
-    <div class="evidence-picker">
-      <label for="evidence-select">Evidence</label>
-      <select id="evidence-select">
-        ${domain.evidences.map((e, i) => `<option value="${i}" ${i === currentEvidenceIdx ? "selected" : ""}>${esc(e.ev_label)} (${esc(e.harm_id)})</option>`).join("")}
-      </select>
     </div>
 
-    <div class="evidence-card" id="evidence-card"></div>
-
-    <div class="section-title">Model Results</div>
-    <div class="section-sub" id="score-section-sub"></div>
-    <div class="table-tools">
-      <input type="search" id="model-search" placeholder="Filter models or companies&hellip;">
-    </div>
-    <div style="overflow-x:auto;">
-      <table class="score-table">
-        <thead><tr id="score-head"></tr></thead>
-        <tbody id="score-body"></tbody>
-      </table>
+    <div class="view" id="view-provision">
+      <div class="table-wrap">
+        <table class="tree-table">
+          <colgroup>
+            <col class="col-label">
+            <col style="width:280px">
+            <col style="width:130px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Citation</th>
+              <th>Jurisdiction / Type / Binding</th>
+              <th>Harms Addressed</th>
+            </tr>
+          </thead>
+          <tbody id="provision-body"></tbody>
+        </table>
+      </div>
     </div>
 
     <div class="legend">
@@ -294,104 +232,258 @@ function renderContent() {
         <span class="badge coverage-explicit">explicit</span>
         <span class="badge coverage-interpretive">interpretive</span>
       </span>
+      <span>Click a row with a <span class="expand-indicator" style="margin:0 4px;"></span> chevron to expand it.</span>
     </div>
-  `;
+  </div>
+</div>
 
-  document.getElementById("evidence-select").addEventListener("change", (e) => {
-    currentEvidenceIdx = Number(e.target.value);
-    sortState = { key: "score", dir: -1 };
-    renderContent();
-  });
+<script>
+let DATA = null;
+const expandedHarm = new Set();   // harm_id -> expanded, used by both views
+const expandedProv = new Set();   // provision_id -> expanded (provision view nodes)
 
-  document.getElementById("model-search").addEventListener("input", () => renderScoreTable(domain, evidence));
-
-  renderEvidenceCard(domain, evidence);
-  renderScoreTable(domain, evidence);
+function esc(s) {
+  if (s === null || s === undefined) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
-function renderEvidenceCard(domain, evidence) {
-  const card = document.getElementById("evidence-card");
-  card.innerHTML = `
-    <div class="harm-path"><strong>${esc(domain.parent_harm_label)}</strong> &rsaquo; ${esc(evidence.harm_label)}</div>
-    <h3>${esc(evidence.ev_label)}</h3>
-    <div class="tag-row">
-      ${evidence.evidence_category ? `<span class="badge neutral">${esc(evidence.evidence_category)}</span>` : ""}
-      ${evidence.evidence_domain ? `<span class="badge neutral">${esc(evidence.evidence_domain)}</span>` : ""}
-      ${evidence.evidence_subdomain ? `<span class="badge neutral">${esc(evidence.evidence_subdomain)}</span>` : ""}
-    </div>
-    <div class="benchmark-box">
-      <strong>Measured by:</strong> ${esc(evidence.benchmark.title)} <span class="ref">(${esc(evidence.benchmark.ref)})</span>
-    </div>
-    <div class="risk-block">
-      <div class="section-title" style="margin-top:14px;">Legal Provisions &amp; Citations</div>
-      ${riskPanelHtml(evidence)}
+function countBadge(n) {
+  return `<span class="count-badge${n ? "" : " zero"}">${n}</span>`;
+}
+
+function benchmarkEntry(b) {
+  return `
+    <div class="entry">
+      <div class="entry-head">
+        <code class="bench-id">${esc(b.benchmark_id)}</code>
+        ${b.quick_ref ? `<span class="quick-ref">${esc(b.quick_ref)}</span>` : ""}
+      </div>
+      <div class="entry-title">${esc(b.bench_title)}</div>
+      <div class="badges">
+        ${b.strength ? `<span class="badge neutral">${esc(b.strength)}</span>` : ""}
+        ${b.basis ? `<span class="badge neutral">${esc(b.basis)}</span>` : ""}
+        ${b.confidence ? `<span class="badge neutral">${esc(b.confidence)}</span>` : ""}
+      </div>
     </div>
   `;
 }
 
-function renderScoreTable(domain, evidence) {
-  document.getElementById("score-section-sub").textContent =
-    `Scores from ${evidence.benchmark.title} (${evidence.benchmark.ref}), via models[].scores.${evidence.score_key}`;
+function provisionEntry(p) {
+  return `
+    <div class="entry">
+      <div class="entry-title">${esc(p.citation)}</div>
+      ${p.parent_citation ? `<div class="entry-sub">${esc(p.parent_citation)}</div>` : ""}
+      <div class="badges">
+        ${p.jurisdiction ? `<span class="badge neutral">${esc(p.jurisdiction)}</span>` : ""}
+        ${p.instrument_type ? `<span class="badge neutral">${esc(p.instrument_type)}</span>` : ""}
+        ${p.binding_force ? `<span class="badge binding-${esc(p.binding_force)}">${esc(p.binding_force)}</span>` : ""}
+        ${p.coverage ? `<span class="badge coverage-${esc(p.coverage)}">${esc(p.coverage)}</span>` : ""}
+      </div>
+      ${p.justification ? `<div class="entry-just">${esc(p.justification)}</div>` : ""}
+    </div>
+  `;
+}
 
-  const head = document.getElementById("score-head");
-  const body = document.getElementById("score-body");
+function benchmarksList(benchmarks) {
+  if (!benchmarks.length) return `<span class="empty-note">No benchmarks mapped yet.</span>`;
+  return benchmarks.map(benchmarkEntry).join("");
+}
 
-  const columns = [
-    { key: "name", label: "Model" },
-    { key: "company", label: "Company" },
-    { key: "specialty", label: "Specialty" },
-    { key: "score", label: "Score" },
-  ];
+/* ---------------- Aggregate counts (rolled up to branch/root rows) ---------------- */
 
-  head.innerHTML = columns.map(c => `
-    <th data-key="${c.key}" class="${sortState.key === c.key ? "sorted" : ""}">
-      ${esc(c.label)} ${sortState.key === c.key ? (sortState.dir === 1 ? "&#9650;" : "&#9660;") : ""}
-    </th>
-  `).join("");
+function computeHarmAggregates(node) {
+  if (!node.children) {
+    node._benchCount = (node.benchmarks || []).length;
+    node._provCount = (node.provisions || []).length;
+    return;
+  }
+  let benchCount = 0, provCount = 0;
+  for (const child of node.children) {
+    computeHarmAggregates(child);
+    benchCount += child._benchCount;
+    provCount += child._provCount;
+  }
+  node._benchCount = benchCount;
+  node._provCount = provCount;
+}
 
-  head.querySelectorAll("th").forEach(th => {
-    th.addEventListener("click", () => {
-      const key = th.dataset.key;
-      if (sortState.key === key) sortState.dir *= -1;
-      else sortState = { key, dir: key === "score" ? -1 : 1 };
-      renderScoreTable(domain, evidence);
-    });
-  });
+function computeProvAggregates(node) {
+  let harmsCount = (node.harms || []).length;
+  for (const child of node.children || []) {
+    computeProvAggregates(child);
+    harmsCount += child._harmsCount;
+  }
+  node._harmsCount = harmsCount;
+}
 
-  const filter = document.getElementById("model-search").value.trim().toLowerCase();
-  let rows = DATA.models
-    .filter(m => !filter || m.name.toLowerCase().includes(filter) || m.company.toLowerCase().includes(filter))
-    .map(m => ({ ...m, score: m.scores[evidence.score_key] }));
+/* ---------------- By Harm view ---------------- */
 
-  rows.sort((a, b) => {
-    let av, bv;
-    if (sortState.key === "score") {
-      av = a.score; bv = b.score;
-      if (av === undefined || av === null) return 1;
-      if (bv === undefined || bv === null) return -1;
-    } else {
-      av = a[sortState.key]; bv = b[sortState.key];
+function harmDetail(node) {
+  const benchmarks = node.benchmarks || [];
+  const provisions = node.provisions || [];
+  return `
+    <div class="detail-grid">
+      <div class="detail-col">
+        <h4>Benchmarks</h4>
+        ${benchmarksList(benchmarks)}
+      </div>
+      <div class="detail-col">
+        <h4>Legal Provisions</h4>
+        ${provisions.length ? provisions.map(provisionEntry).join("") : `<span class="empty-note">No legal provisions mapped yet.</span>`}
+      </div>
+    </div>
+  `;
+}
+
+function renderHarmRows(nodes, depth) {
+  let html = "";
+  for (const node of nodes) {
+    const children = node.children || [];
+    const hasChildren = children.length > 0;
+    const benchmarks = node.benchmarks || [];
+    const provisions = node.provisions || [];
+    const hasDetail = !hasChildren && (benchmarks.length > 0 || provisions.length > 0);
+    const expandable = hasChildren || hasDetail;
+    const isExpanded = expandedHarm.has(node.harm_id);
+    const kindLabel = depth === 0 ? "subdomains" : "harms";
+
+    html += `<tr class="tree-row${expandable ? " expandable" : ""}${isExpanded ? " expanded" : ""}" data-harm-id="${esc(node.harm_id)}">
+      <td style="padding-left:${depth * 18 + 12}px">
+        ${expandable ? `<span class="expand-indicator"></span>` : `<span class="expand-spacer"></span>`}
+        <span class="node-label">${esc(node.label)}</span>
+        ${hasChildren ? `<span class="node-count">${children.length} ${kindLabel}</span>` : ""}
+      </td>
+      <td class="col-ev">${node.ev_id ? `<code class="ev-id">${esc(node.ev_id)}</code>` : ""}</td>
+      <td class="col-count">${countBadge(node._benchCount)}</td>
+      <td class="col-count">${countBadge(node._provCount)}</td>
+    </tr>`;
+
+    if (isExpanded && hasChildren) {
+      html += renderHarmRows(children, depth + 1);
     }
-    if (av < bv) return -1 * sortState.dir;
-    if (av > bv) return 1 * sortState.dir;
-    return 0;
-  });
+    if (isExpanded && hasDetail) {
+      html += `<tr class="detail-row"><td colspan="4">${harmDetail(node)}</td></tr>`;
+    }
+  }
+  return html;
+}
 
-  body.innerHTML = rows.map(m => {
-    const score = fmtScore(m.score);
-    const bar = score === null
-      ? `<div class="score-cell"><span class="score-num na">&mdash;</span><div class="score-bar-track"></div></div>`
-      : `<div class="score-cell"><span class="score-num">${score}</span>
-          <div class="score-bar-track"><div class="score-bar-fill" style="width:${Math.max(0, Math.min(100, score))}%"></div></div></div>`;
-    return `
-      <tr>
-        <td><strong>${esc(m.name)}</strong></td>
-        <td>${esc(m.company)}</td>
-        <td>${esc(m.specialty)}</td>
-        <td>${bar}</td>
-      </tr>
-    `;
-  }).join("") || `<tr><td colspan="4" class="empty-note">No models match &ldquo;${esc(filter)}&rdquo;.</td></tr>`;
+function renderHarmView() {
+  document.getElementById("harm-body").innerHTML = renderHarmRows(DATA.harm_tree, 0);
+}
+
+/* ---------------- By Legal Provision view ---------------- */
+
+function harmEntryRow(h) {
+  const benchmarks = h.benchmarks || [];
+  const expandable = benchmarks.length > 0;
+  const isExpanded = expandedHarm.has(h.harm_id);
+  const breadcrumb = [h.harm_domain_label, h.parent_label].filter(Boolean).map(esc).join(" &rsaquo; ");
+  return `
+    <div class="harm-entry${expandable ? " expandable" : ""}${isExpanded ? " expanded" : ""}" data-harm-id="${esc(h.harm_id)}">
+      <div class="harm-entry-head">
+        ${expandable ? `<span class="expand-indicator"></span>` : `<span class="expand-spacer"></span>`}
+        <div>
+          ${breadcrumb ? `<div class="entry-breadcrumb">${breadcrumb}</div>` : ""}
+          <div class="entry-title">${esc(h.label)} <code class="harm-id">${esc(h.harm_id)}</code></div>
+          ${h.justification ? `<div class="entry-just">${esc(h.justification)}</div>` : ""}
+        </div>
+        ${h.coverage ? `<span class="badge coverage-${esc(h.coverage)}">${esc(h.coverage)}</span>` : ""}
+      </div>
+      ${isExpanded && expandable ? `<div class="nested-benchmarks">${benchmarksList(benchmarks)}</div>` : ""}
+    </div>
+  `;
+}
+
+function provHarmsDetail(harms) {
+  if (!harms.length) return `<span class="empty-note">No harms mapped yet.</span>`;
+  return `<div class="harms-list">${harms.map(harmEntryRow).join("")}</div>`;
+}
+
+function renderProvRows(nodes, depth) {
+  let html = "";
+  for (const node of nodes) {
+    const children = node.children || [];
+    const harms = node.harms || [];
+    const hasChildren = children.length > 0;
+    const hasHarms = harms.length > 0;
+    const expandable = hasChildren || hasHarms;
+    const isExpanded = expandedProv.has(node.provision_id);
+
+    html += `<tr class="tree-row${expandable ? " expandable" : ""}${isExpanded ? " expanded" : ""}" data-prov-id="${esc(node.provision_id)}">
+      <td style="padding-left:${depth * 18 + 12}px">
+        ${expandable ? `<span class="expand-indicator"></span>` : `<span class="expand-spacer"></span>`}
+        <span class="node-label">${esc(node.citation)}</span>
+        ${hasChildren ? `<span class="node-count">${children.length} sub-provision${children.length === 1 ? "" : "s"}</span>` : ""}
+      </td>
+      <td class="col-meta">
+        ${node.jurisdiction ? `<span class="badge neutral">${esc(node.jurisdiction)}</span>` : ""}
+        ${node.instrument_type ? `<span class="badge neutral">${esc(node.instrument_type)}</span>` : ""}
+        ${node.binding_force ? `<span class="badge binding-${esc(node.binding_force)}">${esc(node.binding_force)}</span>` : ""}
+      </td>
+      <td class="col-count">${countBadge(node._harmsCount)}</td>
+    </tr>`;
+
+    if (isExpanded && hasChildren) {
+      html += renderProvRows(children, depth + 1);
+    }
+    if (isExpanded && hasHarms) {
+      html += `<tr class="detail-row"><td colspan="3">${provHarmsDetail(harms)}</td></tr>`;
+    }
+  }
+  return html;
+}
+
+function renderProvisionView() {
+  document.getElementById("provision-body").innerHTML = renderProvRows(DATA.provision_tree, 0);
+}
+
+/* ---------------- Wiring ---------------- */
+
+document.getElementById("harm-body").addEventListener("click", (e) => {
+  const row = e.target.closest("tr.tree-row.expandable");
+  if (!row) return;
+  const id = row.dataset.harmId;
+  if (expandedHarm.has(id)) expandedHarm.delete(id); else expandedHarm.add(id);
+  renderHarmView();
+});
+
+document.getElementById("provision-body").addEventListener("click", (e) => {
+  const harmEntry = e.target.closest(".harm-entry.expandable");
+  if (harmEntry) {
+    const id = harmEntry.dataset.harmId;
+    if (expandedHarm.has(id)) expandedHarm.delete(id); else expandedHarm.add(id);
+    renderProvisionView();
+    return;
+  }
+  const row = e.target.closest("tr.tree-row.expandable");
+  if (row) {
+    const id = row.dataset.provId;
+    if (expandedProv.has(id)) expandedProv.delete(id); else expandedProv.add(id);
+    renderProvisionView();
+  }
+});
+
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t === tab));
+    const view = tab.dataset.view;
+    document.getElementById("view-harm").classList.toggle("active", view === "harm");
+    document.getElementById("view-provision").classList.toggle("active", view === "provision");
+  });
+});
+
+async function init() {
+  const res = await fetch("./dashboard_data.json");
+  DATA = await res.json();
+  DATA.harm_tree.forEach(computeHarmAggregates);
+  DATA.provision_tree.forEach(computeProvAggregates);
+  renderHarmView();
+  renderProvisionView();
 }
 
 init();
