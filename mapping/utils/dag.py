@@ -16,9 +16,8 @@ pah        = pd.read_csv(os.path.join(_maps, 'ESAI Harm-Bench-Legal Map - provis
 
 with open(os.path.join(os.path.dirname(__file__), '../..', 'models', 'models.json'), "r") as f:
     model_res = json.load(f)
-
 def build(columns=None):
-    # merge harms + bench_measures_harm
+    # merge harms + self-merge for parent and global labels
     out = (
         harms
         .rename(columns={
@@ -27,20 +26,22 @@ def build(columns=None):
             'notes' : 'harm_notes'
             })
         .merge(
-            bmh.drop(columns='ev_id').rename(columns={'version' : 'bmh_version', 'notes' : 'bmh_notes', 'annotator' : 'bmh_annotator', 'edge_id' : 'bmh_edge'}), 
-            on="harm_id")
-        .rename(columns=lambda x: x.strip().lower().replace(':', '').replace(' ', '_'))
-    )
-
-    # self-merge to get parent labels
-    out = (
-        out
-        .merge(
             harms[['harm_id', 'label']].rename(
                 columns={'harm_id' : 'parent_harm_id', 'label' : 'parent_label'}
             ),
             on='parent_harm_id',
             how='left'
+        )
+        
+    )
+    #print(out.head())
+    # merge harms + bench_measures_harm
+    out = (
+        out
+        .merge(
+            bmh.drop(columns='ev_id').rename(columns={'version' : 'bmh_version', 'notes' : 'bmh_notes', 'annotator' : 'bmh_annotator', 'edge_id' : 'bmh_edge'}), 
+            on="harm_id",
+            how="left"
         )
     )
 
@@ -68,6 +69,7 @@ def build(columns=None):
             on='provision_parent_id',
             how='left'
         )
+        .rename(columns=lambda x: x.strip().lower().replace(':', '').replace(' ', '_'))
     )
     columns = columns if columns else out.columns
     return out[columns]
