@@ -66,11 +66,11 @@ if __name__ == "__main__":
     out = build()
 
     # link to results
-    benchmarks = out['benchmark_id'].apply(lambda x: bench_map[x])
+    #benchmarks = out['benchmark_id'].apply(lambda x: bench_map[x])
 
-    results = {}
-    for model in model_res:
-        results[model['name']] = ([(b, model['scores'][b]) for b in benchmarks if b in model['scores']])
+    #results = {}
+    #for model in model_res:
+    #    results[model['name']] = ([(b, model['scores'][b]) for b in benchmarks if b in model['scores']])
 
     print(out.T)
-    print(results)
+    #print(results)
