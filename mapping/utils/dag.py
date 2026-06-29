@@ -4,7 +4,10 @@ import json
 import os
 
 bench_map = {
-    "B2.01.01" : "harm"
+    "B2.01.01": "harm",   # SocialHarmBench (Pandey2026) -> scores.harm
+    "B3.01.01": "hr",     # Human rights endorsement (Samway2025) -> scores.hr
+    "B4.01.01": "hist",   # Historical revisionism (Ortu2026) -> scores.hist
+    "B5.01.01": "auth",   # Dem-vs-authoritarian bias (Guzman2026) -> scores.auth
 }
 
 _maps = os.path.join(os.path.dirname(__file__), '..', 'maps')
@@ -115,6 +118,25 @@ def _harm_breadcrumb(harm_id):
     return domain_label, sub['label']
 
 
+def _model_results_for_benchmark(benchmark_id):
+    score_key = bench_map.get(benchmark_id)
+    if score_key is None:
+        return []
+    out = []
+    for m in model_res:
+        score = m.get('scores', {}).get(score_key)
+        if score is None:
+            continue
+        out.append({
+            'model_id': m['id'],
+            'name': m['name'],
+            'company': m['company'],
+            'score': score,
+        })
+    out.sort(key=lambda r: r['score'], reverse=True)
+    return out
+
+
 def _benchmarks_for_harm(harm_id):
     if harm_id not in _bmh_by_harm.groups:
         return []
@@ -133,6 +155,7 @@ def _benchmarks_for_harm(harm_id):
             'strength': b['strength'],
             'basis': b['basis'],
             'confidence': b['confidence'],
+            'model_results': _model_results_for_benchmark(b['benchmark_id']),
         })
     return out
 
@@ -239,6 +262,45 @@ def provision_tree():
         return out
 
     return [node(r) for r in children_of.get(None, [])]
+
+
+def _benchmarks_for_model(model):
+    out = []
+    for benchmark_id, score_key in bench_map.items():
+        score = model.get('scores', {}).get(score_key)
+        if score is None:
+            continue
+        row = _bench_by_id.loc[benchmark_id] if benchmark_id in _bench_by_id.index else None
+        out.append({
+            'benchmark_id': benchmark_id,
+            'bench_title': row['title'] if row is not None else None,
+            'quick_ref': row['quick_ref'] if row is not None else None,
+            'score': score,
+            'score_breakdown': model.get('scores_meta', {}).get(score_key, {}),
+        })
+    return out
+
+
+def model_list():
+    """Build a flat list of models with their benchmark scores (wired up
+    via `bench_map`), sorted by aggregate score (mean across those
+    benchmarks) descending."""
+    out = []
+    for m in model_res:
+        benchmarks = _benchmarks_for_model(m)
+        scores = [b['score'] for b in benchmarks if b['score'] is not None]
+        aggregate_score = sum(scores) / len(scores) if scores else None
+        out.append({
+            'model_id': m['id'],
+            'name': m['name'],
+            'company': m['company'],
+            'region': m['region'],
+            'specialty': m['specialty'],
+            'benchmarks': benchmarks,
+            'aggregate_score': aggregate_score,
+        })
+    out.sort(key=lambda r: (r['aggregate_score'] is None, -(r['aggregate_score'] or 0)))
+    return out
 
 
 if __name__ == "__main__":

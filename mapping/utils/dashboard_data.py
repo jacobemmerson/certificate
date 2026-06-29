@@ -2,7 +2,7 @@ import json
 import math
 import os
 
-from dag import harm_tree, provision_tree
+from dag import harm_tree, provision_tree, model_list
 
 
 def _clean(value):
@@ -22,6 +22,7 @@ def build_dashboard_data():
     return _clean({
         "harm_tree": harm_tree(),
         "provision_tree": provision_tree(),
+        "model_list": model_list(),
     })
 
 

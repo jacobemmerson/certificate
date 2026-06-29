@@ -40,7 +40,11 @@
   .layout { flex: 1; overflow-y: auto; padding: 20px 24px; }
 
   /* Tabs */
-  .tabs { display: flex; gap: 4px; margin-bottom: 14px; }
+  .tabs { display: flex; gap: 4px; align-items: center; margin-bottom: 14px; }
+  .filter-toggle {
+    margin-left: 12px; font-size: 12.5px; color: var(--text-muted);
+    display: flex; align-items: center; gap: 6px; cursor: pointer;
+  }
   .tab {
     padding: 8px 16px; border: 1px solid var(--border); background: var(--surface);
     border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--text-muted);
@@ -127,6 +131,18 @@
   .entry-just { margin-top: 6px; color: var(--text-muted); font-style: italic; font-size: 11.5px; }
   .quick-ref { color: var(--text-muted); font-size: 11px; font-style: italic; }
 
+  .model-results { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); }
+  .model-results-row {
+    display: grid; grid-template-columns: 1fr 1fr 50px; gap: 8px;
+    padding: 2px 0; font-size: 11.5px;
+  }
+  .model-results-row.head {
+    color: var(--text-muted); font-weight: 700; text-transform: uppercase; font-size: 10px;
+  }
+  .model-results-row .score { text-align: right; }
+
+  .score-cell { text-align: center; font-weight: 700; font-size: 12.5px; }
+
   .badges { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
   .badge {
     padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700;
@@ -178,6 +194,11 @@
     <div class="tabs">
       <button class="tab active" data-view="harm">By Harm</button>
       <button class="tab" data-view="provision">By Legal Provision</button>
+      <button class="tab" data-view="model">By Model</button>
+      <label class="filter-toggle">
+        <input type="checkbox" id="legal-filter">
+        Only show items with legal-provision coverage
+      </label>
     </div>
 
     <div class="view active" id="view-harm">
@@ -222,6 +243,21 @@
       </div>
     </div>
 
+    <div class="view" id="view-model">
+      <div class="table-wrap">
+        <table class="tree-table">
+          <thead>
+            <tr id="model-head-row">
+              <th>Model</th>
+              <th>Provider</th>
+              <th class="col-count">Aggregate</th>
+            </tr>
+          </thead>
+          <tbody id="model-body"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="legend">
       <span><strong>Binding force:</strong>
         <span class="badge binding-hard-law">hard-law</span>
@@ -233,6 +269,11 @@
         <span class="badge coverage-interpretive">interpretive</span>
       </span>
       <span>Click a row with a <span class="expand-indicator" style="margin:0 4px;"></span> chevron to expand it.</span>
+      <span id="legend-model-scores" style="display:none;">
+        <strong>By Model scores:</strong> color shows each column's rank,
+        from <span class="score-cell" style="background:hsl(0,70%,87%);color:hsl(0,65%,28%);padding:2px 8px;border-radius:6px;">lowest</span>
+        to <span class="score-cell" style="background:hsl(120,70%,87%);color:hsl(120,65%,28%);padding:2px 8px;border-radius:6px;">highest</span>.
+      </span>
     </div>
   </div>
 </div>
@@ -255,6 +296,35 @@ function countBadge(n) {
   return `<span class="count-badge${n ? "" : " zero"}">${n}</span>`;
 }
 
+function fmtScore(n) {
+  return n == null ? "" : n.toFixed(1);
+}
+
+function scoreRange(values) {
+  const nums = values.filter(v => v != null);
+  if (!nums.length) return { min: 0, max: 0 };
+  return { min: Math.min(...nums), max: Math.max(...nums) };
+}
+
+function scoreStyle(value, range) {
+  if (value == null) return "";
+  const { min, max } = range;
+  const t = max === min ? 0.5 : (value - min) / (max - min);
+  const hue = t * 120;
+  return ` style="background-color: hsl(${hue}, 70%, 87%); color: hsl(${hue}, 65%, 28%);"`;
+}
+
+function filterByCoverage(nodes, key) {
+  const out = [];
+  for (const node of nodes) {
+    if (node[key] === 0) continue;
+    const copy = { ...node };
+    if (node.children) copy.children = filterByCoverage(node.children, key);
+    out.push(copy);
+  }
+  return out;
+}
+
 function benchmarkEntry(b) {
   return `
     <div class="entry">
@@ -268,6 +338,14 @@ function benchmarkEntry(b) {
         ${b.basis ? `<span class="badge neutral">${esc(b.basis)}</span>` : ""}
         ${b.confidence ? `<span class="badge neutral">${esc(b.confidence)}</span>` : ""}
       </div>
+      ${b.model_results && b.model_results.length ? `
+        <div class="model-results">
+          <div class="model-results-row head"><span>Model</span><span>Provider</span><span class="score">Score</span></div>
+          ${b.model_results.map(r => `
+            <div class="model-results-row"><span>${esc(r.name)}</span><span>${esc(r.company)}</span><span class="score">${fmtScore(r.score)}</span></div>
+          `).join("")}
+        </div>
+      ` : ""}
     </div>
   `;
 }
@@ -373,7 +451,9 @@ function renderHarmRows(nodes, depth) {
 }
 
 function renderHarmView() {
-  document.getElementById("harm-body").innerHTML = renderHarmRows(DATA.harm_tree, 0);
+  const filterOn = document.getElementById("legal-filter").checked;
+  const tree = filterOn ? filterByCoverage(DATA.harm_tree, "_provCount") : DATA.harm_tree;
+  document.getElementById("harm-body").innerHTML = renderHarmRows(tree, 0);
 }
 
 /* ---------------- By Legal Provision view ---------------- */
@@ -439,7 +519,52 @@ function renderProvRows(nodes, depth) {
 }
 
 function renderProvisionView() {
-  document.getElementById("provision-body").innerHTML = renderProvRows(DATA.provision_tree, 0);
+  const filterOn = document.getElementById("legal-filter").checked;
+  const tree = filterOn ? filterByCoverage(DATA.provision_tree, "_harmsCount") : DATA.provision_tree;
+  document.getElementById("provision-body").innerHTML = renderProvRows(tree, 0);
+}
+
+/* ---------------- By Model view ---------------- */
+
+function renderModelView() {
+  const models = DATA.model_list;
+  const columns = (models[0] && models[0].benchmarks) || [];
+
+  document.getElementById("model-head-row").innerHTML = `
+    <th>Model</th>
+    <th>Provider</th>
+    <th class="col-count">Aggregate</th>
+    ${columns.map(b => {
+      const title = [b.bench_title, b.quick_ref].filter(Boolean).join(" — ");
+      return `<th class="col-count"${title ? ` title="${esc(title)}"` : ""}><code class="bench-id">${esc(b.benchmark_id)}</code></th>`;
+    }).join("")}
+  `;
+
+  const aggRange = scoreRange(models.map(m => m.aggregate_score));
+  const benchRanges = columns.map(col => scoreRange(models.map(m => {
+    const b = (m.benchmarks || []).find(x => x.benchmark_id === col.benchmark_id);
+    return b ? b.score : null;
+  })));
+
+  document.getElementById("model-body").innerHTML = models.map(m => {
+    const byId = {};
+    (m.benchmarks || []).forEach(b => { byId[b.benchmark_id] = b; });
+
+    const benchCells = columns.map((col, i) => {
+      const b = byId[col.benchmark_id];
+      const score = b ? b.score : null;
+      const breakdown = b ? Object.entries(b.score_breakdown || {}) : [];
+      const title = breakdown.map(([k, v]) => `${k}: ${fmtScore(v)}`).join(" · ");
+      return `<td class="score-cell"${scoreStyle(score, benchRanges[i])}${title ? ` title="${esc(title)}"` : ""}>${fmtScore(score)}</td>`;
+    }).join("");
+
+    return `<tr>
+      <td><span class="node-label">${esc(m.name)}</span></td>
+      <td>${esc(m.company)}</td>
+      <td class="score-cell"${scoreStyle(m.aggregate_score, aggRange)}>${fmtScore(m.aggregate_score)}</td>
+      ${benchCells}
+    </tr>`;
+  }).join("");
 }
 
 /* ---------------- Wiring ---------------- */
@@ -474,7 +599,14 @@ document.querySelectorAll(".tab").forEach(tab => {
     const view = tab.dataset.view;
     document.getElementById("view-harm").classList.toggle("active", view === "harm");
     document.getElementById("view-provision").classList.toggle("active", view === "provision");
+    document.getElementById("view-model").classList.toggle("active", view === "model");
+    document.getElementById("legend-model-scores").style.display = view === "model" ? "" : "none";
   });
+});
+
+document.getElementById("legal-filter").addEventListener("change", () => {
+  renderHarmView();
+  renderProvisionView();
 });
 
 async function init() {
@@ -484,6 +616,7 @@ async function init() {
   DATA.provision_tree.forEach(computeProvAggregates);
   renderHarmView();
   renderProvisionView();
+  renderModelView();
 }
 
 init();
