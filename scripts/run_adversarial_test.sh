@@ -11,11 +11,11 @@
 export HF_HOME="${SCRATCH:-/scratch/$USER}/hf_cache"
 export OPENROUTER_API_KEY="${OPENROUTER_API_KEY:?}"
 
-cd "$(dirname "$0")/.."
+cd "$SLURM_SUBMIT_DIR"
 source .venv/bin/activate
 mkdir -p logs
 
-uv run inspect eval tasks/evals/socialharmbench.py@social_harm_bench_adversarial \
+inspect eval tasks/evals/socialharmbench.py@social_harm_bench_adversarial \
     --model "openrouter/anthropic/claude-haiku-4-5" \
     --max-connections 5 \
     --limit 5 \
