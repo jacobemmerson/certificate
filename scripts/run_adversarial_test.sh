@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=shb-test
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:t4:1
+#SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=00:30:00
