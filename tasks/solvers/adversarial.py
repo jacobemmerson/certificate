@@ -112,7 +112,7 @@ def adversarial_retry(
                 elif attack_name in _ATTACKS_WITH_BUDGET:
                     transcript().info(f"Running {attack_name} (budget: {attacker_budget})")
                     success, new_state = await _ATTACKS_WITH_BUDGET[attack_name](
-                        state, generate, goal, attacker_budget
+                        state, generate, goal, attacker_budget, verify
                     )
                 elif attack_name in _ATTACKS_WITH_ATTACKER:
                     transcript().info(f"Running {attack_name} (attacker: {attacker_model})")
@@ -126,7 +126,7 @@ def adversarial_retry(
                 attacks_tried.append(attack_name)
 
                 if success:
-                    if verify is not None:
+                    if verify is not None and attack_name not in _ATTACKS_WITH_BUDGET:
                         if not await verify(new_state):
                             transcript().info(f"{attack_name} bypassed refusal but graded safe — continuing")
                             continue

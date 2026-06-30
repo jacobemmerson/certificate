@@ -86,14 +86,21 @@ def _perturb(text: str, strength: float, rng: random.Random) -> str:
 
 
 async def bon_attack(
-    state: TaskState, generate: Generate, goal: str, budget: int = 10,
+    state: TaskState, generate: Generate, goal: str, budget: int = 10, verify=None,
 ) -> tuple[bool, TaskState]:
     rng = random.Random()
     for i in range(budget):
         test = copy.deepcopy(state)
         test.messages = [ChatMessageUser(content=_perturb(goal, 0.2, rng))]
         test = await generate(test)
-        if not _is_refusal(test.output.completion):
+        if _is_refusal(test.output.completion):
+            continue
+        if verify is not None:
+            if await verify(test):
+                transcript().info(f"BoN found harmful response on attempt {i + 1}/{budget}")
+                return True, test
+            transcript().info(f"BoN attempt {i + 1}/{budget}: non-refusal but graded safe — continuing")
+        else:
             transcript().info(f"BoN succeeded on attempt {i + 1}/{budget}")
             return True, test
     return False, state
