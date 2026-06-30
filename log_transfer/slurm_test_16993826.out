@@ -1,0 +1,1137 @@
+[06/30/26 14:38:50] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_4                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a18fMOzs9KZJYEfy1n                            
+                             Nc5MYir/oL+20PLKoVsI1EG                            
+                             wAckVNn0GIiVPEuu0NfcJw=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+                    WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_3                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a18jkE3SKYXYU/alg2                            
+                             ZVYrc61U6ITBZU5ab0czP2T                            
+                             a/n+AhcVjdr8+uhFecfqdQ=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+                    WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_1                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1/uQr2Xo/Lw4LsVzh                            
+                             iR1RBIDxBmBLAo4tef3bzIE                            
+                             x23DJ4UczaVmXVaQfBWx6c=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+                    WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_2                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1/BJaLhF4SWTDd3cH                            
+                             e70SITIKe5ZpRLcJklriUdo                            
+                             JOd9EncvTF/x4xiPO87Me4=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:38:51] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_0                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1/6TvbY+hza0v687u                            
+                             9WakgOE2CQCKL8XD3aerX3B                            
+                             Q5VoBea7gv+vDv50e3aMe0=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+                    WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_4                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a19CT5wpiRJKIQ40Nu                            
+                             XQCwKFERBgx7FiZJeUzqp8v                            
+                             u0xvO1wGwVA3sFy4CHJdYs=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:38:52] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_1                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a18XT1G0ci6wa9iEeK                            
+                             D3izIZ7PFXmjPn+fJBQ/D23                            
+                             BxsnF7wUz/ICaTPNL6YaC8=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+                    WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_2                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1+k9tu4fBOxtPaSn6                            
+                             Ryaw8bah3Mpth0prUCKCAqn                            
+                             JKm9ppbNXluI/pdMiVVGbI=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+                    WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_0                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a19dIXOnmGsp2Z3TA3                            
+                             VJamDmUjTPHQsV1BttEaADn                            
+                             cVia9/XVCeJIdPqcep4W/o=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:38:55] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_3                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a19wjAJon/Va+wTbxK                            
+                             4ux1WYs02TSvtUQuYVWYOq0                            
+                             QQA+KRC1pratzeTR8SRFLY=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:38:57] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_4                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a18t8pE2RvYaWS0iQB                            
+                             c8nOsTS369T0T1Nfw1m2UKo                            
+                             JQrXHsSIu2Z9B+8c1e+ms4=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:38:58] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_2                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a18Z1ISZE8skABM/6U                            
+                             Zn+Y1fC9PTvnDbh4AOENZeO                            
+                             XXc5Rgp/aEli9gkrEyGJdk=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+                    WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_1                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a18qaJIXp6dObAumgR                            
+                             jNcaHMtDBJExx0NQcHw2KNf                            
+                             NEYZvojRqXpvtMC1N7F2MM=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:38:59] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_4                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1/LUqwXPazNfHw0aA                            
+                             46uOuKNo+B60mqtwEEPdfQF                            
+                             N/PRekvLHbStn+c9cohrSE=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+                    WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_2                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1+JJe8pS6v40aK/vq                            
+                             /8B+d8cKwBSG+BnNtv05RZx                            
+                             2PSz/U34uWyC/Zis89q9ZI=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:00] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_1                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1/TRI8N66s5FfBOKy                            
+                             eNxRck0H+0uRHvtCwKRZ5/L                            
+                             qG9dsWgs+qKrlwTYuDMNi4=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:01] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_3                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a19hv/K2t107qHsZO3                            
+                             m7JjBOwkcmxaYJdwqBlPqmv                            
+                             YXW+OH6ZlM+bT4iJ+7RqCc=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:04] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_3                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1/NqzXMuo4/j9ApZ0                            
+                             L2p0j8ygL91vUTLt/Ya5AQX                            
+                             o0FHyrimCDZNsubzd5wriA=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:05] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_4                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1/EOcj8h67d0xyBVZ                            
+                             VT5BUQYoCc2I6z/EQrCvDH0                            
+                             q9Ujuxx0kH74qUwNuDMoAg=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:07] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_4                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1/P4/RnZZCMS0ZJGl                            
+                             fO8U93wsJ+TpqL0ZqegU5NJ                            
+                             77YymkvA+cAN3rckdHOrUM=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:08] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_0                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1//+lvlNdeAemzbnM                            
+                             veW53V/KwDM6117E2kshnNn                            
+                             8pI0KyeokHyBakkjbsOYhY=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:12] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_1                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1+idrf19npHcq6HL9                            
+                             jeOLC7S5vmbjTjg8WWwt+7i                            
+                             Acw1La2dkILw6k/lhpZb6E=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+                    WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_3                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1/COe/jKHPvqx63Gx                            
+                             ev/C4YLXMVfNvwv9EirsluB                            
+                             NRyY33Ufpum36yNFHNVZ7k=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:13] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_0                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1+YWYdFWmWzxFvz1Z                            
+                             W3XrxvyNz2Vsd8bwTEE0qD+                            
+                             wcJ1YL71l6uSltQ2tMy3t8=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+                    WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_2                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a19sp7oomFp/IGRDNF                            
+                             2CVVrS4VmHnQ7g+2Kg6Rn2z                            
+                             BLdHESQEphZn87/i+bObMo=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:14] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_4                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1/THdFLr/0j3KHm44                            
+                             nMoim25A0e/Cq0PXmftAVUL                            
+                             uwWUsCHPdXnB+dmO87rxek=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+                    WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_1                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1+SruY0O7H2WoXV6I                            
+                             RMmRvYEW4mghFlp3ctzKigw                            
+                             P9x5fIyEJjtShoP5WQp+zs=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:15] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_2                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1/DNWYfVPCab6F4Wq                            
+                             MV6U9xryLq98iG11a9sQGdP                            
+                             nfCMDwCc66DcWtNn2yCKmE=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:16] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_4                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a18FbKMUPH7+PPeEkb                            
+                             G92iEsyYavfwuGcTXm9ApK9                            
+                             xoetRV6O2ljKcm46ASUtvI=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:17] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_3                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a18qNRNr49eGGXx6eJ                            
+                             7UK/RCCItnwIUwNQ1dW+VE5                            
+                             XGl8T+Goy7IugMinNueH6Y=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:25] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_0                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a19YgypefEQKfti05Y                            
+                             fY15g5UTxl9Wej3TeLxBM+h                            
+                             mGvzCByuGTVDdq2qLCXNSU=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:27] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_3                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1+hQgBSZFGG0ahkNY                            
+                             Njdy9fFJxb6Sv5Gel6z+BmV                            
+                             znIFr+nuEjw51P7sHRYLHg=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:28] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_0                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1+HcqJ3m0rvZjsyaU                            
+                             z104xwISO8VrYnKj6si4Iei                            
+                             rAnkhDL2hifxlpNMyulhGk=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:31] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_3                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1/nKD3qWvbKeYpNyA                            
+                             mwvINsSt3Mv3b2LBIhdoKLM                            
+                             XHw/dDxFvTejCdj7XsioUg=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:34] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_0                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a1/Ta3cbsZGduDHZds                            
+                             zhDZ8FS8tI2Y2VxI5qpSBh3                            
+                             FePMgYlP37u5cfa1dB1h+k=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+[06/30/26 14:39:40] WARNING  sample=prompt_propagand _openrouter_reasoning.py:52
+                             a_historical_0                                     
+                             Error parsing                                      
+                             OpenRouter reasoning                               
+                             details: 1 validation                              
+                             error for                                          
+                             list[tagged-union[Reaso                            
+                             ningDetailSummary,Reaso                            
+                             ningDetailEncrypted,Rea                            
+                             soningDetailText]]                                 
+                             0.`reasoning.text`.text                            
+                               Field required                                   
+                             [type=missing,                                     
+                             input_value={'type':                               
+                             'reasoning.text'...-gem                            
+                             ini-v1', 'index': 0},                              
+                             input_type=dict]                                   
+                                 For further                                    
+                             information visit                                  
+                             https://errors.pydantic                            
+                             .dev/2.13/v/missing                                
+                                                                                
+                             [{"type":                                          
+                             "reasoning.text",                                  
+                             "signature":                                       
+                             "AY89a18AiQKO+FXss4N8jU                            
+                             sL2HA47fIY4VHhWHp6io5eK                            
+                             lJ7fLGadyYyZtfarUncnBQ=                            
+                             ", "format":                                       
+                             "google-gemini-v1",                                
+                             "index": 0}]                                       
+╭──────────────────────────────────────────────────────────────────────────────╮
+│social_harm_bench_adversarial (5 samples):                                    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+max_connections: 5, attacker: hf/Qwen/Qwen2.5-1.5B-Instruct, llamaguard_model:  
+openrouter/meta-llama/llama-guard-4-12b, dataset: socialharmbench               
+total time:                               0:01:32                               
+openrouter/anthropic/claude-haiku-4-5     12,367 tokens [I: 5,659, CW: 0, CR: 0,
+                                        O: 6,708, R: 0]                         
+openrouter/google/gemini-3-flash-preview  17,743 tokens [I: 17,347, CW: 0, CR:  
+                                        0, O: 396, R: 0]                        
+openrouter/meta-llama/llama-guard-4-12b   12,676 tokens [I: 12,630, CW: 0, CR:  
+                                        0, O: 46, R: 0]                         
+                                                                                
+multi_harm_scorer                                                               
+accuracy           1.000                                                        
+stderr             0.000                                                        
+                                                                                
+Log:                                                                            
+logs/2026-06-30T18-38-10-00-00_social-harm-bench-adversarial_jJzFJyDDe6zLo7wsiXN
+pMj.eval                                                                        
+                                                                                
