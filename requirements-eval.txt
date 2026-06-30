@@ -1,0 +1,14 @@
+requests
+tqdm
+pandas
+numpy
+openai
+anthropic
+matplotlib
+seaborn
+scipy
+geopandas
+ipython
+inspect-ai
+huggingface_hub
+transformers

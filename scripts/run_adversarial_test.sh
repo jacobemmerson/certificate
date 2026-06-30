@@ -13,7 +13,7 @@ export OPENROUTER_API_KEY="${OPENROUTER_API_KEY:?}"
 
 cd "$SLURM_SUBMIT_DIR"
 uv venv .venv --quiet 2>/dev/null || true
-uv pip install -r requirements.txt --quiet
+uv pip install -r requirements-eval.txt --quiet
 source .venv/bin/activate
 mkdir -p logs
 
