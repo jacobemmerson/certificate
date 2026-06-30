@@ -21,7 +21,7 @@ inspect eval tasks/evals/socialharmbench.py@social_harm_bench_adversarial \
     --model "openrouter/anthropic/claude-haiku-4-5" \
     --max-connections 5 \
     --limit 5 \
-    --log-dir logs/ \
+    --log-dir out/ \
     -T "attacker=hf/Qwen/Qwen2.5-1.5B-Instruct" \
     -T "llamaguard_model=openrouter/meta-llama/llama-guard-4-12b" \
     "$@"

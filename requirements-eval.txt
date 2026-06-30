@@ -12,3 +12,5 @@ ipython
 inspect-ai
 huggingface_hub
 transformers
+torch
+accelerate
