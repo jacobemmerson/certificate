@@ -22,8 +22,9 @@ uv pip install -r requirements.txt --quiet
 source .venv/bin/activate
 
 # ── Cleanup trap ──────────────────────────────────────────────────────────────
+PROXY_PID="" ATTACKER_PID="" HARMBENCH_PID=""
 cleanup() {
-    kill "$PROXY_PID" "$ATTACKER_PID" "$HARMBENCH_PID" 2>/dev/null || true
+    kill $PROXY_PID $ATTACKER_PID $HARMBENCH_PID 2>/dev/null || true
     wait 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
