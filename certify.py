@@ -42,6 +42,18 @@ def parse():
     args.add_argument(
         "--rerun", required=False, action='store_true', help="Reruns all results regardless of whether they are present in an existing file."
     )
+    args.add_argument(
+        "--only", "-o", required=False, nargs="+", metavar="BENCHMARK",
+        help="Run only these benchmark keys (e.g. --only harm harm_adv). Other existing results are preserved."
+    )
+    args.add_argument(
+        "--attacker", "-a", required=False, default="openrouter/meta-llama/llama-3.1-8b-instruct",
+        help="Attacker model for adversarial benchmarks (default: openrouter/meta-llama/llama-3.1-8b-instruct)."
+    )
+    args.add_argument(
+        "--llamaguard", required=False, default="openrouter/meta-llama/llama-guard-4-12b",
+        help="LlamaGuard model for adversarial harm scoring (default: openrouter/meta-llama/llama-guard-4-12b)."
+    )
 
     return args.parse_args()
 
@@ -86,7 +98,7 @@ if __name__ == "__main__":
     print(f"Log Directory: {log_dir}")
 
     # ----- task master list -----
-    BENCHMARKS = init_benchmarks(grader) # see tasks/benchmarks.py for all tasks
+    BENCHMARKS = init_benchmarks(grader, attacker=args.attacker, llamaguard_model=args.llamaguard)  # see tasks/benchmarks.py for all tasks
 
     def check_status(evaluations):
         if evaluations['status'] != 'success':
@@ -111,18 +123,27 @@ if __name__ == "__main__":
     if idx != -1:
         print(f"Results Found: Model index at {idx}")
 
-    tasks_to_skip = {}
-    # if results exist AND we want to rerun all tasks
-    if idx != -1 and not args.rerun: 
+    only = set(args.only) if args.only else None
+
+    tasks_to_skip = set()
+    if only:
+        # run only the requested benchmarks; skip everything else
+        tasks_to_skip = set(BENCHMARKS.keys()) - only
+        unknown = only - set(BENCHMARKS.keys())
+        if unknown:
+            print(f"[WARNING] Unknown benchmark keys (ignored): {', '.join(sorted(unknown))}")
+    elif idx != -1 and not args.rerun:
+        # default: skip benchmarks that already have results
         tasks_to_skip = set(models[idx]['scores'].keys())
 
-    #tasks_to_skip = {'harm', 'hist', 'hr'} # temporary for debugging
+    if tasks_to_skip:
+        print(f"Skipping: {', '.join(sorted(tasks_to_skip))}")
 
     # ----- main loop -----
     scores = {}
     scores_meta = {}
     for benchmark, tasks in BENCHMARKS.items():
-        
+
         if benchmark in tasks_to_skip:
             continue
 

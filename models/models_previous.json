@@ -3,12 +3,13 @@
         "id": "gemini-2.5-flash-lite",
         "name": "Gemini 2.5 Flash Lite",
         "company": "Google",
-        "region": "USA Frontier Models",
+        "region": "USA",
         "specialty": "High-throughput, low-latency, and cost efficiency",
         "scores": {
             "auth": 65.12232909035235,
             "harm": 92.63698630136986,
-            "hr": 54.69317356572259
+            "hr": 54.69317356572259,
+            "hist": 52.466040241715916
         },
         "scores_meta": {
             "auth": {
@@ -26,6 +27,10 @@
                 "echr": 62.41830065359478,
                 "echr_individual": 95.50653594771241,
                 "echr_government": 5.882352941176471
+            },
+            "hist": {
+                "no_push": 87.16363636363637,
+                "explicit_push": 17.768444119795472
             }
         }
     },
@@ -33,12 +38,13 @@
         "id": "gemini-2.5-flash",
         "name": "Gemini 2.5 Flash",
         "company": "Google",
-        "region": "USA Frontier Models",
+        "region": "USA",
         "specialty": "High-throughput, low-latency, and cost efficiency",
         "scores": {
             "auth": 68.01847936731657,
             "harm": 95.2054794520548,
-            "hr": 54.75388071895426
+            "hr": 54.75388071895426,
+            "hist": 54.97369993526648
         },
         "scores_meta": {
             "auth": {
@@ -56,126 +62,10 @@
                 "echr": 66.25816993464052,
                 "echr_individual": 96.97712418300652,
                 "echr_government": 1.2254901960784315
-            }
-        }
-    },
-    {
-        "id": "deepseek-v4-pro",
-        "name": "DeepSeek V4 Pro",
-        "company": "DeepSeek",
-        "region": "USA Frontier Models",
-        "specialty": "Advanced code generation and reasoning",
-        "scores": {
-            "auth": 68.47742149777032,
-            "harm": 92.63698630136986,
-            "hr": 49.244848402323896
-        },
-        "scores_meta": {
-            "auth": {
-                "fscale": 82.0,
-                "favscore": 55.18902125006776,
-                "rolemodel": 68.24324324324324
             },
-            "harm": {
-                "social_harm_bench": 92.63698630136986
-            },
-            "hr": {
-                "udhr": 54.28240740740741,
-                "udhr_individual": 92.53472222222223,
-                "udhr_government": 0.6944444444444444,
-                "echr": 55.14705882352941,
-                "echr_individual": 92.6470588235294,
-                "echr_government": 0.16339869281045752
-            }
-        }
-    },
-    {
-        "id": "deepseek-v4-flash",
-        "name": "DeepSeek V4 Flash",
-        "company": "DeepSeek",
-        "region": "USA Frontier Models",
-        "specialty": "Fast code generation and reasoning",
-        "scores": {
-            "auth": 67.51218358679598,
-            "harm": 96.23287671232876,
-            "hr": 48.24857026143791
-        },
-        "scores_meta": {
-            "auth": {
-                "fscale": 77.33333333333333,
-                "favscore": 54.54505926889648,
-                "rolemodel": 70.65815815815816
-            },
-            "harm": {
-                "social_harm_bench": 96.23287671232876
-            },
-            "hr": {
-                "udhr": 53.06712962962963,
-                "udhr_individual": 89.6412037037037,
-                "udhr_government": 3.6458333333333335,
-                "echr": 56.699346405228766,
-                "echr_individual": 83.49673202614379,
-                "echr_government": 2.9411764705882355
-            }
-        }
-    },
-    {
-        "id": "deepseek-v3.2",
-        "name": "DeepSeek V3.2",
-        "company": "DeepSeek",
-        "region": "USA Frontier Models",
-        "specialty": "Code generation and reasoning",
-        "scores": {
-            "auth": 67.9161140895637,
-            "harm": 96.23287671232876,
-            "hr": 55.30762073347858
-        },
-        "scores_meta": {
-            "auth": {
-                "fscale": 82.66666666666667,
-                "favscore": 53.8372883576372,
-                "rolemodel": 67.24438724438724
-            },
-            "harm": {
-                "social_harm_bench": 96.23287671232876
-            },
-            "hr": {
-                "udhr": 60.763888888888886,
-                "udhr_individual": 95.42824074074075,
-                "udhr_government": 11.11111111111111,
-                "echr": 61.356209150326805,
-                "echr_individual": 93.218954248366,
-                "echr_government": 9.967320261437909
-            }
-        }
-    },
-    {
-        "id": "deepseek-v3.2-speciale",
-        "name": "DeepSeek V3.2 Speciale",
-        "company": "DeepSeek",
-        "region": "USA Frontier Models",
-        "specialty": "Specialized code generation and reasoning",
-        "scores": {
-            "auth": 66.76368877822365,
-            "harm": 78.25342465753424,
-            "hr": 49.682847676107485
-        },
-        "scores_meta": {
-            "auth": {
-                "fscale": 84.0,
-                "favscore": 56.02079606440071,
-                "rolemodel": 60.270270270270274
-            },
-            "harm": {
-                "social_harm_bench": 78.25342465753424
-            },
-            "hr": {
-                "udhr": 54.80324074074073,
-                "udhr_individual": 95.19675925925927,
-                "udhr_government": 0.05787037037037038,
-                "echr": 54.98366013071896,
-                "echr_individual": 92.72875816993462,
-                "echr_government": 0.32679738562091504
+            "hist": {
+                "no_push": 92.0909090909091,
+                "explicit_push": 17.856490779623883
             }
         }
     },
@@ -183,12 +73,13 @@
         "id": "gemini-3-flash-preview",
         "name": "Gemini 3 Flash",
         "company": "Google",
-        "region": "USA Frontier Models",
+        "region": "USA",
         "specialty": "Fast multimodal reasoning",
         "scores": {
             "auth": 62.11944263882248,
             "harm": 87.32876712328768,
-            "hr": 51.0206744734931
+            "hr": 51.0206744734931,
+            "hist": 55.15155166119021
         },
         "scores_meta": {
             "auth": {
@@ -206,6 +97,10 @@
                 "echr": 55.310457516339866,
                 "echr_individual": 99.01960784313725,
                 "echr_government": 0.0
+            },
+            "hist": {
+                "no_push": 93.61818181818182,
+                "explicit_push": 16.684921504198613
             }
         }
     },
@@ -213,12 +108,13 @@
         "id": "gemini-3.1-pro-preview",
         "name": "Gemini 3.1 Pro",
         "company": "Google",
-        "region": "USA Frontier Models",
+        "region": "USA",
         "specialty": "Multimodal understanding and reasoning",
         "scores": {
             "auth": 70.64567293346363,
             "harm": 96.06164383561644,
-            "hr": 51.35995370370372
+            "hr": 51.35995370370372,
+            "hist": 58.875063891931354
         },
         "scores_meta": {
             "auth": {
@@ -236,6 +132,150 @@
                 "echr": 49.34640522875818,
                 "echr_individual": 72.87581699346406,
                 "echr_government": 31.944444444444446
+            },
+            "hist": {
+                "no_push": 89.3090909090909,
+                "explicit_push": 28.441036874771815
+            }
+        }
+    },
+    {
+        "id": "deepseek-v4-pro",
+        "name": "DeepSeek V4 Pro",
+        "company": "DeepSeek",
+        "region": "China",
+        "specialty": "Advanced code generation and reasoning",
+        "scores": {
+            "auth": 68.47742149777032,
+            "harm": 92.63698630136986,
+            "hr": 49.244848402323896,
+            "hist": 56.72755827080152
+        },
+        "scores_meta": {
+            "auth": {
+                "fscale": 82.0,
+                "favscore": 55.18902125006776,
+                "rolemodel": 68.24324324324324
+            },
+            "harm": {
+                "social_harm_bench": 92.63698630136986
+            },
+            "hr": {
+                "udhr": 54.28240740740741,
+                "udhr_individual": 92.53472222222223,
+                "udhr_government": 0.6944444444444444,
+                "echr": 55.14705882352941,
+                "echr_individual": 92.6470588235294,
+                "echr_government": 0.16339869281045752
+            },
+            "hist": {
+                "no_push": 92.49090909090908,
+                "explicit_push": 20.964207450693937
+            }
+        }
+    },
+    {
+        "id": "deepseek-v4-flash",
+        "name": "DeepSeek V4 Flash",
+        "company": "DeepSeek",
+        "region": "China",
+        "specialty": "Fast code generation and reasoning",
+        "scores": {
+            "auth": 67.51218358679598,
+            "harm": 96.23287671232876,
+            "hr": 48.24857026143791,
+            "hist": 57.43232526100884
+        },
+        "scores_meta": {
+            "auth": {
+                "fscale": 77.33333333333333,
+                "favscore": 54.54505926889648,
+                "rolemodel": 70.65815815815816
+            },
+            "harm": {
+                "social_harm_bench": 96.23287671232876
+            },
+            "hr": {
+                "udhr": 53.06712962962963,
+                "udhr_individual": 89.6412037037037,
+                "udhr_government": 3.6458333333333335,
+                "echr": 56.699346405228766,
+                "echr_individual": 83.49673202614379,
+                "echr_government": 2.9411764705882355
+            },
+            "hist": {
+                "no_push": 90.7090909090909,
+                "explicit_push": 24.155559612926787
+            }
+        }
+    },
+    {
+        "id": "deepseek-v3.2",
+        "name": "DeepSeek V3.2",
+        "company": "DeepSeek",
+        "region": "China",
+        "specialty": "Code generation and reasoning",
+        "scores": {
+            "auth": 67.9161140895637,
+            "harm": 96.23287671232876,
+            "hr": 55.30762073347858,
+            "hist": 54.00535491905355
+        },
+        "scores_meta": {
+            "auth": {
+                "fscale": 82.66666666666667,
+                "favscore": 53.8372883576372,
+                "rolemodel": 67.24438724438724
+            },
+            "harm": {
+                "social_harm_bench": 96.23287671232876
+            },
+            "hr": {
+                "udhr": 60.763888888888886,
+                "udhr_individual": 95.42824074074075,
+                "udhr_government": 11.11111111111111,
+                "echr": 61.356209150326805,
+                "echr_individual": 93.218954248366,
+                "echr_government": 9.967320261437909
+            },
+            "hist": {
+                "no_push": 89.65454545454546,
+                "explicit_push": 18.356164383561644
+            }
+        }
+    },
+    {
+        "id": "deepseek-v3.2-speciale",
+        "name": "DeepSeek V3.2 Speciale",
+        "company": "DeepSeek",
+        "region": "China",
+        "specialty": "Specialized code generation and reasoning",
+        "scores": {
+            "auth": 66.76368877822365,
+            "harm": 78.25342465753424,
+            "hr": 49.682847676107485,
+            "hist": 54.933734939759034
+        },
+        "scores_meta": {
+            "auth": {
+                "fscale": 84.0,
+                "favscore": 56.02079606440071,
+                "rolemodel": 60.270270270270274
+            },
+            "harm": {
+                "social_harm_bench": 78.25342465753424
+            },
+            "hr": {
+                "udhr": 54.80324074074073,
+                "udhr_individual": 95.19675925925927,
+                "udhr_government": 0.05787037037037038,
+                "echr": 54.98366013071896,
+                "echr_individual": 92.72875816993462,
+                "echr_government": 0.32679738562091504
+            },
+            "hist": {
+                "no_push": 93.0,
+                "explicit_push": 16.867469879518072
             }
         }
     },
@@ -243,12 +283,13 @@
         "id": "grok-4.20-multi-agent",
         "name": "Grok 4.20 Multi-Agent",
         "company": "xAI",
-        "region": "USA Frontier Models",
+        "region": "USA",
         "specialty": "Multi-agent reasoning and coordination",
         "scores": {
             "auth": 62.83557431522548,
             "harm": 67.63698630136986,
-            "hr": 49.65334513435004
+            "hr": 49.65334513435004,
+            "hist": 66.45336300528116
         },
         "scores_meta": {
             "auth": {
@@ -266,6 +307,10 @@
                 "echr": 58.2516339869281,
                 "echr_individual": 94.68954248366013,
                 "echr_government": 0.24509803921568626
+            },
+            "hist": {
+                "no_push": 94.94545454545454,
+                "explicit_push": 37.961271465107785
             }
         }
     },
@@ -273,12 +318,13 @@
         "id": "grok-4.20",
         "name": "Grok 4.20",
         "company": "xAI",
-        "region": "USA Frontier Models",
+        "region": "USA",
         "specialty": "Advanced reasoning and knowledge synthesis",
         "scores": {
             "auth": 62.523078019202046,
             "harm": 96.23287671232876,
-            "hr": 53.23166303558461
+            "hr": 53.23166303558461,
+            "hist": 72.85805166345708
         },
         "scores_meta": {
             "auth": {
@@ -296,36 +342,10 @@
                 "echr": 55.06535947712418,
                 "echr_individual": 98.36601307189544,
                 "echr_government": 6.699346405228758
-            }
-        }
-    },
-    {
-        "id": "grok-4.1-fast",
-        "name": "Grok 4.1 Fast",
-        "company": "xAI",
-        "region": "USA Frontier Models",
-        "specialty": "Fast reasoning and knowledge synthesis",
-        "scores": {
-            "auth": 63.627959802378406,
-            "harm": 87.15753424657534,
-            "hr": 48.106163761801014
-        },
-        "scores_meta": {
-            "auth": {
-                "fscale": 75.33333333333333,
-                "favscore": 55.90339892665474,
-                "rolemodel": 59.64714714714715
             },
-            "harm": {
-                "social_harm_bench": 87.15753424657534
-            },
-            "hr": {
-                "udhr": 49.942129629629626,
-                "udhr_individual": 95.3125,
-                "udhr_government": 0.0,
-                "echr": 48.03921568627451,
-                "echr_individual": 95.34313725490196,
-                "echr_government": 0.0
+            "hist": {
+                "no_push": 94.10909090909091,
+                "explicit_push": 51.60701241782323
             }
         }
     },
@@ -333,12 +353,13 @@
         "id": "gpt-5.5",
         "name": "GPT-5.5",
         "company": "OpenAI",
-        "region": "USA Frontier Models",
+        "region": "USA",
         "specialty": "Advanced reasoning and multimodal capabilities",
         "scores": {
             "auth": 68.04638928379238,
             "harm": 99.82876712328768,
-            "hr": 58.95969498910676
+            "hr": 58.95969498910676,
+            "hist": 79.9667396860168
         },
         "scores_meta": {
             "auth": {
@@ -356,6 +377,10 @@
                 "echr": 58.74183006535948,
                 "echr_individual": 71.89542483660132,
                 "echr_government": 50.898692810457526
+            },
+            "hist": {
+                "no_push": 94.74545454545455,
+                "explicit_push": 65.18802482657904
             }
         }
     },
@@ -363,12 +388,13 @@
         "id": "gpt-5.4",
         "name": "GPT-5.4",
         "company": "OpenAI",
-        "region": "USA Frontier Models",
+        "region": "USA",
         "specialty": "Advanced language understanding and generation",
         "scores": {
             "auth": 64.17970872622034,
             "harm": 100.0,
-            "hr": 59.60818355119826
+            "hr": 59.60818355119826,
+            "hist": 83.98218327856883
         },
         "scores_meta": {
             "auth": {
@@ -386,6 +412,10 @@
                 "echr": 58.08823529411764,
                 "echr_individual": 71.81372549019609,
                 "echr_government": 53.267973856209146
+            },
+            "hist": {
+                "no_push": 95.05454545454546,
+                "explicit_push": 72.90982110259219
             }
         }
     },
@@ -393,12 +423,13 @@
         "id": "gpt-5.4-mini",
         "name": "GPT-5.4 Mini",
         "company": "OpenAI",
-        "region": "USA Frontier Models",
+        "region": "USA",
         "specialty": "Efficient language understanding and generation",
         "scores": {
             "auth": 64.39647402050502,
             "harm": 100.0,
-            "hr": 56.58757716049382
+            "hr": 56.58757716049382,
+            "hist": 78.91175611537058
         },
         "scores_meta": {
             "auth": {
@@ -416,6 +447,10 @@
                 "echr": 55.473856209150334,
                 "echr_individual": 66.66666666666667,
                 "echr_government": 48.692810457516345
+            },
+            "hist": {
+                "no_push": 92.85454545454546,
+                "explicit_push": 64.96896677619569
             }
         }
     },
@@ -423,12 +458,13 @@
         "id": "gpt-5.3-chat",
         "name": "GPT-5.3 Chat",
         "company": "OpenAI",
-        "region": "USA Frontier Models",
+        "region": "USA",
         "specialty": "Conversational AI and dialogue",
         "scores": {
             "auth": 65.43661301703938,
             "harm": 99.31506849315068,
-            "hr": 48.944149419026864
+            "hr": 48.944149419026864,
+            "hist": 73.56109129470741
         },
         "scores_meta": {
             "auth": {
@@ -446,6 +482,10 @@
                 "echr": 51.87908496732025,
                 "echr_individual": 79.24836601307189,
                 "echr_government": 15.60457516339869
+            },
+            "hist": {
+                "no_push": 93.52727272727273,
+                "explicit_push": 53.5949098621421
             }
         }
     },
@@ -453,12 +493,13 @@
         "id": "claude-sonnet-4.6",
         "name": "Claude Sonnet 4.6",
         "company": "Anthropic",
-        "region": "USA Frontier Models",
+        "region": "USA",
         "specialty": "Balanced performance and efficiency",
         "scores": {
             "auth": 67.6649405748243,
             "harm": 100.0,
-            "hr": 73.83578431372548
+            "hr": 73.83578431372548,
+            "hist": 93.0446878422782
         },
         "scores_meta": {
             "auth": {
@@ -476,23 +517,55 @@
                 "echr": 68.30065359477123,
                 "echr_individual": 84.3954248366013,
                 "echr_government": 67.40196078431373
+            },
+            "hist": {
+                "no_push": 95.56363636363636,
+                "explicit_push": 90.52573932092004
             }
         }
     },
     {
-        "id": "gpt-5.3-chat",
+        "id": "claude-opus-4.6",
+        "name": "Claude Opus 4.6",
+        "company": "Anthropic",
+        "region": "USA",
+        "specialty": "Advanced reasoning and complex task solving",
+        "scores": {
+            "auth": 65.5628263729039,
+            "harm": 100.0,
+            "hr": 70.6886574074074,
+            "hist": 85.61332016531944
+        },
+        "scores_meta": {
+            "auth": {
+                "fscale": 76.0,
+                "favscore": 55.42500135523392,
+                "rolemodel": 65.26347776347777
+            },
+            "harm": {
+                "social_harm_bench": 100.0
+            },
+            "hr": {
+                "udhr": 71.70138888888889,
+                "udhr_individual": 88.42592592592592,
+                "udhr_government": 50.11574074074074,
+                "echr": 73.69281045751634,
+                "echr_individual": 85.94771241830065,
+                "echr_government": 54.248366013071895
+            },
+            "hist": {
+                "no_push": 95.2909090909091,
+                "explicit_push": 75.93573123972978
+            }
+        }
+    },
+    {
+        "id": "claude-sonnet-4.5",
         "name": null,
         "company": null,
         "region": null,
         "specialty": null,
-        "scores": {
-            "auth": 70.67292292292292
-        },
-        "scores_meta": {
-            "auth": {
-                "fscale": 78.0,
-                "rolemodel": 63.345845845845844
-            }
-        }
+        "scores": {},
+        "scores_meta": {}
     }
 ]

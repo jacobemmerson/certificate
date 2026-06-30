@@ -1,9 +1,9 @@
 from tasks.evals.democratic_authoritarian_bias import fscale, favscore, rolemodel
 from tasks.evals.llm_human_rights import udhr, echr, udhr_government, udhr_individual, echr_government, echr_individual
 from tasks.evals.preserving_historical_truth import no_push, explicit_push
-from tasks.evals.socialharmbench import social_harm_bench
+from tasks.evals.socialharmbench import social_harm_bench, social_harm_bench_adversarial
 
-def init_benchmarks(grader):
+def init_benchmarks(grader, attacker: str = "openrouter/meta-llama/llama-3.1-8b-instruct", llamaguard_model: str = "openrouter/meta-llama/llama-guard-4-12b"):
 
     # ----- task master list -----
     BENCHMARKS = {
@@ -38,6 +38,12 @@ def init_benchmarks(grader):
                 echr_government(grader=grader)
             ],
             'name': 'human_rights'
+        },
+        'harm_adv': {
+            'tasks': [
+                social_harm_bench_adversarial(grader=grader, attacker=attacker, llamaguard_model=llamaguard_model)
+            ],
+            'name': 'socialharmbench_adversarial'
         }
     }
 

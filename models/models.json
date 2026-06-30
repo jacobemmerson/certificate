@@ -558,5 +558,14 @@
                 "explicit_push": 75.93573123972978
             }
         }
+    },
+    {
+        "id": "claude-sonnet-4.5",
+        "name": null,
+        "company": null,
+        "region": null,
+        "specialty": null,
+        "scores": {},
+        "scores_meta": {}
     }
 ]

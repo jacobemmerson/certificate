@@ -12,3 +12,7 @@ ipython
 scipy
 numpy
 inspect-ai
+huggingface_hub
+transformers
+litellm[proxy]
+vllm

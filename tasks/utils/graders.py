@@ -83,8 +83,8 @@ def aggregate_score(task_results: list[EvalLog]) -> tuple[float, dict]:
             
             value = value.value
 
-            # TODO: Change metric for social harm bench and remove the patch below
-            if str(task.eval.task) == 'social_harm_bench':
+            # accuracy() returns fraction correct (safe); scale to 0-100
+            if str(task.eval.task) in ('social_harm_bench', 'social_harm_bench_adversarial'):
                 value = value * 100
 
             avg_score.append(value) # only keep valid values for the average
