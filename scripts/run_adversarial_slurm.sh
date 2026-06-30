@@ -44,7 +44,6 @@ export OPENROUTER_API_KEY="${OPENROUTER_API_KEY:?Set OPENROUTER_API_KEY}"
 
 mkdir -p logs
 
-# ── Cleanup trap ──────────────────────────────────────────────────────────────
 cleanup() {
     echo "Shutting down servers..."
     kill "$PROXY_PID" "$ATTACKER_PID" "$HARMBENCH_PID" "$LLAMAGUARD_PID" 2>/dev/null || true
@@ -52,7 +51,6 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# ── Helper: wait for vLLM health endpoint ────────────────────────────────────
 wait_for_server() {
     local port=$1 name=$2
     echo "Waiting for $name on port $port..."
@@ -67,8 +65,6 @@ wait_for_server() {
     echo "  $name ready"
 }
 
-# ── Start vLLM: Hermes-3-70B AWQ (attacker) — GPUs 0,1 ──────────────────────
-# AWQ keeps weights to ~35 GB across both GPUs (~17.5 GB/GPU)
 CUDA_VISIBLE_DEVICES=0,1 python -m vllm.entrypoints.openai.api_server \
     --model "NousResearch/Hermes-3-Llama-3.1-70B-AWQ" \
     --quantization awq \
@@ -79,8 +75,6 @@ CUDA_VISIBLE_DEVICES=0,1 python -m vllm.entrypoints.openai.api_server \
     &
 ATTACKER_PID=$!
 
-# ── Start vLLM: HarmBench classifier — GPU 2 ─────────────────────────────────
-# Llama-2-13B fp16 ≈ 26 GB; fits in 48 GB L40S
 CUDA_VISIBLE_DEVICES=2 python -m vllm.entrypoints.openai.api_server \
     --model "cais/HarmBench-Llama-2-13b-cls" \
     --served-model-name "$HARMBENCH_NAME" \
@@ -89,8 +83,6 @@ CUDA_VISIBLE_DEVICES=2 python -m vllm.entrypoints.openai.api_server \
     &
 HARMBENCH_PID=$!
 
-# ── Start vLLM: LlamaGuard — GPU 3 ───────────────────────────────────────────
-# Llama-Guard-3-8B fp16 ≈ 16 GB; fits easily
 CUDA_VISIBLE_DEVICES=3 python -m vllm.entrypoints.openai.api_server \
     --model "meta-llama/Llama-Guard-3-8B" \
     --served-model-name "$LLAMAGUARD_NAME" \
@@ -103,9 +95,6 @@ wait_for_server "$ATTACKER_PORT"  "attacker"
 wait_for_server "$HARMBENCH_PORT" "harmbench"
 wait_for_server "$LLAMAGUARD_PORT" "llamaguard"
 
-# ── LiteLLM proxy — single OPENAI_BASE_URL routes by model name ──────────────
-# Inspect's openai/* provider uses OPENAI_BASE_URL for all openai/* model calls.
-# LiteLLM reads the model name from the request and forwards to the right backend.
 cat > /tmp/litellm_config_${SLURM_JOB_ID}.yaml <<EOF
 model_list:
   - model_name: ${ATTACKER_NAME}
@@ -135,7 +124,6 @@ wait_for_server "$PROXY_PORT" "litellm-proxy"
 export OPENAI_BASE_URL="http://localhost:${PROXY_PORT}/v1"
 export OPENAI_API_KEY="dummy"
 
-# ── Run eval ─────────────────────────────────────────────────────────────────
 uv run inspect eval tasks/evals/socialharmbench.py@social_harm_bench_adversarial \
     --model "$TARGET_MODEL" \
     --max-connections 20 \
