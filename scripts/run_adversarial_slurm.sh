@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=shb-adversarial
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:l40s:4
+#SBATCH --gres=gpu:a100:4
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=128G
 #SBATCH --time=24:00:00
