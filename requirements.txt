@@ -11,6 +11,7 @@ geopandas
 ipython
 scipy
 numpy
+dirtyjson
 inspect-ai
 huggingface_hub
 transformers
