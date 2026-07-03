@@ -91,6 +91,7 @@ inspect eval tasks/evals/socialharmbench.py@social_harm_bench_adversarial \
     --max-connections 10 \
     --limit 20 \
     --log-dir out/ \
+    -T attacks="["cipher", "deep_inception", "pair", "crescendo"]" \
     -T "grader=openrouter/google/gemini-flash-1.5" \
     -T "attacker=openai/hermes-attacker" \
     -T "llamaguard_model=openrouter/meta-llama/llama-guard-4-12b" \

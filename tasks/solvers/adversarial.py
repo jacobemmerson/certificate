@@ -1,19 +1,29 @@
 """Adversarial retry solver — runs attacks until a response is graded harmful.
 
-Attack order (default): best_of_n → cipher → many_shot → crescendo
-PAIR is opt-in; pass attacks=["best_of_n", "cipher", "many_shot", "pair"] to enable.
+Attack order (default):
+best_of_n → cipher → many_shot → deep_inception → pair → crescendo →
+deep_inception_cipher → pair_cipher → crescendo_cipher
 """
 from __future__ import annotations
 
 from inspect_ai.log import transcript
 from inspect_ai.solver import Generate, Solver, TaskState, solver
 
-from tasks.attacks import bon_attack, cipher_attack, crescendo_attack, many_shot_attack, pair_attack
+from tasks.attacks import (
+    bon_attack,
+    cipher_attack,
+    crescendo_attack,
+    crescendo_cipher_attack,
+    deep_inception_attack,
+    deep_inception_cipher_attack,
+    many_shot_attack,
+    pair_attack,
+    pair_cipher_attack,
+)
 from tasks.attacks.utils import _is_refusal
 
-_ATTACKS_SINGLE_SHOT = {
+_ATTACKS_WITH_VERIFY = {
     "cipher": cipher_attack,
-    "many_shot": many_shot_attack,
 }
 
 _ATTACKS_WITH_BUDGET = {
@@ -21,11 +31,26 @@ _ATTACKS_WITH_BUDGET = {
 }
 
 _ATTACKS_WITH_ATTACKER = {
+    "many_shot": many_shot_attack,
+    "deep_inception": deep_inception_attack,
     "pair": pair_attack,
     "crescendo": crescendo_attack,
+    "deep_inception_cipher": deep_inception_cipher_attack,
+    "pair_cipher": pair_cipher_attack,
+    "crescendo_cipher": crescendo_cipher_attack,
 }
 
-DEFAULT_ATTACK_ORDER = ["best_of_n", "cipher", "many_shot", "pair", "crescendo"]
+# Ordered roughly cheapest -> most expensive: best_of_n/cipher make no attacker-model
+# calls at all; many_shot and deep_inception each make exactly one attacker-model call
+# per run (deep_inception's single call also produces a longer completion); pair and
+# crescendo make an attacker-model call per iteration/turn, scaling with attacker_budget.
+# The "_cipher" hybrids additionally require the target to self-encode every reply and
+# decode it before checking success, so they are strictly more expensive than their
+# non-cipher counterparts and sit last.
+DEFAULT_ATTACK_ORDER = [
+    "best_of_n", "cipher", "many_shot", "deep_inception", "pair", "crescendo",
+    "deep_inception_cipher", "pair_cipher", "crescendo_cipher",
+]
 
 
 def _goal_from_state(state: TaskState) -> str:
@@ -51,9 +76,26 @@ def adversarial_retry(
 
     Without verify: falls back to triggering only on textual refusals.
 
-    Single-shot attacks (best_of_n, cipher, many_shot) each make one API call.
-    Multi-turn attacks (pair, crescendo) use attacker_budget to control depth.
-    PAIR is opt-in — include "pair" in the attacks list to enable it.
+    cipher tries all 8 cipher/obfuscation variants (rot13, base64, caesar shift,
+    atbash, morse, leetspeak, homoglyph substitution, artprompt) in sequence; with
+    verify provided, a coherent non-refusal that's still graded safe doesn't stop the
+    loop early — it moves on to the next cipher variant, so every variant gets a real
+    chance instead of the first non-refusal winning by default. best_of_n retries
+    random text perturbations up to attacker_budget times.
+    Attacker-model attacks (many_shot, deep_inception, pair, crescendo) call
+    attacker_model to generate goal-tailored adversarial content; many_shot uses
+    attacker_budget to size its generated shot pool, deep_inception uses it as a
+    variant count (only the first variant calls the attacker model, the rest reuse
+    built-in nested-fiction templates), pair/crescendo use it to control turn depth
+    (calling the attacker model on every iteration/turn, so cost scales directly with
+    the budget).
+
+    deep_inception_cipher, pair_cipher, and crescendo_cipher are hybrid variants of
+    deep_inception/pair/crescendo that additionally require the target's reply be
+    encoded in a cipher (rotating through rot13/caesar/atbash/base64/morse), decoding
+    it before checking for a refusal — strictly more expensive than their non-cipher
+    counterparts since every reply now also has to survive a decode step, so they run
+    last.
     """
     attack_order = attacks if attacks is not None else DEFAULT_ATTACK_ORDER
 
@@ -104,10 +146,10 @@ def adversarial_retry(
 
         for attack_name in attack_order:
             try:
-                if attack_name in _ATTACKS_SINGLE_SHOT:
+                if attack_name in _ATTACKS_WITH_VERIFY:
                     transcript().info(f"Running {attack_name}")
-                    success, new_state = await _ATTACKS_SINGLE_SHOT[attack_name](
-                        state, generate, goal
+                    success, new_state = await _ATTACKS_WITH_VERIFY[attack_name](
+                        state, generate, goal, verify
                     )
                 elif attack_name in _ATTACKS_WITH_BUDGET:
                     transcript().info(f"Running {attack_name} (budget: {attacker_budget})")
@@ -126,7 +168,11 @@ def adversarial_retry(
                 attacks_tried.append(attack_name)
 
                 if success:
-                    if verify is not None and attack_name not in _ATTACKS_WITH_BUDGET:
+                    if (
+                        verify is not None
+                        and attack_name not in _ATTACKS_WITH_BUDGET
+                        and attack_name not in _ATTACKS_WITH_VERIFY
+                    ):
                         if not await verify(new_state):
                             transcript().info(f"{attack_name} bypassed refusal but graded safe — continuing")
                             continue
