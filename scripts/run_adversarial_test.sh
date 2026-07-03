@@ -1,16 +1,16 @@
 #!/bin/bash
 #SBATCH --job-name=shb-test
 #SBATCH --nodes=1
-#SBATCH --gpus=h100:2
+#SBATCH --gpus=l40s:2
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=64G
+#SBATCH --mem=128GB
 #SBATCH --time=02:00:00
 #SBATCH --output=logs/slurm_test_%j.out
 #SBATCH --error=logs/slurm_test_%j.err
 
 set -euo pipefail
 
-export HF_HOME="${SCRATCH:-/scratch/$USER}/hf_cache"
+export HF_HOME="$HOME/hf_cache"
 export OPENROUTER_API_KEY="${OPENROUTER_API_KEY:?}"
 
 cd "$SLURM_SUBMIT_DIR"
