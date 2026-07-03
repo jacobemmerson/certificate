@@ -1,16 +1,16 @@
 #!/bin/bash
 #SBATCH --job-name=shb-test
 #SBATCH --nodes=1
-#SBATCH --gpus=l40s:2
+#SBATCH --gpus=h100:2
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=128GB
+#SBATCH --mem=64G
 #SBATCH --time=02:00:00
 #SBATCH --output=logs/slurm_test_%j.out
 #SBATCH --error=logs/slurm_test_%j.err
 
 set -euo pipefail
 
-export HF_HOME="$HOME/hf_cache"
+export HF_HOME="${SCRATCH:-/scratch/$USER}/hf_cache"
 export OPENROUTER_API_KEY="${OPENROUTER_API_KEY:?}"
 
 cd "$SLURM_SUBMIT_DIR"
@@ -91,7 +91,7 @@ inspect eval tasks/evals/socialharmbench.py@social_harm_bench_adversarial \
     --max-connections 10 \
     --limit 20 \
     --log-dir out/ \
-    -T attacks="["cipher", "deep_inception", "pair", "crescendo"]" \
+    -T attacks="["cipher", "deep_inception", "pair", "crescendo"]"\
     -T "grader=openrouter/google/gemini-flash-1.5" \
     -T "attacker=openai/hermes-attacker" \
     -T "llamaguard_model=openrouter/meta-llama/llama-guard-4-12b" \
