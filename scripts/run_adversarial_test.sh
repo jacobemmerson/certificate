@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=shb-test
 #SBATCH --nodes=1
-#SBATCH --gpus=nvidia_h100_80gb_hbm3_3g.40gb:2
+#SBATCH --gpus=h100:2
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64G
 #SBATCH --time=02:00:00
@@ -49,7 +49,6 @@ CUDA_VISIBLE_DEVICES=0 python -m vllm.entrypoints.openai.api_server \
     --model "NousResearch/Hermes-3-Llama-3.1-70B-AWQ" \
     --quantization awq \
     --tensor-parallel-size 1 \
-    --max-model-len 4096 \
     --served-model-name hermes-attacker \
     --port 8001 &
 ATTACKER_PID=$!
