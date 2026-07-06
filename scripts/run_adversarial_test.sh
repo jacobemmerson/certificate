@@ -10,7 +10,10 @@
 
 set -euo pipefail
 
-export HF_HOME="${SCRATCH:-/scratch/$USER}/hf_cache"
+module load cuda 2>/dev/null || true   # needed for flashinfer JIT (nvcc)
+
+export HF_HOME="$HOME/scratch/hf_cache"
+export HF_HUB_OFFLINE=1               # never attempt network access on compute nodes
 export OPENROUTER_API_KEY="${OPENROUTER_API_KEY:?}"
 
 cd "$SLURM_SUBMIT_DIR"
@@ -48,8 +51,9 @@ wait_for_server() {
 # ── vLLM: Hermes-3-70B-AWQ (attacker) on GPU 0 ───────────────────────────────
 # AWQ fits in ~35 GB; leaves GPU 1 free for HarmBench
 CUDA_VISIBLE_DEVICES=0 python -m vllm.entrypoints.openai.api_server \
-    --model "NousResearch/Hermes-3-Llama-3.1-70B-AWQ" \
-    --quantization awq \
+    --model "NousResearch/Hermes-3-Llama-3.1-70B" \
+    --quantization bitsandbytes \
+    --load-format bitsandbytes \
     --tensor-parallel-size 1 \
     --served-model-name hermes-attacker \
     --port 8001 &
