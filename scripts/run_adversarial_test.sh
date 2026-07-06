@@ -35,10 +35,10 @@ trap cleanup EXIT INT TERM
 wait_for_server() {
     local port=$1 name=$2
     echo "Waiting for $name on port $port..."
-    local deadline=$(( $(date +%s) + 300 ))
+    local deadline=$(( $(date +%s) + 900 ))
     until curl -sf "http://localhost:$port/health" > /dev/null 2>&1; do
         if [[ $(date +%s) -gt $deadline ]]; then
-            echo "ERROR: $name did not start within 5 minutes" >&2; exit 1
+            echo "ERROR: $name did not start within 15 minutes" >&2; exit 1
         fi
         sleep 5
     done
