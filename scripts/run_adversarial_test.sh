@@ -16,9 +16,11 @@ export OPENROUTER_API_KEY="${OPENROUTER_API_KEY:?}"
 cd "$SLURM_SUBMIT_DIR"
 mkdir -p logs
 
-# ── Install dependencies ──────────────────────────────────────────────────────
-uv venv .venv --quiet 2>/dev/null || true
-uv pip install -r requirements.txt --quiet
+# ── Activate venv (install on login node first with: uv venv .venv && uv pip install -r requirements.txt) ──
+if [[ ! -f .venv/bin/activate ]]; then
+    echo "ERROR: .venv not found. Run 'uv venv .venv && uv pip install -r requirements.txt' on the login node first." >&2
+    exit 1
+fi
 source .venv/bin/activate
 
 # ── Cleanup trap ──────────────────────────────────────────────────────────────
