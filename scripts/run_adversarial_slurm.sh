@@ -46,18 +46,25 @@ mkdir -p logs
 
 cleanup() {
     echo "Shutting down servers..."
-    kill "$PROXY_PID" "$ATTACKER_PID" "$HARMBENCH_PID" "$LLAMAGUARD_PID" 2>/dev/null || true
+    local pid
+    for pid in "$PROXY_PID" "$ATTACKER_PID" "$HARMBENCH_PID" "$LLAMAGUARD_PID"; do
+        [[ -n "$pid" ]] && kill -TERM -- "-$pid" 2>/dev/null || true
+    done
+    sleep 5
+    for pid in "$PROXY_PID" "$ATTACKER_PID" "$HARMBENCH_PID" "$LLAMAGUARD_PID"; do
+        [[ -n "$pid" ]] && kill -KILL -- "-$pid" 2>/dev/null || true
+    done
     wait 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
 wait_for_server() {
-    local port=$1 name=$2
-    echo "Waiting for $name on port $port..."
-    local deadline=$(( $(date +%s) + 300 ))
+    local port=$1 name=$2 timeout=${3:-300}
+    echo "Waiting for $name on port $port (timeout ${timeout}s)..."
+    local deadline=$(( $(date +%s) + timeout ))
     until curl -sf "http://localhost:$port/health" > /dev/null 2>&1; do
         if [[ $(date +%s) -gt $deadline ]]; then
-            echo "ERROR: $name did not start within 5 minutes" >&2
+            echo "ERROR: $name did not start within $((timeout / 60)) minutes" >&2
             exit 1
         fi
         sleep 5
@@ -65,17 +72,23 @@ wait_for_server() {
     echo "  $name ready"
 }
 
-CUDA_VISIBLE_DEVICES=0,1 python -m vllm.entrypoints.openai.api_server \
-    --model "NousResearch/Hermes-3-Llama-3.1-70B-AWQ" \
-    --quantization awq \
-    --tensor-parallel-size 2 \
+# NB: "Hermes-3-Llama-3.1-70B-AWQ" does not exist under NousResearch on HF —
+# don't switch to it without first confirming a real repo. On-the-fly
+# bitsandbytes quantization is slow (~11 min just for weight loading, observed
+# in slurm_test_17299918), so this only needs one GPU and gets a generous
+# health-check timeout; GPU 1 is left free (was previously used for AWQ TP=2).
+CUDA_VISIBLE_DEVICES=0 setsid python -m vllm.entrypoints.openai.api_server \
+    --model "NousResearch/Hermes-3-Llama-3.1-70B" \
+    --quantization bitsandbytes \
+    --load-format bitsandbytes \
+    --tensor-parallel-size 1 \
     --served-model-name "$ATTACKER_NAME" \
     --port "$ATTACKER_PORT" \
     --max-model-len 8192 \
     &
 ATTACKER_PID=$!
 
-CUDA_VISIBLE_DEVICES=2 python -m vllm.entrypoints.openai.api_server \
+CUDA_VISIBLE_DEVICES=2 setsid python -m vllm.entrypoints.openai.api_server \
     --model "cais/HarmBench-Llama-2-13b-cls" \
     --served-model-name "$HARMBENCH_NAME" \
     --port "$HARMBENCH_PORT" \
@@ -83,7 +96,7 @@ CUDA_VISIBLE_DEVICES=2 python -m vllm.entrypoints.openai.api_server \
     &
 HARMBENCH_PID=$!
 
-CUDA_VISIBLE_DEVICES=3 python -m vllm.entrypoints.openai.api_server \
+CUDA_VISIBLE_DEVICES=3 setsid python -m vllm.entrypoints.openai.api_server \
     --model "meta-llama/Llama-Guard-3-8B" \
     --served-model-name "$LLAMAGUARD_NAME" \
     --port "$LLAMAGUARD_PORT" \
@@ -91,7 +104,7 @@ CUDA_VISIBLE_DEVICES=3 python -m vllm.entrypoints.openai.api_server \
     &
 LLAMAGUARD_PID=$!
 
-wait_for_server "$ATTACKER_PORT"  "attacker"
+wait_for_server "$ATTACKER_PORT"  "attacker" 1200
 wait_for_server "$HARMBENCH_PORT" "harmbench"
 wait_for_server "$LLAMAGUARD_PORT" "llamaguard"
 
@@ -116,7 +129,7 @@ model_list:
       api_key: dummy
 EOF
 
-litellm --config "/tmp/litellm_config_${SLURM_JOB_ID}.yaml" --port "$PROXY_PORT" &
+setsid litellm --config "/tmp/litellm_config_${SLURM_JOB_ID}.yaml" --port "$PROXY_PORT" &
 PROXY_PID=$!
 wait_for_server "$PROXY_PORT" "litellm-proxy"
 
