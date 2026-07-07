@@ -1,0 +1,128 @@
+Waiting for attacker on port 8001...
+(APIServer pid=1746851) INFO 07-07 13:55:46 [utils.py:344] 
+(APIServer pid=1746851) INFO 07-07 13:55:46 [utils.py:344]        █     █     █▄   ▄█
+(APIServer pid=1746851) INFO 07-07 13:55:46 [utils.py:344]  ▄▄ ▄█ █     █     █ ▀▄▀ █  version 0.22.1
+(APIServer pid=1746851) INFO 07-07 13:55:46 [utils.py:344]   █▄█▀ █     █     █     █  model   cais/HarmBench-Llama-2-13b-cls
+(APIServer pid=1746851) INFO 07-07 13:55:46 [utils.py:344]    ▀▀  ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀
+(APIServer pid=1746851) INFO 07-07 13:55:46 [utils.py:344] 
+(APIServer pid=1746850) INFO 07-07 13:55:46 [utils.py:344] 
+(APIServer pid=1746850) INFO 07-07 13:55:46 [utils.py:344]        █     █     █▄   ▄█
+(APIServer pid=1746850) INFO 07-07 13:55:46 [utils.py:344]  ▄▄ ▄█ █     █     █ ▀▄▀ █  version 0.22.1
+(APIServer pid=1746850) INFO 07-07 13:55:46 [utils.py:344]   █▄█▀ █     █     █     █  model   NousResearch/Hermes-3-Llama-3.1-70B
+(APIServer pid=1746850) INFO 07-07 13:55:46 [utils.py:344]    ▀▀  ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀
+(APIServer pid=1746850) INFO 07-07 13:55:46 [utils.py:344] 
+(APIServer pid=1746850) INFO 07-07 13:55:46 [utils.py:278] non-default args: {'port': 8001, 'model': 'NousResearch/Hermes-3-Llama-3.1-70B', 'max_model_len': 8192, 'quantization': 'bitsandbytes', 'served_model_name': ['hermes-attacker'], 'load_format': 'bitsandbytes'}
+(APIServer pid=1746851) INFO 07-07 13:55:46 [utils.py:278] non-default args: {'port': 8002, 'model': 'cais/HarmBench-Llama-2-13b-cls', 'served_model_name': ['harmbench-cls']}
+(APIServer pid=1746850) INFO 07-07 13:55:46 [arg_utils.py:753] HF_HUB_OFFLINE is True, replace model_id [NousResearch/Hermes-3-Llama-3.1-70B] to model_path [/home/tae/scratch/hf_cache/hub/models--NousResearch--Hermes-3-Llama-3.1-70B/snapshots/1fc86da0ce9cdb14cd775ad270bc7d1b4bf70ede]
+(APIServer pid=1746851) INFO 07-07 13:55:46 [arg_utils.py:753] HF_HUB_OFFLINE is True, replace model_id [cais/HarmBench-Llama-2-13b-cls] to model_path [/home/tae/scratch/hf_cache/hub/models--cais--HarmBench-Llama-2-13b-cls/snapshots/bda705349d1144fa618770bea64d99ce54e3835b]
+(APIServer pid=1746851) INFO 07-07 13:55:46 [model.py:617] Resolved architecture: LlamaForCausalLM
+(APIServer pid=1746851) INFO 07-07 13:55:46 [model.py:1752] Using max model len 2048
+(APIServer pid=1746851) INFO 07-07 13:55:46 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=8192.
+(APIServer pid=1746851) INFO 07-07 13:55:46 [vllm.py:977] Asynchronous scheduling is enabled.
+(APIServer pid=1746851) INFO 07-07 13:55:46 [kernel.py:270] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(APIServer pid=1746850) INFO 07-07 13:55:46 [model.py:617] Resolved architecture: LlamaForCausalLM
+(APIServer pid=1746850) INFO 07-07 13:55:46 [model.py:1752] Using max model len 8192
+(APIServer pid=1746850) INFO 07-07 13:55:46 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=8192.
+(APIServer pid=1746850) INFO 07-07 13:56:32 [vllm.py:977] Asynchronous scheduling is enabled.
+(APIServer pid=1746850) INFO 07-07 13:56:32 [kernel.py:270] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(EngineCore pid=1748444) INFO 07-07 13:56:57 [core.py:112] Initializing a V1 LLM engine (v0.22.1) with config: model='/home/tae/scratch/hf_cache/hub/models--cais--HarmBench-Llama-2-13b-cls/snapshots/bda705349d1144fa618770bea64d99ce54e3835b', speculative_config=None, tokenizer='/home/tae/scratch/hf_cache/hub/models--cais--HarmBench-Llama-2-13b-cls/snapshots/bda705349d1144fa618770bea64d99ce54e3835b', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=2048, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=False, quantization=None, quantization_config=None, enforce_eager=False, enable_return_routed_experts=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False), seed=0, served_model_name=harmbench-cls, enable_prefix_caching=True, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.VLLM_COMPILE: 3>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['none'], 'ir_enable_torch_wrap': True, 'splitting_ops': ['vllm::unified_attention_with_output', 'vllm::unified_mla_attention_with_output', 'vllm::mamba_mixer2', 'vllm::mamba_mixer', 'vllm::short_conv', 'vllm::linear_attention', 'vllm::plamo2_mamba_mixer', 'vllm::qwen_gdn_attention_core', 'vllm::gdn_attention_core_xpu', 'vllm::olmo_hybrid_gdn_full_forward', 'vllm::kda_attention', 'vllm::sparse_attn_indexer', 'vllm::rocm_aiter_sparse_attn_indexer', 'vllm::deepseek_v4_attention', 'vllm::unified_kv_cache_update', 'vllm::unified_mla_kv_cache_update'], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': [], 'compile_ranges_endpoints': [8192], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'size_asserts': False, 'alignment_asserts': False, 'scalar_asserts': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.FULL_AND_PIECEWISE: (2, 1)>, 'cudagraph_num_of_warmups': 1, 'cudagraph_capture_sizes': [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': False, 'fuse_act_quant': False, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False}, 'max_cudagraph_capture_size': 512, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native']), enable_flashinfer_autotune=True, moe_backend='auto', linear_backend='auto')
+(EngineCore pid=1748444) INFO 07-07 13:57:06 [parallel_state.py:1422] world_size=1 rank=0 local_rank=0 distributed_init_method=tcp://10.37.162.18:42809 backend=nccl
+(EngineCore pid=1748444) INFO 07-07 13:57:06 [parallel_state.py:1735] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank N/A, EPLB rank N/A
+(EngineCore pid=1748774) INFO 07-07 13:57:12 [core.py:112] Initializing a V1 LLM engine (v0.22.1) with config: model='/home/tae/scratch/hf_cache/hub/models--NousResearch--Hermes-3-Llama-3.1-70B/snapshots/1fc86da0ce9cdb14cd775ad270bc7d1b4bf70ede', speculative_config=None, tokenizer='/home/tae/scratch/hf_cache/hub/models--NousResearch--Hermes-3-Llama-3.1-70B/snapshots/1fc86da0ce9cdb14cd775ad270bc7d1b4bf70ede', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=8192, download_dir=None, load_format=bitsandbytes, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=False, quantization=bitsandbytes, quantization_config=None, enforce_eager=False, enable_return_routed_experts=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False), seed=0, served_model_name=hermes-attacker, enable_prefix_caching=True, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.VLLM_COMPILE: 3>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['none'], 'ir_enable_torch_wrap': True, 'splitting_ops': ['vllm::unified_attention_with_output', 'vllm::unified_mla_attention_with_output', 'vllm::mamba_mixer2', 'vllm::mamba_mixer', 'vllm::short_conv', 'vllm::linear_attention', 'vllm::plamo2_mamba_mixer', 'vllm::qwen_gdn_attention_core', 'vllm::gdn_attention_core_xpu', 'vllm::olmo_hybrid_gdn_full_forward', 'vllm::kda_attention', 'vllm::sparse_attn_indexer', 'vllm::rocm_aiter_sparse_attn_indexer', 'vllm::deepseek_v4_attention', 'vllm::unified_kv_cache_update', 'vllm::unified_mla_kv_cache_update'], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': [], 'compile_ranges_endpoints': [8192], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'size_asserts': False, 'alignment_asserts': False, 'scalar_asserts': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.FULL_AND_PIECEWISE: (2, 1)>, 'cudagraph_num_of_warmups': 1, 'cudagraph_capture_sizes': [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': False, 'fuse_act_quant': False, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False}, 'max_cudagraph_capture_size': 512, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native']), enable_flashinfer_autotune=True, moe_backend='auto', linear_backend='auto')
+(EngineCore pid=1748774) INFO 07-07 13:57:14 [parallel_state.py:1422] world_size=1 rank=0 local_rank=0 distributed_init_method=tcp://10.37.162.18:46041 backend=nccl
+(EngineCore pid=1748774) INFO 07-07 13:57:15 [parallel_state.py:1735] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank N/A, EPLB rank N/A
+(EngineCore pid=1748774) INFO 07-07 13:57:29 [topk_topp_sampler.py:45] Using FlashInfer for top-p & top-k sampling.
+(EngineCore pid=1748444) INFO 07-07 13:57:29 [topk_topp_sampler.py:45] Using FlashInfer for top-p & top-k sampling.
+(EngineCore pid=1748774) INFO 07-07 13:57:29 [gpu_model_runner.py:5037] Starting to load model /home/tae/scratch/hf_cache/hub/models--NousResearch--Hermes-3-Llama-3.1-70B/snapshots/1fc86da0ce9cdb14cd775ad270bc7d1b4bf70ede...
+(EngineCore pid=1748444) INFO 07-07 13:57:29 [gpu_model_runner.py:5037] Starting to load model /home/tae/scratch/hf_cache/hub/models--cais--HarmBench-Llama-2-13b-cls/snapshots/bda705349d1144fa618770bea64d99ce54e3835b...
+(EngineCore pid=1748444) INFO 07-07 13:57:31 [cuda.py:378] Using FLASH_ATTN attention backend out of potential backends: ['FLASH_ATTN', 'FLASHINFER', 'TRITON_ATTN', 'FLEX_ATTENTION'].
+(EngineCore pid=1748444) INFO 07-07 13:57:31 [flash_attn.py:636] Using FlashAttention version 3
+(EngineCore pid=1748774) INFO 07-07 13:57:33 [cuda.py:378] Using FLASH_ATTN attention backend out of potential backends: ['FLASH_ATTN', 'FLASHINFER', 'TRITON_ATTN', 'FLEX_ATTENTION'].
+(EngineCore pid=1748774) INFO 07-07 13:57:33 [flash_attn.py:636] Using FlashAttention version 3
+(EngineCore pid=1748774) INFO 07-07 13:57:39 [bitsandbytes_loader.py:786] Loading weights with BitsAndBytes quantization. May take a while ...
+(EngineCore pid=1748444) INFO 07-07 13:57:39 [weight_utils.py:922] Filesystem type for checkpoints: NFS. Checkpoint size: 24.24 GiB. Available RAM: 1722.78 GiB.
+(EngineCore pid=1748444) INFO 07-07 13:57:39 [weight_utils.py:884] Prefetching checkpoint files into page cache started (in background, num_threads=8, block_size=16777216 bytes)
+(EngineCore pid=1748774) INFO 07-07 13:57:39 [weight_utils.py:922] Filesystem type for checkpoints: NFS. Checkpoint size: 131.42 GiB. Available RAM: 1722.73 GiB.
+(EngineCore pid=1748774) INFO 07-07 13:57:40 [weight_utils.py:884] Prefetching checkpoint files into page cache started (in background, num_threads=8, block_size=16777216 bytes)
+(EngineCore pid=1748444) INFO 07-07 13:57:41 [weight_utils.py:856] Prefetching checkpoint files: 10% (1/6)
+(EngineCore pid=1748444) INFO 07-07 13:57:49 [weight_utils.py:856] Prefetching checkpoint files: 20% (2/6)
+(EngineCore pid=1748774) INFO 07-07 13:57:49 [weight_utils.py:856] Prefetching checkpoint files: 10% (3/30)
+(EngineCore pid=1748444) INFO 07-07 13:57:50 [weight_utils.py:856] Prefetching checkpoint files: 30% (3/6)
+(EngineCore pid=1748444) INFO 07-07 13:57:50 [weight_utils.py:856] Prefetching checkpoint files: 40% (4/6)
+(EngineCore pid=1748774) INFO 07-07 13:57:54 [weight_utils.py:856] Prefetching checkpoint files: 20% (6/30)
+(EngineCore pid=1748444) INFO 07-07 13:57:54 [weight_utils.py:856] Prefetching checkpoint files: 50% (5/6)
+(EngineCore pid=1748774) INFO 07-07 13:57:56 [weight_utils.py:856] Prefetching checkpoint files: 30% (9/30)
+(EngineCore pid=1748774) INFO 07-07 13:58:01 [weight_utils.py:856] Prefetching checkpoint files: 40% (12/30)
+(EngineCore pid=1748774) INFO 07-07 13:58:10 [weight_utils.py:856] Prefetching checkpoint files: 50% (15/30)
+(EngineCore pid=1748774) INFO 07-07 13:58:50 [weight_utils.py:856] Prefetching checkpoint files: 60% (18/30)
+(EngineCore pid=1748774) INFO 07-07 13:59:02 [weight_utils.py:856] Prefetching checkpoint files: 70% (21/30)
+(EngineCore pid=1748774) INFO 07-07 14:00:21 [weight_utils.py:856] Prefetching checkpoint files: 80% (24/30)
+(EngineCore pid=1748444) INFO 07-07 14:00:29 [weight_utils.py:856] Prefetching checkpoint files: 60% (6/6)
+(EngineCore pid=1748444) INFO 07-07 14:00:29 [weight_utils.py:879] Prefetching checkpoint files into page cache finished in 170.05s
+(EngineCore pid=1748774) INFO 07-07 14:00:42 [weight_utils.py:856] Prefetching checkpoint files: 90% (27/30)
+(EngineCore pid=1748774) INFO 07-07 14:00:47 [weight_utils.py:856] Prefetching checkpoint files: 100% (30/30)
+(EngineCore pid=1748774) INFO 07-07 14:00:47 [weight_utils.py:879] Prefetching checkpoint files into page cache finished in 187.72s
+(EngineCore pid=1748444) INFO 07-07 14:01:01 [default_loader.py:397] Loading weights took 201.76 seconds
+(EngineCore pid=1748444) INFO 07-07 14:01:02 [gpu_model_runner.py:5132] Model loading took 24.29 GiB memory and 211.428885 seconds
+(EngineCore pid=1748444) INFO 07-07 14:01:24 [backends.py:1089] Using cache directory: /home/tae/.cache/vllm/torch_compile_cache/d98cce5d9e/rank_0_0/backbone for vLLM's torch.compile
+(EngineCore pid=1748444) INFO 07-07 14:01:24 [backends.py:1148] Dynamo bytecode transform time: 22.26 s
+(EngineCore pid=1748444) INFO 07-07 14:01:28 [backends.py:292] Directly load the compiled graph(s) for compile range (1, 8192) from the cache, took 3.717 s
+(EngineCore pid=1748444) INFO 07-07 14:01:28 [decorators.py:311] Directly load AOT compilation from path /home/tae/.cache/vllm/torch_compile_cache/torch_aot_compile/8741eee7ad77997274a4cb7d1cc7f552509fd313842087821f057d326d94ae06/rank_0_0/model
+(EngineCore pid=1748444) INFO 07-07 14:01:28 [monitor.py:53] torch.compile took 26.19 s in total
+(EngineCore pid=1748444) INFO 07-07 14:01:29 [monitor.py:81] Initial profiling/warmup run took 1.33 s
+(EngineCore pid=1748444) INFO 07-07 14:01:35 [gpu_model_runner.py:6279] Profiling CUDA graph memory: PIECEWISE=51 (largest=512), FULL=51 (largest=512)
+(EngineCore pid=1748444) INFO 07-07 14:01:35 [gpu_model_runner.py:6365] Estimated CUDA graph memory: 0.61 GiB total
+(EngineCore pid=1748444) INFO 07-07 14:01:36 [gpu_worker.py:466] Available KV cache memory: 46.81 GiB
+(EngineCore pid=1748444) INFO 07-07 14:01:36 [gpu_worker.py:481] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9200 is equivalent to --gpu-memory-utilization=0.9123 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9277. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.
+(EngineCore pid=1748444) INFO 07-07 14:01:36 [kv_cache_utils.py:1733] GPU KV cache size: 61,344 tokens
+(EngineCore pid=1748444) INFO 07-07 14:01:36 [kv_cache_utils.py:1734] Maximum concurrency for 2,048 tokens per request: 29.95x
+(EngineCore pid=1748444) INFO 07-07 14:01:40 [gpu_model_runner.py:6456] Graph capturing finished in 4 secs, took 0.76 GiB
+(EngineCore pid=1748444) INFO 07-07 14:01:40 [gpu_worker.py:619] CUDA graph pool memory: 0.76 GiB (actual), 0.61 GiB (estimated), difference: 0.15 GiB (20.2%).
+(EngineCore pid=1748444) INFO 07-07 14:01:40 [jit_monitor.py:54] Kernel JIT monitor activated — Triton JIT compilations during inference will be logged as warnings.
+(EngineCore pid=1748444) INFO 07-07 14:01:40 [core.py:302] init engine (profile, create kv cache, warmup model) took 38.39 s (compilation: 26.19 s)
+(EngineCore pid=1748444) INFO 07-07 14:01:41 [vllm.py:977] Asynchronous scheduling is enabled.
+(EngineCore pid=1748444) INFO 07-07 14:01:41 [kernel.py:270] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(APIServer pid=1746851) INFO 07-07 14:01:41 [api_server.py:592] Supported tasks: ['generate']
+(APIServer pid=1746851) INFO 07-07 14:01:42 [hf.py:488] Detected the chat template content format to be 'string'. You can set `--chat-template-content-format` to override this.
+(APIServer pid=1746851) INFO 07-07 14:01:42 [api_server.py:596] Starting vLLM server on http://0.0.0.0:8002
+(APIServer pid=1746851) INFO 07-07 14:01:42 [launcher.py:37] Available routes are:
+(APIServer pid=1746851) INFO 07-07 14:01:42 [launcher.py:46] Route: /openapi.json, Methods: GET, HEAD
+(APIServer pid=1746851) INFO 07-07 14:01:42 [launcher.py:46] Route: /docs, Methods: GET, HEAD
+(APIServer pid=1746851) INFO 07-07 14:01:42 [launcher.py:46] Route: /docs/oauth2-redirect, Methods: GET, HEAD
+(APIServer pid=1746851) INFO 07-07 14:01:42 [launcher.py:46] Route: /redoc, Methods: GET, HEAD
+(APIServer pid=1746851) INFO 07-07 14:01:42 [launcher.py:46] Route: /metrics, Methods: GET
+(EngineCore pid=1748774) INFO 07-07 14:08:28 [gpu_model_runner.py:5132] Model loading took 39.81 GiB memory and 657.571387 seconds
+(EngineCore pid=1748444) INFO 07-07 14:08:48 [core.py:1266] Shutdown initiated (timeout=0)
+(EngineCore pid=1748444) INFO 07-07 14:08:48 [core.py:1289] Shutdown complete
+(APIServer pid=1746851) INFO 07-07 14:08:48 [launcher.py:137] Shutting down FastAPI HTTP server.
+(EngineCore pid=1748774) INFO 07-07 14:08:52 [backends.py:1089] Using cache directory: /home/tae/.cache/vllm/torch_compile_cache/af68eca8ac/rank_0_0/backbone for vLLM's torch.compile
+(EngineCore pid=1748774) INFO 07-07 14:08:52 [backends.py:1148] Dynamo bytecode transform time: 23.82 s
+(EngineCore pid=1748774) INFO 07-07 14:08:57 [backends.py:292] Directly load the compiled graph(s) for compile range (1, 8192) from the cache, took 3.880 s
+(EngineCore pid=1748774) INFO 07-07 14:08:57 [decorators.py:311] Directly load AOT compilation from path /home/tae/.cache/vllm/torch_compile_cache/torch_aot_compile/8f59b1a23e37c9275c76ad7e51ceef2a8a5fbb94e5a0218750bf87230a725298/rank_0_0/model
+(EngineCore pid=1748774) INFO 07-07 14:08:57 [monitor.py:53] torch.compile took 28.22 s in total
+(EngineCore pid=1748774) INFO 07-07 14:08:59 [monitor.py:81] Initial profiling/warmup run took 2.61 s
+(EngineCore pid=1748774) INFO 07-07 14:09:09 [gpu_model_runner.py:6279] Profiling CUDA graph memory: PIECEWISE=51 (largest=512), FULL=51 (largest=512)
+(EngineCore pid=1748774) INFO 07-07 14:09:11 [gpu_model_runner.py:6365] Estimated CUDA graph memory: 1.75 GiB total
+(EngineCore pid=1748774) INFO 07-07 14:09:11 [gpu_worker.py:466] Available KV cache memory: 28.74 GiB
+(EngineCore pid=1748774) INFO 07-07 14:09:11 [gpu_worker.py:481] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9200 is equivalent to --gpu-memory-utilization=0.8978 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9422. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.
+(EngineCore pid=1748774) INFO 07-07 14:09:11 [kv_cache_utils.py:1733] GPU KV cache size: 94,160 tokens
+(EngineCore pid=1748774) INFO 07-07 14:09:11 [kv_cache_utils.py:1734] Maximum concurrency for 8,192 tokens per request: 11.49x
+(EngineCore pid=1748774) INFO 07-07 14:09:36 [gpu_model_runner.py:6456] Graph capturing finished in 23 secs, took 2.23 GiB
+(EngineCore pid=1748774) INFO 07-07 14:09:36 [gpu_worker.py:619] CUDA graph pool memory: 2.23 GiB (actual), 1.75 GiB (estimated), difference: 0.47 GiB (21.3%).
+(EngineCore pid=1748774) INFO 07-07 14:09:36 [jit_monitor.py:54] Kernel JIT monitor activated — Triton JIT compilations during inference will be logged as warnings.
+(EngineCore pid=1748774) INFO 07-07 14:09:36 [core.py:302] init engine (profile, create kv cache, warmup model) took 67.65 s (compilation: 28.22 s)
+(EngineCore pid=1748774) INFO 07-07 14:09:37 [vllm.py:977] Asynchronous scheduling is enabled.
+(EngineCore pid=1748774) INFO 07-07 14:09:37 [kernel.py:270] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(APIServer pid=1746850) INFO 07-07 14:09:42 [api_server.py:592] Supported tasks: ['generate']
+(APIServer pid=1746850) WARNING 07-07 14:09:43 [model.py:1509] Default vLLM sampling parameters have been overridden by the model's `generation_config.json`: `{'temperature': 0.6, 'top_p': 0.9}`. If this is not intended, please relaunch vLLM instance with `--generation-config vllm`.
+(APIServer pid=1746850) INFO 07-07 14:09:43 [hf.py:488] Detected the chat template content format to be 'string'. You can set `--chat-template-content-format` to override this.
+(APIServer pid=1746850) INFO 07-07 14:09:43 [api_server.py:596] Starting vLLM server on http://0.0.0.0:8001
+(APIServer pid=1746850) INFO 07-07 14:09:43 [launcher.py:37] Available routes are:
+(APIServer pid=1746850) INFO 07-07 14:09:43 [launcher.py:46] Route: /openapi.json, Methods: HEAD, GET
+(APIServer pid=1746850) INFO 07-07 14:09:43 [launcher.py:46] Route: /docs, Methods: HEAD, GET
+(APIServer pid=1746850) INFO 07-07 14:09:43 [launcher.py:46] Route: /docs/oauth2-redirect, Methods: HEAD, GET
+(APIServer pid=1746850) INFO 07-07 14:09:43 [launcher.py:46] Route: /redoc, Methods: HEAD, GET
+(APIServer pid=1746850) INFO 07-07 14:09:43 [launcher.py:46] Route: /metrics, Methods: GET
+(EngineCore pid=1748774) INFO 07-07 14:23:48 [core.py:1266] Shutdown initiated (timeout=0)
+(EngineCore pid=1748774) INFO 07-07 14:23:48 [core.py:1289] Shutdown complete
+(APIServer pid=1746850) INFO 07-07 14:23:48 [launcher.py:137] Shutting down FastAPI HTTP server.
