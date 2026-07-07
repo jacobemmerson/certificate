@@ -55,6 +55,7 @@ CUDA_VISIBLE_DEVICES=0 python -m vllm.entrypoints.openai.api_server \
     --quantization bitsandbytes \
     --load-format bitsandbytes \
     --tensor-parallel-size 1 \
+    --max-model-len 8192 \
     --served-model-name hermes-attacker \
     --port 8001 &
 ATTACKER_PID=$!
