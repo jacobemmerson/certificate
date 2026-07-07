@@ -4,7 +4,7 @@
 #SBATCH --gpus=h100:2
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64G
-#SBATCH --time=02:00:00
+#SBATCH --time=00:30:00
 #SBATCH --output=logs/slurm_test_%j.out
 #SBATCH --error=logs/slurm_test_%j.err
 
@@ -91,12 +91,15 @@ wait_for_server 8000 "litellm-proxy"
 
 export OPENAI_BASE_URL="http://localhost:8000/v1"
 export OPENAI_API_KEY="dummy"
+# Force inspect-ai to use Chat Completions instead of the newer Responses API,
+# which vLLM does not support (/v1/responses returns 400).
+export INSPECT_OPENAI_FORCE_LEGACY_COMPLETIONS=1
 
 # ── Run eval ──────────────────────────────────────────────────────────────────
 inspect eval tasks/evals/socialharmbench.py@social_harm_bench_adversarial \
     --model "openrouter/anthropic/claude-haiku-4-5" \
-    --max-connections 10 \
-    --limit 20 \
+    --max-connections 3 \
+    --limit 3 \
     --log-dir out/ \
     -T attacks="["cipher", "deep_inception", "pair", "crescendo"]"\
     -T "grader=openrouter/google/gemini-flash-1.5" \
