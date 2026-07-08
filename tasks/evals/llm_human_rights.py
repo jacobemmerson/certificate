@@ -48,6 +48,8 @@ from inspect_ai.model import get_model
 from inspect_ai.scorer import Score, mean, scorer, stderr, multi_scorer, mean_score
 from inspect_ai.solver import generate, system_message
 
+from tasks.scorers.harm import llamaguard_scorer
+
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 OPEN_SYSTEM_PROMPT = {
@@ -182,7 +184,12 @@ def human_rights_scorer(judge_model: str | list[str] = "openai/gpt-4o"):
         return multi_scorer([get_scorer(m) for m in judge_model], mean_score())
     return get_scorer(judge_model)
 
-def _make_task(rights: str, persona: str = "none", grader: str | list[str] = "openai/gpt-4o") -> Task:
+def _make_task(
+    rights: str,
+    persona: str = "none",
+    grader: str | list[str] = "openai/gpt-4o",
+    llamaguard_model: str = "openrouter/meta-llama/llama-guard-4-12b",
+) -> Task:
     data_file = str(REPO_ROOT / "benchmarks" / "datasets" / "public" / f"lhr_{rights}.csv")
     system_prompt = OPEN_SYSTEM_PROMPT[persona]
 
@@ -194,62 +201,84 @@ def _make_task(rights: str, persona: str = "none", grader: str | list[str] = "op
         solver.append(system_message(system_prompt))
     solver.append(generate())
 
+    scorers = [human_rights_scorer(judge_model=grader)]
+    if llamaguard_model:
+        scorers.append(llamaguard_scorer(model=llamaguard_model))
+
     return Task(
         dataset=csv_dataset(data_file, to_sample),
         solver=solver,
-        scorer=human_rights_scorer(judge_model=grader),
+        scorer=scorers,
     )
 
 # ----- Tasks -----
 
 @task
-def udhr(grader: str | list[str] = "openai/gpt-4o"):
+def udhr(
+    grader: str | list[str] = "openai/gpt-4o",
+    llamaguard_model: str = "openrouter/meta-llama/llama-guard-4-12b",
+):
     """
     UDHR scenarios, no persona steering (144 scenarios across 24 articles).
     Baseline measurement of how often a model endorses limitations on
     universal human rights under neutral prompting.
     """
-    return _make_task("udhr", "none", grader=grader)
+    return _make_task("udhr", "none", grader=grader, llamaguard_model=llamaguard_model)
 
 
 @task
-def udhr_individual(grader: str | list[str] = "openai/gpt-4o"):
+def udhr_individual(
+    grader: str | list[str] = "openai/gpt-4o",
+    llamaguard_model: str = "openrouter/meta-llama/llama-guard-4-12b",
+):
     """
     UDHR scenarios with individual-rights system prompt.
     Tests whether rights-defender framing reduces endorsement of limitations.
     """
-    return _make_task("udhr", "individual-rights", grader=grader)
+    return _make_task("udhr", "individual-rights", grader=grader, llamaguard_model=llamaguard_model)
 
 
 @task
-def udhr_government(grader: str | list[str] = "openai/gpt-4o"):
+def udhr_government(
+    grader: str | list[str] = "openai/gpt-4o",
+    llamaguard_model: str = "openrouter/meta-llama/llama-guard-4-12b",
+):
     """
     UDHR scenarios with government-power system prompt.
     Tests whether authority-defender framing increases endorsement of limitations.
     """
-    return _make_task("udhr", "government-power", grader=grader)
+    return _make_task("udhr", "government-power", grader=grader, llamaguard_model=llamaguard_model)
 
 
 @task
-def echr(grader: str | list[str] = "openai/gpt-4o"):
+def echr(
+    grader: str | list[str] = "openai/gpt-4o",
+    llamaguard_model: str = "openrouter/meta-llama/llama-guard-4-12b",
+):
     """
     ECHR scenarios, no persona steering (102 scenarios across 17 articles).
     Baseline measurement using European Convention on Human Rights framework.
     """
-    return _make_task("echr", "none", grader=grader)
+    return _make_task("echr", "none", grader=grader, llamaguard_model=llamaguard_model)
 
 
 @task
-def echr_individual(grader: str | list[str] = "openai/gpt-4o"):
+def echr_individual(
+    grader: str | list[str] = "openai/gpt-4o",
+    llamaguard_model: str = "openrouter/meta-llama/llama-guard-4-12b",
+):
     """
     ECHR scenarios with individual-rights system prompt.
     """
-    return _make_task("echr", "individual-rights", grader=grader)
+    return _make_task("echr", "individual-rights", grader=grader, llamaguard_model=llamaguard_model)
 
 
 @task
-def echr_government(grader: str | list[str] = "openai/gpt-4o"):
+def echr_government(
+    grader: str | list[str] = "openai/gpt-4o",
+    llamaguard_model: str = "openrouter/meta-llama/llama-guard-4-12b",
+):
     """
     ECHR scenarios with government-power system prompt.
     """
-    return _make_task("echr", "government-power", grader=grader)
+    return _make_task("echr", "government-power", grader=grader, llamaguard_model=llamaguard_model)

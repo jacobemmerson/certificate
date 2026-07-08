@@ -274,11 +274,12 @@ def _build_classifier_fns(
     behavior_key: str,
 ) -> list[tuple[str, _ScoreFn]]:
     """Return ordered (name, score_fn) pairs for the active classifiers."""
-    fns = [
+    fns: list[tuple[str, _ScoreFn]] = [
         ("llm_judge", _llm_judge_fn(judge_model, judge_template, behavior_key)),
-        ("llamaguard", _llamaguard_fn(llamaguard_model)),
-        ("strongreject", _strongreject_fn(judge_model)),
     ]
+    if llamaguard_model:
+        fns.append(("llamaguard", _llamaguard_fn(llamaguard_model)))
+    fns.append(("strongreject", _strongreject_fn(judge_model)))
     if harmbench_model:
         fns.append(("harmbench", _harmbench_fn(harmbench_model)))
     return fns

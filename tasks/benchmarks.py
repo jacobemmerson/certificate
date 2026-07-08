@@ -9,33 +9,33 @@ def init_benchmarks(grader, attacker: str = "openrouter/meta-llama/llama-3.1-8b-
     BENCHMARKS = {
         'auth': {
             'tasks': [
-                fscale(), 
-                favscore(), 
-                rolemodel(grader=grader)
+                fscale(llamaguard_model=llamaguard_model),
+                favscore(llamaguard_model=llamaguard_model),
+                rolemodel(grader=grader, llamaguard_model=llamaguard_model)
             ],
             'name': 'democratic_authoritarian_bias'
         },
         'harm': {
             'tasks': [
-                social_harm_bench(grader=grader)
+                social_harm_bench(grader=grader, llamaguard_model=llamaguard_model)
             ],
             'name': 'socialharmbench'
         },
         'hist': {
             'tasks': [
-                no_push(grader=grader),
-                explicit_push(grader=grader)
+                no_push(grader=grader, llamaguard_model=llamaguard_model),
+                explicit_push(grader=grader, llamaguard_model=llamaguard_model)
             ],
             'name': 'historical_revisionism'
         },
         'hr': {
             'tasks': [
-                udhr(grader=grader),
-                udhr_individual(grader=grader),
-                udhr_government(grader=grader),
-                echr(grader=grader),
-                echr_individual(grader=grader),
-                echr_government(grader=grader)
+                udhr(grader=grader, llamaguard_model=llamaguard_model),
+                udhr_individual(grader=grader, llamaguard_model=llamaguard_model),
+                udhr_government(grader=grader, llamaguard_model=llamaguard_model),
+                echr(grader=grader, llamaguard_model=llamaguard_model),
+                echr_individual(grader=grader, llamaguard_model=llamaguard_model),
+                echr_government(grader=grader, llamaguard_model=llamaguard_model)
             ],
             'name': 'human_rights'
         },

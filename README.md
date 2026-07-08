@@ -36,15 +36,21 @@ uv run certify.py \
   --model       {api-formatted model name for testing, i.e. openrouter/google/gemini-3-flash-preview} \
   --grader      {OPTIONAL: api-formatted model name for grading, i.e. openai/gpt-4o} \
   --name        {OPTIONAL: the name stored in models/models.json} \
-  --proivder    {OPTIONAL: the model provider, stored in models/models.json} \
+  --provider    {OPTIONAL: the model provider, stored in models/models.json} \
   --region      {OPTIONAL: a description of the model's origin (i.e. US, Asia)} \
-  --specialty  {OPTIONAL: the model's primary task (i.e. coding, math)} \
+  --specialty   {OPTIONAL: the model's primary task (i.e. coding, math)} \
   --epochs      {OPTIONAL: the number of epochs to run, default=1} \
-  --rerun       {OPTIONAL: rerun results that are already present for the model}
+  --rerun       {OPTIONAL: rerun results that are already present for the model} \
+  --only        {OPTIONAL: run only these benchmark keys, i.e. --only harm harm_adv, see tasks/benchmarks.py for the keys} \
+  --attacker    {OPTIONAL: attacker model for adversarial benchmarks, default=openrouter/meta-llama/llama-3.1-8b-instruct} \
+  --llamaguard  {OPTIONAL: LlamaGuard model used for harm scoring across all tasks, default=openrouter/meta-llama/llama-guard-4-12b; pass an empty string to disable it (i.e. "")} \
+  --limit       {OPTIONAL: randomly sample this many examples per task instead of running the full dataset}
 ```
 If a grader model is not specified with `--grader`, a group of models is used for LLM-as-a-judge grading as specified in `GRADERS.md`.
 
-All results are stored in `models/models.json` which will automatically be updated with new models or replace previously run models. By default, the script will skip benchmarks that have already been processed; however, you can override this with by adding `--rerun` argument to `certify.py`. All logs will be in `logs/{benchmark_name}`; these can be accessed to use unreported metrics or other metadata about the samples. 
+All results are stored in `models/models.json` which will automatically be updated with new models or replace previously run models. By default, the script will skip benchmarks that have already been processed; however, you can override this with by adding `--rerun` argument to `certify.py`. All logs will be in `logs/{benchmark_name}`; these can be accessed to use unreported metrics or other metadata about the samples.
+
+Runs using `--limit` are treated as smoke tests: since they only cover a random subset of each benchmark, results are **not** written to `models/models.json`, though they remain available in `logs/{model_name}`.
 
 **You can also use any package manager of your choice** (i.e. anaconda); install the requirements by omitting `uv` and execute the pipeline using `python certify.py` with the appropriate arguments.
 

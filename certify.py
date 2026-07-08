@@ -38,7 +38,6 @@ def parse():
     args.add_argument(
         "--epochs", "-e", required=False, default=1, help="The number of turns to generate a response per sample and average over."
     )
-
     args.add_argument(
         "--rerun", required=False, action='store_true', help="Reruns all results regardless of whether they are present in an existing file."
     )
@@ -53,6 +52,10 @@ def parse():
     args.add_argument(
         "--llamaguard", required=False, default="openrouter/meta-llama/llama-guard-4-12b",
         help="LlamaGuard model for adversarial harm scoring (default: openrouter/meta-llama/llama-guard-4-12b)."
+    )
+    args.add_argument(
+        "--limit", "-l", required=False, type=int, default=None,
+        help="Randomly sample this many examples per task (default: run the full dataset). WARNING: if limit is present, results will not be saved. They can still be accessed in logs/MODEL_NAME/"
     )
 
     return args.parse_args()
@@ -113,7 +116,8 @@ if __name__ == "__main__":
             continue_on_fail=True,
             retry_on_error=2,
             epochs=args.epochs,
-            sample_shuffle=False,
+            sample_shuffle=bool(args.limit),
+            limit=args.limit,
             max_connections=50,
             cache=True
         )
@@ -161,15 +165,16 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"[ERROR] on {benchmark}: {e}")
         
-    # ----- format and store results -----
-    results = {
-        "id": model_id,
-        "name": args.name,
-        "company": args.provider,
-        "region": args.region,
-        "specialty": args.specialty,
-        "scores": scores,
-        "scores_meta": scores_meta
-    }
+    if (not args.limit):
+        # ----- format and store results -----
+        results = {
+            "id": model_id,
+            "name": args.name,
+            "company": args.provider,
+            "region": args.region,
+            "specialty": args.specialty,
+            "scores": scores,
+            "scores_meta": scores_meta
+        }
 
-    update(results, models, idx)
+        update(results, models, idx)

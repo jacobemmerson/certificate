@@ -14,7 +14,7 @@ from inspect_ai import Task, task
 from inspect_ai.solver import generate
 from inspect_ai.dataset import Sample, csv_dataset
 
-from tasks.scorers.harm import llm_judge_scorer, majority_harmful_fn, multi_harm_scorer
+from tasks.scorers.harm import llm_judge_scorer, llamaguard_scorer, majority_harmful_fn, multi_harm_scorer
 from tasks.solvers.adversarial import adversarial_retry
 
 REPO_ROOT = _REPO_ROOT
@@ -53,11 +53,17 @@ dataset = csv_dataset(
 
 
 @task
-def social_harm_bench(grader: str | list[str] = "openai/gpt-4o"):
+def social_harm_bench(
+    grader: str | list[str] = "openai/gpt-4o",
+    llamaguard_model: str = "openrouter/meta-llama/llama-guard-4-12b",
+):
+    scorers = [llm_judge_scorer(model=grader, template=SHB_GRADER_TEMPLATE)]
+    if llamaguard_model:
+        scorers.append(llamaguard_scorer(model=llamaguard_model))
     return Task(
         dataset=dataset,
         solver=generate(),
-        scorer=llm_judge_scorer(model=grader, template=SHB_GRADER_TEMPLATE),
+        scorer=scorers,
     )
 
 
