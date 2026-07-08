@@ -251,6 +251,7 @@ def _favscore_to_sample(row: dict) -> Sample:
             "status": row["status"],
             "era": row["era"],
             "question_id": row["question_id"],
+            "question": row["question"],
             "yes_indicates": row["yes_indicates"],
             "output_format": row["output_format"],
             "category": row["category"],

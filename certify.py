@@ -9,8 +9,8 @@ import json
 from argparse import ArgumentParser
 
 from inspect_ai import eval
-from tasks.benchmarks import init_benchmarks
-from tasks.utils.graders import load_graders, load_models_with_check, aggregate_score
+from tasks.benchmarks import init_benchmarks, apply_perturbations, ALL_PERTURB_FAMILIES
+from tasks.utils.graders import load_graders, load_models_with_check, aggregate_score, alignment_rate
 
 # ----- Argument Parser -----
 
@@ -42,10 +42,6 @@ def parse():
         "--rerun", required=False, action='store_true', help="Reruns all results regardless of whether they are present in an existing file."
     )
     args.add_argument(
-        "--only", "-o", required=False, nargs="+", metavar="BENCHMARK",
-        help="Run only these benchmark keys (e.g. --only harm harm_adv). Other existing results are preserved."
-    )
-    args.add_argument(
         "--attacker", "-a", required=False, default="openrouter/meta-llama/llama-3.1-8b-instruct",
         help="Attacker model for adversarial benchmarks (default: openrouter/meta-llama/llama-3.1-8b-instruct)."
     )
@@ -56,6 +52,23 @@ def parse():
     args.add_argument(
         "--limit", "-l", required=False, type=int, default=None,
         help="Randomly sample this many examples per task (default: run the full dataset). WARNING: if limit is present, results will not be saved. They can still be accessed in logs/MODEL_NAME/"
+    )
+    args.add_argument(
+        "--only", "-o", required=False, nargs="+", metavar="BENCHMARK",
+        help="Run only these benchmark keys (e.g. --only harm harm_adv). Other existing results are preserved."
+    )
+    args.add_argument(
+        "--perturb", required=False, nargs="+", default=ALL_PERTURB_FAMILIES, choices=sorted(ALL_PERTURB_FAMILIES),
+        metavar="FAMILY",
+        help="Run surface-perturbation reliability auditing (see PERTURB.MD) for these families "
+             "(e.g. --perturb paraphrase reconsideration) on top of every benchmark in --only "
+             "(or all benchmarks if --only is omitted). All by default. Reuses --attacker as the "
+             "rewrite/paraphrase model."
+    )
+    args.add_argument(
+        "--perturb-k", required=False, type=int, default=3,
+        help="Number of perturbed variants per item for the generative perturbation families "
+             "(paraphrase, register, identity_strip); default=3."
     )
 
     return args.parse_args()
@@ -75,8 +88,9 @@ def update(results, models, idx):
     # if idx != -1, model results already exist
     if idx != -1:
         # take values from overlapping keys from the new results (right side of pipe operator)
-        results['scores'] = models[idx].get('scores', {}) | results['scores'] 
+        results['scores'] = models[idx].get('scores', {}) | results['scores']
         results['scores_meta'] = models[idx].get('scores_meta', {}) | results['scores_meta']
+        results['perturbations'] = models[idx].get('perturbations', {}) | results.get('perturbations', {})
         models[idx] = results
     else:
         # add new entry
@@ -103,6 +117,17 @@ if __name__ == "__main__":
     # ----- task master list -----
     BENCHMARKS = init_benchmarks(grader, attacker=args.attacker, llamaguard_model=args.llamaguard)  # see tasks/benchmarks.py for all tasks
 
+    if args.perturb:
+        # Attaches one solver per requested perturbation family directly onto
+        # each benchmark's own Task (see tasks/benchmarks.py::apply_perturbations
+        # and PERTURB.MD) — same benchmark keys/log paths as without --perturb.
+        BENCHMARKS = apply_perturbations(
+            BENCHMARKS,
+            families=args.perturb,
+            rewrite_model=args.attacker,
+            k=args.perturb_k,
+        )
+
     def check_status(evaluations):
         if evaluations['status'] != 'success':
             pass
@@ -119,7 +144,10 @@ if __name__ == "__main__":
             sample_shuffle=bool(args.limit),
             limit=args.limit,
             max_connections=50,
-            cache=True
+            # Perturbation solvers each call the rewrite/target model with
+            # variant-specific prompts (tasks/perturb/solvers.py); caching is
+            # disabled so those independent generations aren't collapsed.
+            cache=not bool(args.perturb),
         )
 
     # check for existing model results
@@ -146,6 +174,7 @@ if __name__ == "__main__":
     # ----- main loop -----
     scores = {}
     scores_meta = {}
+    perturbations = {}
     for benchmark, tasks in BENCHMARKS.items():
 
         if benchmark in tasks_to_skip:
@@ -156,15 +185,20 @@ if __name__ == "__main__":
                 tasks=tasks['tasks'],
                 task_name=tasks['name']
             )
-            
-            if res: 
+
+            if res:
                 average, meta = aggregate_score(res)
                 scores[benchmark] = average
                 scores_meta[benchmark] = meta
 
+                if args.perturb:
+                    # Same log the certification scores just came from — see
+                    # PERTURB.MD and tasks/benchmarks.py::apply_perturbations.
+                    perturbations[benchmark] = alignment_rate(res)
+
         except Exception as e:
             print(f"[ERROR] on {benchmark}: {e}")
-        
+
     if (not args.limit):
         # ----- format and store results -----
         results = {
@@ -174,7 +208,8 @@ if __name__ == "__main__":
             "region": args.region,
             "specialty": args.specialty,
             "scores": scores,
-            "scores_meta": scores_meta
+            "scores_meta": scores_meta,
+            "perturbations": perturbations,
         }
 
         update(results, models, idx)
