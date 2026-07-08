@@ -87,10 +87,28 @@ def update(results, models, idx):
     # ----- store ------
     # if idx != -1, model results already exist
     if idx != -1:
+        prev = models[idx]
+        prev_status = prev.get('status', {})
+
+        # never overwrite a previously-complete benchmark result with a
+        # partial/failed rerun — drop the demoted rerun and keep the old one
+        for benchmark, status in list(results.get('status', {}).items()):
+            previously_complete = (
+                benchmark in prev.get('scores', {})
+                and prev_status.get(benchmark, {}).get('status', 'success') == 'success'
+            )
+            if status.get('status') != 'success' and previously_complete:
+                print(f"[WARNING] {benchmark}: rerun was {status.get('status')}; keeping previous complete result")
+                results['scores'].pop(benchmark, None)
+                results['scores_meta'].pop(benchmark, None)
+                results['perturbations'].pop(benchmark, None)
+                results['status'].pop(benchmark, None)
+
         # take values from overlapping keys from the new results (right side of pipe operator)
-        results['scores'] = models[idx].get('scores', {}) | results['scores']
-        results['scores_meta'] = models[idx].get('scores_meta', {}) | results['scores_meta']
-        results['perturbations'] = models[idx].get('perturbations', {}) | results.get('perturbations', {})
+        results['scores'] = prev.get('scores', {}) | results['scores']
+        results['scores_meta'] = prev.get('scores_meta', {}) | results['scores_meta']
+        results['perturbations'] = prev.get('perturbations', {}) | results.get('perturbations', {})
+        results['status'] = prev_status | results.get('status', {})
         models[idx] = results
     else:
         # add new entry
@@ -129,9 +147,17 @@ if __name__ == "__main__":
         )
 
     def check_status(evaluations):
-        if evaluations['status'] != 'success':
-            pass
-        # TODO: implement a catch to see when a task fails
+        '''
+        Summarise a benchmark's EvalLogs into a status record:
+        success (every task log succeeded), partial (some did), or failed —
+        plus completed/total sample counts. Stored per benchmark in
+        models.json so an incomplete run is distinguishable from a clean one.
+        '''
+        ok = sum(1 for log in evaluations if log.status == "success")
+        completed = sum(getattr(log.results, "completed_samples", 0) or 0 for log in evaluations if log.results)
+        total = sum(getattr(log.results, "total_samples", 0) or 0 for log in evaluations if log.results)
+        status = "success" if ok == len(evaluations) else ("partial" if ok else "failed")
+        return {"status": status, "completed_samples": completed, "total_samples": total}
 
     def start_eval(tasks: list, task_name: str):
         return eval(
@@ -175,6 +201,7 @@ if __name__ == "__main__":
     scores = {}
     scores_meta = {}
     perturbations = {}
+    statuses = {}
     for benchmark, tasks in BENCHMARKS.items():
 
         if benchmark in tasks_to_skip:
@@ -187,17 +214,27 @@ if __name__ == "__main__":
             )
 
             if res:
-                average, meta = aggregate_score(res)
-                scores[benchmark] = average
-                scores_meta[benchmark] = meta
+                statuses[benchmark] = check_status(res)
+                if statuses[benchmark]['status'] != 'success':
+                    print(f"[WARNING] {benchmark}: run was {statuses[benchmark]['status']} "
+                          f"({statuses[benchmark]['completed_samples']}/{statuses[benchmark]['total_samples']} samples)")
 
-                if args.perturb:
-                    # Same log the certification scores just came from — see
-                    # PERTURB.MD and tasks/benchmarks.py::apply_perturbations.
-                    perturbations[benchmark] = alignment_rate(res)
+                # score only the task logs that succeeded; a partial run's
+                # scores are stored but flagged by its status record
+                ok = [log for log in res if log.status == "success"]
+                if ok:
+                    average, meta = aggregate_score(ok)
+                    scores[benchmark] = average
+                    scores_meta[benchmark] = meta
+
+                    if args.perturb:
+                        # Same log the certification scores just came from — see
+                        # PERTURB.MD and tasks/benchmarks.py::apply_perturbations.
+                        perturbations[benchmark] = alignment_rate(ok)
 
         except Exception as e:
             print(f"[ERROR] on {benchmark}: {e}")
+            statuses[benchmark] = {"status": "failed", "error": str(e)}
 
     if (not args.limit):
         # ----- format and store results -----
@@ -210,6 +247,7 @@ if __name__ == "__main__":
             "scores": scores,
             "scores_meta": scores_meta,
             "perturbations": perturbations,
+            "status": statuses,
         }
 
         update(results, models, idx)

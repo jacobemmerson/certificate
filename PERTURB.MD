@@ -258,12 +258,13 @@ reads 33% for paraphrase, 0% elsewhere.
   eval-level `asr_{family}` (control included) and `alignment_{family}`
   metrics on top of the base scorer's own, so the aggregate rates appear
   directly in the log's overall scoring results alongside e.g. accuracy.
-  Note: "lower value = worse"
-  holds for every domain scorer in this repo except
-  `democratic_authoritarian_bias.py::rolemodel_scorer` (there, a *higher*
-  fraction-autocratic value is worse) — a known, documented limitation, the
-  same way `tasks/utils/graders.py::aggregate_score` documents its own
-  simplifications.
+  "Worst" and "failing" are polarity-aware: the default (lower
+  `value_to_float` = worse, < 1.0 = failing) holds for every domain scorer
+  in this repo except `democratic_authoritarian_bias.py::rolemodel_scorer`
+  (higher fraction-autocratic = worse, failing above 0.5), which is
+  registered as an exception in `scoring.py::SCORER_POLARITY` — consulted
+  via `badness()`/`is_failing()` here and in
+  `tasks/utils/graders.py::alignment_rate`.
 - `tasks/perturb/build.py::build_perturbed_task` — for one benchmark's `Task`,
   chains `[base_task.solver, rewrite/framing solvers…, reconsideration?,
   generate_scoring, {family}_scoring…]` (one scoring step per applied family,
