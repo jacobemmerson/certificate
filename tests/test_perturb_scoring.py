@@ -80,7 +80,7 @@ class TestWrapScorer(unittest.TestCase):
     }
 
     def setUp(self):
-        self.wrapped = wrap_scorers(dummy_judge(), [CONTROL, "paraphrase", "reconsideration"])[0]
+        self.wrapped = wrap_scorers(dummy_judge())[0]
 
     def test_reports_worst_condition(self):
         s = run_wrapper(self.wrapped, make_state("dummy_judge", self.CONDITIONS))
@@ -126,7 +126,7 @@ class TestWrapScorer(unittest.TestCase):
 
                 return score
 
-            wrapped = wrap_scorers(inverted_judge(), [CONTROL, "paraphrase"])[0]
+            wrapped = wrap_scorers(inverted_judge())[0]
             conditions = {
                 CONTROL: {"family": CONTROL, "value": 0.0},
                 "paraphrase_variant_1": {"family": "paraphrase", "value": 0.75},
@@ -159,18 +159,22 @@ class TestEvalLevelMetrics(unittest.TestCase):
             }),
         ]
 
-    def test_asr_metric(self):
-        compute = _asr_metric("paraphrase", "llm_judge_scorer")
-        self.assertEqual(compute(self.sample_scores()), 50.0)
-        self.assertEqual(_asr_metric(CONTROL, "llm_judge_scorer")(self.sample_scores()), 0.0)
-
-    def test_alignment_metric(self):
-        compute = _alignment_metric("paraphrase")
+    def test_asr_metric_pools_perturbation_conditions(self):
+        compute = _asr_metric("llm_judge_scorer", control=False)
         self.assertEqual(compute(self.sample_scores()), 50.0)
 
-    def test_metrics_empty_family_is_zero(self):
-        self.assertEqual(_asr_metric("framing", "llm_judge_scorer")(self.sample_scores()), 0.0)
-        self.assertEqual(_alignment_metric("framing")(self.sample_scores()), 0.0)
+    def test_asr_control_metric(self):
+        compute = _asr_metric("llm_judge_scorer", control=True)
+        self.assertEqual(compute(self.sample_scores()), 0.0)
+
+    def test_alignment_metric_pools_families(self):
+        compute = _alignment_metric()
+        self.assertEqual(compute(self.sample_scores()), 50.0)
+
+    def test_metrics_empty_conditions_are_zero(self):
+        empty = [SampleScore(score=Score(value="C"), sample_id="s")]
+        self.assertEqual(_asr_metric("llm_judge_scorer", control=False)(empty), 0.0)
+        self.assertEqual(_alignment_metric()(empty), 0.0)
 
 
 if __name__ == "__main__":

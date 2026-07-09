@@ -170,10 +170,13 @@ if __name__ == "__main__":
             sample_shuffle=bool(args.limit),
             limit=args.limit,
             max_connections=50,
-            # Perturbation solvers each call the rewrite/target model with
-            # variant-specific prompts (tasks/perturb/solvers.py); caching is
-            # disabled so those independent generations aren't collapsed.
-            cache=not bool(args.perturb),
+            # Eval-level cache benefits judge/grader calls (the bulk of API
+            # traffic under --perturb) and retries. The perturbation solvers
+            # opt out explicitly (cache=False in tasks/perturb/solvers.py):
+            # their rewrite calls repeat the same prompt k times and their
+            # variants must stay independent generations, so inheriting this
+            # would collapse them.
+            cache=True,
         )
 
     # check for existing model results

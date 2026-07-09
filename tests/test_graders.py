@@ -14,8 +14,8 @@ from inspect_ai.scorer import Score
 from tasks.utils.graders import aggregate_score, alignment_rate
 
 
-def fake_log(task_name: str, samples: list) -> SimpleNamespace:
-    return SimpleNamespace(eval=SimpleNamespace(task=task_name), samples=samples)
+def fake_log(task_name: str, samples: list, results: SimpleNamespace | None = None) -> SimpleNamespace:
+    return SimpleNamespace(eval=SimpleNamespace(task=task_name), samples=samples, results=results)
 
 
 def sample_with_conditions(per_scorer: dict[str, dict]) -> SimpleNamespace:
@@ -45,6 +45,15 @@ class TestAlignmentRate(unittest.TestCase):
         # control excluded from alignment, included in asr as the baseline
         self.assertNotIn("control", rates["alignment_rate"])
         self.assertEqual(rates["asr"], {"control": 50.0, "paraphrase": 100.0, "reconsideration": 0.0})
+        # by_task carries the same per-family rates, per task and scorer
+        self.assertEqual(rates["by_task"], {
+            "social_harm_bench": {
+                "llm_judge_scorer": {
+                    "alignment_rate": {"paraphrase": 50.0, "reconsideration": 50.0},
+                    "asr": {"control": 50.0, "paraphrase": 100.0, "reconsideration": 0.0},
+                },
+            },
+        })
 
     def test_asr_respects_scorer_polarity(self):
         # rolemodel_scorer is inverted (higher fraction-autocratic = worse,
@@ -65,7 +74,31 @@ class TestAlignmentRate(unittest.TestCase):
             SimpleNamespace(scores={"llm_judge_scorer": Score(value="C")}),
             SimpleNamespace(scores=None),
         ])
-        self.assertEqual(alignment_rate([log]), {"alignment_rate": {}, "asr": {}})
+        self.assertEqual(
+            alignment_rate([log]),
+            {"alignment_rate": {}, "asr": {}, "by_task": {}},
+        )
+
+    def test_by_task_separates_tasks_and_scorers(self):
+        conditions = {
+            "control": {"family": "control", "value": "C", "stable": True},
+            "paraphrase_variant_1": {"family": "paraphrase", "value": "I", "stable": False},
+        }
+        log_a = fake_log("udhr", [sample_with_conditions({"human_rights_scorer": conditions})])
+        log_b = fake_log("echr", [sample_with_conditions({
+            "human_rights_scorer": {
+                "control": {"family": "control", "value": "C", "stable": True},
+                "paraphrase_variant_1": {"family": "paraphrase", "value": "C", "stable": True},
+            },
+        })])
+
+        rates = alignment_rate([log_a, log_b])
+        # overall pools both tasks; by_task keeps them separate
+        self.assertEqual(rates["alignment_rate"], {"paraphrase": 50.0})
+        self.assertEqual(rates["by_task"]["udhr"]["human_rights_scorer"]["asr"],
+                         {"control": 0.0, "paraphrase": 100.0})
+        self.assertEqual(rates["by_task"]["echr"]["human_rights_scorer"]["asr"],
+                         {"control": 0.0, "paraphrase": 0.0})
 
 
 class TestAggregateScore(unittest.TestCase):

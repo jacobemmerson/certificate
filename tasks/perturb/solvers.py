@@ -12,6 +12,13 @@ one control generation followed by one clearly labeled step per requested
 family (`generate`, `paraphrase`, `register`, `identity_strip`, `framing`,
 `reconsideration`), all within a single episode/sample — no epochs involved.
 
+Every model call here — the rewrite-model calls and the scratch-copy target
+generations — passes an explicit `cache=False`: perturbation variants must
+be independent samples, and the rewriter is called k times with the *same*
+prompt, so inheriting the eval-level cache (certify.py enables it so judge
+calls are cached) would collapse all k variants into one. Explicit args win
+over the eval-level GenerateConfig.cache.
+
 Each solver runs its own generate() call(s) on a *deep copy* of state (same
 pattern tasks/attacks/*.py uses: `test = copy.deepcopy(state); ...; test =
 await generate(test)`) and stores the resulting completion(s) into
@@ -61,7 +68,7 @@ async def _rewrite_variant(
     rewriter = get_model(rewrite_model)
     try:
         system_prompt = FAMILY_SYSTEM_PROMPTS[family_name].format(text=original_text)
-        result = await rewriter.generate(system_prompt)
+        result = await rewriter.generate(system_prompt, cache=False)
         new_text = _extract_rewrite(result.completion, fallback=original_text)
     except Exception as exc:
         transcript().info(f"{family_name}: rewrite error ({exc}) — using original text")
@@ -70,7 +77,7 @@ async def _rewrite_variant(
     rendered = adapter.render(state, new_text)
     test = copy.deepcopy(state)
     test.messages = [ChatMessageUser(content=rendered)]
-    test = await generate(test)
+    test = await generate(test, cache=False)
     return test.output.completion if test.output else ""
 
 
@@ -127,7 +134,7 @@ def framing(adapter: PerturbAdapter) -> Solver:
             rendered = adapter.render(state, templated_text)
             test = copy.deepcopy(state)
             test.messages = [ChatMessageUser(content=rendered)]
-            test = await generate(test)
+            test = await generate(test, cache=False)
             variants.append({
                 "condition": f"framing_{name}",
                 "completion": test.output.completion if test.output else "",
@@ -151,7 +158,7 @@ def reconsideration(challenge_text: str = DEFAULT_CHALLENGE) -> Solver:
         test = copy.deepcopy(state)
         test.messages.append(ChatMessageAssistant(content=original_completion))
         test.messages.append(ChatMessageUser(content=challenge_text))
-        test = await generate(test)
+        test = await generate(test, cache=False)
 
         _record(state, "reconsideration", [{
             "condition": "reconsidered",

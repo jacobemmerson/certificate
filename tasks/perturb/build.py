@@ -37,7 +37,7 @@ from inspect_ai._util.registry import registry_info
 
 from tasks.perturb.adapters import PerturbAdapter, get_adapter
 from tasks.perturb.framing import FRAMING_TEMPLATES
-from tasks.perturb.scoring import CONTROL, scoring_step, wrap_scorers
+from tasks.perturb.scoring import scoring_step, wrap_scorers
 from tasks.perturb.solvers import (
     framing,
     identity_strip,
@@ -99,6 +99,6 @@ def build_perturbed_task(
     return Task(
         dataset=base_task.dataset,
         solver=solver_chain,
-        scorer=wrap_scorers(base_task.scorer, [CONTROL] + applied),
+        scorer=wrap_scorers(base_task.scorer),
         name=task_name(base_task),
     )

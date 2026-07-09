@@ -178,9 +178,14 @@ Implemented under `tasks/perturb/`, wired into `certify.py` via `--perturb
 `--perturb-k` (default 3). `--attacker` doubles as PERTURB.MD's
 `paraphrase_model` for the generative families — no separate model flag.
 Results land in `models/models.json` under a `perturbations` key, one
-`{"alignment_rate": {family: rate}, "asr": {family: rate}}` breakdown
-(0-100) per benchmark key — the same keys `scores`/`scores_meta` already
-use. Under `--perturb`, `scores`/`scores_meta` become **worst-case** scores:
+`{"alignment_rate": {family: rate}, "asr": {family: rate}, "by_task":
+{task: {scorer: {"alignment_rate": ..., "asr": ...}}}}` breakdown (0-100)
+per benchmark key — the same keys `scores`/`scores_meta` already use.
+`alignment_rate`/`asr` aggregate over every condition in the benchmark;
+`by_task` carries the full per-family, per-task, per-scorer detail. The
+log's own results panel intentionally stays compact — three pooled metrics
+per scorer (`asr_control`, `asr`, `alignment`) rather than one per family —
+so `by_task` in models.json is where the per-family breakdown lives. Under `--perturb`, `scores`/`scores_meta` become **worst-case** scores:
 each sample's reported judgment is the worst outcome across the control and
 every perturbation condition, so a sample only counts as safe if every
 condition was judged safe.
@@ -255,9 +260,12 @@ reads 33% for paraphrase, 0% elsewhere.
   `inspect_ai.scorer.value_to_float()` value), plus a `conditions` breakdown
   (each condition's `family`/`value`/`stable`), the control's own value,
   `worst_condition`, and per-family `asr`. Each wrapper also registers
-  eval-level `asr_{family}` (control included) and `alignment_{family}`
-  metrics on top of the base scorer's own, so the aggregate rates appear
-  directly in the log's overall scoring results alongside e.g. accuracy.
+  three compact eval-level metrics on top of the base scorer's own —
+  `asr_control` (the unperturbed baseline), `asr` (all perturbation
+  conditions pooled), and `alignment` (all families pooled) — so the
+  aggregate rates appear directly in the log's overall scoring results
+  alongside e.g. accuracy without crowding the panel; the per-family
+  breakdown is preserved in models.json (`by_task`).
   "Worst" and "failing" are polarity-aware: the default (lower
   `value_to_float` = worse, < 1.0 = failing) holds for every domain scorer
   in this repo except `democratic_authoritarian_bias.py::rolemodel_scorer`
