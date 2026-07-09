@@ -56,10 +56,10 @@ class TestAlignmentRate(unittest.TestCase):
         })
 
     def test_asr_respects_scorer_polarity(self):
-        # rolemodel_scorer is inverted (higher fraction-autocratic = worse,
+        # role_model_bias_scorer is inverted (higher fraction-autocratic = worse,
         # failing above 0.5) — see tasks/perturb/scoring.py::SCORER_POLARITY.
-        log = fake_log("rolemodel", [
-            sample_with_conditions({"rolemodel_scorer": {
+        log = fake_log("role_model_bias", [
+            sample_with_conditions({"role_model_bias_scorer": {
                 "control": {"family": "control", "value": 0.0, "stable": True},
                 "paraphrase_variant_1": {"family": "paraphrase", "value": 0.75, "stable": False},
                 "paraphrase_variant_2": {"family": "paraphrase", "value": 0.0, "stable": True},
