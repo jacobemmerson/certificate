@@ -6,6 +6,8 @@ drop a CSV in `benchmarks/datasets/`, write one `@task` file in
 `tasks/evals/`, register it in `tasks/benchmarks.py`, and (optionally) tell
 the perturbation module how your benchmark elicits its judgment.
 
+`tip: clearly formatted datasets with well-defined outputs or scoring templates are SIGNIFICANTLY easier to add... adding a data-formatting script to tasks/data/ might make your life easier`
+
 ## 1. Add the dataset
 
 Put your CSV under `benchmarks/datasets/public/` (or `private/` for
