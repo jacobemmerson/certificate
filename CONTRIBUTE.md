@@ -6,7 +6,7 @@ drop a CSV in `benchmarks/datasets/`, write one `@task` file in
 `tasks/evals/`, register it in `tasks/benchmarks.py`, and (optionally) tell
 the perturbation module how your benchmark elicits its judgment.
 
-**Tip:** Clearly formatted datasets with well-defined outputs or scoring templates are SIGNIFICANTLY easier to add. If you're struggling, I recommend adding a data-formatting script to tasks/data/ before adding any Inspect AI tasks.
+**Tip:** `Clearly formatted datasets with well-defined outputs or scoring templates are SIGNIFICANTLY easier to add. If you're struggling, I recommend adding a data-formatting script to tasks/data/ before adding any Inspect AI tasks.`
 
 ## 1. Add the dataset
 
