@@ -1,0 +1,194 @@
+# Contributing a New Benchmark
+
+How to add a new benchmark (from a CSV) to the certification pipeline using
+[Inspect AI](https://inspect.aisi.org.uk/)'s interface. The short version:
+drop a CSV in `benchmarks/datasets/`, write one `@task` file in
+`tasks/evals/`, register it in `tasks/benchmarks.py`, and (optionally) tell
+the perturbation module how your benchmark elicits its judgment.
+
+## 1. Add the dataset
+
+Put your CSV under `benchmarks/datasets/public/` (or `private/` for
+non-redistributable data). One row per item. Any columns are fine — you
+control the mapping to Inspect `Sample`s.
+
+## 2. Write the task file (`tasks/evals/<your_benchmark>.py`)
+
+Follow the existing files (`socialharmbench.py` is the simplest model). The
+pattern:
+
+```python
+from pathlib import Path
+
+from inspect_ai import Task, task
+from inspect_ai.dataset import Sample, csv_dataset
+from inspect_ai.solver import generate
+
+from tasks.scorers.harm import llm_judge_scorer, llamaguard_scorer
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def to_sample(row: dict) -> Sample:
+    return Sample(
+        input=row["prompt_text"],          # what the target model sees
+        id=str(row["prompt_id"]),          # stable per-item id
+        # target=row["label"],             # only if you have ground truth
+        metadata={...},                    # anything scorers/analysis need
+    )
+
+
+dataset = csv_dataset(
+    str(REPO_ROOT / "benchmarks" / "datasets" / "public" / "your_benchmark.csv"),
+    to_sample,
+)
+
+
+@task
+def your_benchmark(
+    grader: str | list[str] = "openai/gpt-4o",
+    llamaguard_model: str = "openrouter/meta-llama/llama-guard-4-12b",
+):
+    scorers = [llm_judge_scorer(model=grader, template=YOUR_JUDGE_TEMPLATE)]
+    if llamaguard_model:
+        scorers.append(llamaguard_scorer(model=llamaguard_model))
+    return Task(dataset=dataset, solver=generate(), scorer=scorers)
+```
+
+Conventions that matter:
+
+- **`@task` function name is the benchmark's identity.** The registry name
+  is used for log filenames and for perturbation adapter lookup (step 4).
+- **Accept `grader` and `llamaguard_model` parameters** (with defaults) so
+  `certify.py`'s `--grader`/`--llamaguard` flags reach your task. Append
+  `llamaguard_scorer` when `llamaguard_model` is set — every benchmark
+  carries it by default.
+- **Reuse existing scorers** from `tasks/scorers/harm.py`
+  (`llm_judge_scorer`, `llamaguard_scorer`, `strongreject_scorer`,
+  `harmbench_classifier_scorer`, `multi_harm_scorer`) before writing a new
+  `@scorer`. If you do write one, give it `@scorer(metrics=[...])` with the
+  **primary metric first** (see step 5).
+- **Put your primary scorer first** in the `scorer=[...]` list. The first
+  scorer's first metric becomes the benchmark's reported certification
+  score.
+
+## 3. Register it (`tasks/benchmarks.py::init_benchmarks`)
+
+Import your `@task` function and add an entry to the `BENCHMARKS` dict:
+
+```python
+'yourkey': {
+    'tasks': [your_benchmark(grader=grader, llamaguard_model=llamaguard_model)],
+    'name': 'your_benchmark_name',   # log directory: logs/{model}/{name}/
+},
+```
+
+- `'yourkey'` is the benchmark key used by `--only yourkey` and as the key
+  under `scores`/`scores_meta`/`perturbations`/`status` in
+  `models/models.json`.
+- A benchmark entry can hold multiple related tasks (see `'hr'` or
+  `'auth'`); their scores are averaged into one benchmark score.
+
+That's all the wiring — `certify.py` iterates `init_benchmarks` and
+`apply_perturbations` covers every registered Task automatically.
+
+## 4. Perturbation integration (see PERTURB.MD)
+
+**The common case needs nothing.** If your target-facing prompt is free
+text graded by an LLM judge/LlamaGuard, every perturbation family except
+framing applies automatically, and framing is safely skipped (see below).
+Two situations need a decision:
+
+### a. Framing: pick an `elicitation_family`, or opt out
+
+The elicitation-format framing family applies a fixed set of
+content-equivalent wrapper templates. Which template set is used is a
+**manual, design-time classification** — you declare it, nothing infers it.
+Add an entry to `tasks/perturb/adapters.py::ADAPTERS` keyed by your
+`@task` function's name, choosing the family that matches what your
+benchmark elicits (template sets live in `tasks/perturb/framing.py`):
+
+| `elicitation_family` | The item is... | Templates applied |
+|---|---|---|
+| `"compliance"` | a request/instruction | imperative / interrogative ("how would one...") / enumerative ("list the steps...") |
+| `"judgment"` | a scenario or claim to evaluate | direct ("is this true?") / predictive ("will this be judged true?") / normative ("should this be judged true?") |
+| `"opinion"` | something eliciting agreement/position | first-person / third-person / forced-choice |
+
+```python
+"your_benchmark": PerturbAdapter(
+    item_text=_default_item_text,
+    render=_default_render,
+    elicitation_family="compliance",
+),
+```
+
+**If none fits, register nothing.** Unregistered tasks fall back to
+`DEFAULT_ADAPTER` (`elicitation_family="generic"`), which has no template
+entry, so the framing family is skipped for that task while every other
+family still runs. That's the deliberate fail-safe: a wrong wrapper would
+violate the content-equivalence requirement (PERTURB.MD, "What Counts as a
+Valid Surface Perturbation"), so the default is skip, not guess.
+`rolemodel` is the in-repo example — its open-ended "list role models"
+elicitation fits no family, so it's intentionally unregistered.
+
+### b. Rigid output formats: custom `item_text`/`render`
+
+If the target must reply in a rigid, directly machine-parsed format (a JSON
+contract, fixed scale options — like `fscale`/`favscore`), a naive rewrite
+of the whole prompt would corrupt the format instructions and break the
+parser. Register an adapter whose `item_text(state)` extracts only the raw
+statement/question (usually from `state.metadata`) and whose
+`render(state, new_text)` re-injects the format wrapper verbatim via your
+benchmark's own prompt-builder function. See the `fscale`/`favscore`
+entries in `adapters.py`.
+
+### c. Scorer polarity
+
+Perturbation reporting picks each sample's **worst** condition and counts
+**failing** outcomes (ASR), assuming higher score value = better/safer
+(`value_to_float` lower = worse, `< 1.0` = failing). If your scorer is
+inverted — a higher value means a *worse* outcome — register it in
+`tasks/perturb/scoring.py::SCORER_POLARITY` with `badness` and `failing`
+functions, as `rolemodel_scorer` does. Otherwise worst-case scores and ASR
+for your benchmark will be backwards.
+
+## 5. Scoring conventions
+
+- `tasks/utils/graders.py::aggregate_score` reports the **first metric of
+  the first scorer** of each task, averaged across a benchmark's tasks, as
+  the certification score. Scores are expected on a 0–100 scale — if your
+  primary metric is a 0–1 fraction (e.g. `accuracy()`), either rescale in
+  the scorer/metric or add your task to the scaling special-case in
+  `aggregate_score` (as `social_harm_bench` does).
+- Under `--perturb`, your scorers are wrapped automatically
+  (`tasks/perturb/scoring.py::wrap_scorers`): the reported per-sample value
+  becomes the worst outcome across the control and every perturbation
+  condition, and three pooled metrics (`asr_control`, `asr`, `alignment`)
+  are added to the log's results panel. Per-family detail lands in
+  `models/models.json` under `perturbations.{yourkey}.by_task`.
+
+## 6. Test it
+
+```bash
+# unit tests (scoring/aggregation logic — no model calls)
+uv run python3 -m unittest discover tests
+
+# cheap end-to-end smoke run: 2 samples, results NOT saved to models.json
+uv run python3 certify.py -m <target-model> -g <grader-model> \
+    --only yourkey --limit 2
+
+# with perturbations (k=1 keeps it cheap)
+uv run python3 certify.py -m <target-model> -g <grader-model> \
+    --only yourkey --limit 2 --perturb paraphrase reconsideration --perturb-k 1
+```
+
+Then open the log (`inspect view --log-dir logs/<model>/<name>/`) and check:
+
+- each sample's transcript shows your solver steps (plus, under
+  `--perturb`, one tab per perturbation family and one `{family}_scoring`
+  tab per condition family);
+- the results panel reports your primary metric first, with
+  `asr_control`/`asr`/`alignment` alongside under `--perturb`;
+- a full run (no `--limit`) writes your benchmark key into
+  `models/models.json` under `scores`, `scores_meta`, `perturbations`, and
+  `status`.
