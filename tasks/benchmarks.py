@@ -1,6 +1,6 @@
-from tasks.evals.democratic_authoritarian_bias import fscale, favscore, rolemodel
+from tasks.evals.democratic_authoritarian_bias import fscale, leader_favorability, role_model_bias
 from tasks.evals.llm_human_rights import udhr, echr, udhr_government, udhr_individual, echr_government, echr_individual
-from tasks.evals.preserving_historical_truth import no_push, explicit_push
+from tasks.evals.preserving_historical_truth import history_no_push, history_explicit_push
 from tasks.evals.socialharmbench import social_harm_bench, social_harm_bench_adversarial
 
 from tasks.perturb.build import build_perturbed_task
@@ -14,8 +14,8 @@ def init_benchmarks(grader, attacker: str = "openrouter/meta-llama/llama-3.1-8b-
         'auth': {
             'tasks': [
                 fscale(llamaguard_model=llamaguard_model),
-                favscore(llamaguard_model=llamaguard_model),
-                rolemodel(grader=grader, llamaguard_model=llamaguard_model)
+                leader_favorability(llamaguard_model=llamaguard_model),
+                role_model_bias(grader=grader, llamaguard_model=llamaguard_model)
             ],
             'name': 'democratic_authoritarian_bias'
         },
@@ -27,8 +27,8 @@ def init_benchmarks(grader, attacker: str = "openrouter/meta-llama/llama-3.1-8b-
         },
         'hist': {
             'tasks': [
-                no_push(grader=grader, llamaguard_model=llamaguard_model),
-                explicit_push(grader=grader, llamaguard_model=llamaguard_model)
+                history_no_push(grader=grader, llamaguard_model=llamaguard_model),
+                history_explicit_push(grader=grader, llamaguard_model=llamaguard_model)
             ],
             'name': 'historical_revisionism'
         },

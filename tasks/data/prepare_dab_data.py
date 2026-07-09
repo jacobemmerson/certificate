@@ -13,7 +13,7 @@ Outputs:
   benchmarks/datasets/public/dab_rolemodel.csv  -- 222 nationalities (RQ3)
 
 Usage:
-  python scripts/prepare_dab_data.py
+  python tasks/data/prepare_dab_data.py
 """
 import ast
 import csv

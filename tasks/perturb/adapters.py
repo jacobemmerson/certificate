@@ -12,10 +12,10 @@ conditions.
 which is correct for any benchmark whose target-facing prompt is free text
 graded by an LLM judge/LlamaGuard (the common case — covers socialharmbench,
 preserving_historical_truth, llm_human_rights, and democratic_authoritarian_bias's
-rolemodel task today). `ADAPTERS` registers the exceptions: benchmarks where the
-target must reply in a rigid, directly machine-parsed format (fscale, favscore),
-so only the raw statement/question gets reworded and the format instructions
-are re-injected verbatim via the benchmark's own prompt builder.
+role_model_bias task today). `ADAPTERS` registers the exceptions: benchmarks where
+the target must reply in a rigid, directly machine-parsed format (fscale,
+leader_favorability), so only the raw statement/question gets reworded and the
+format instructions are re-injected verbatim via the benchmark's own prompt builder.
 
 Adding a new benchmark later needs an ADAPTERS entry only if it has this kind
 of rigid, directly-parsed target output contract — otherwise nothing at all.
@@ -29,7 +29,7 @@ from inspect_ai.solver import TaskState
 
 from tasks.evals.democratic_authoritarian_bias import (
     _build_fscale_prompt,
-    _build_favscore_prompt,
+    _build_favscore_prompt,  # leader_favorability's rigid prompt builder
 )
 
 ElicitationFamily = str  # "compliance" | "judgment" | "opinion" | "generic"
@@ -65,11 +65,11 @@ def _fscale_render(state: TaskState, new_text: str) -> str:
     return _build_fscale_prompt(new_text)
 
 
-def _favscore_item_text(state: TaskState) -> str:
+def _leader_favorability_item_text(state: TaskState) -> str:
     return state.metadata.get("question", state.input_text)
 
 
-def _favscore_render(state: TaskState, new_text: str) -> str:
+def _leader_favorability_render(state: TaskState, new_text: str) -> str:
     return _build_favscore_prompt(
         state.metadata.get("leader_name", ""),
         new_text,
@@ -86,9 +86,9 @@ ADAPTERS: dict[str, PerturbAdapter] = {
         render=_fscale_render,
         elicitation_family="opinion",
     ),
-    "favscore": PerturbAdapter(
-        item_text=_favscore_item_text,
-        render=_favscore_render,
+    "leader_favorability": PerturbAdapter(
+        item_text=_leader_favorability_item_text,
+        render=_leader_favorability_render,
         elicitation_family="opinion",
     ),
     "udhr": PerturbAdapter(item_text=_default_item_text, render=_default_render, elicitation_family="judgment"),
@@ -99,10 +99,10 @@ ADAPTERS: dict[str, PerturbAdapter] = {
     "echr_government": PerturbAdapter(item_text=_default_item_text, render=_default_render, elicitation_family="judgment"),
     "social_harm_bench": PerturbAdapter(item_text=_default_item_text, render=_default_render, elicitation_family="compliance"),
     "social_harm_bench_adversarial": PerturbAdapter(item_text=_default_item_text, render=_default_render, elicitation_family="compliance"),
-    "no_push": PerturbAdapter(item_text=_default_item_text, render=_default_render, elicitation_family="compliance"),
-    "explicit_push": PerturbAdapter(item_text=_default_item_text, render=_default_render, elicitation_family="compliance"),
-    # rolemodel intentionally unregistered: open-ended elicitation doesn't fit
-    # any of the fixed framing families, so it falls back to DEFAULT_ADAPTER
+    "history_no_push": PerturbAdapter(item_text=_default_item_text, render=_default_render, elicitation_family="compliance"),
+    "history_explicit_push": PerturbAdapter(item_text=_default_item_text, render=_default_render, elicitation_family="compliance"),
+    # role_model_bias intentionally unregistered: open-ended elicitation doesn't
+    # fit any of the fixed framing families, so it falls back to DEFAULT_ADAPTER
     # (elicitation_family="generic") and simply gets skipped by the framing
     # family (see tasks/perturb/framing.py).
 }

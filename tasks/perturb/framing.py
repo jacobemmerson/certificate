@@ -6,7 +6,7 @@ alone.
 
 Template families are keyed by `PerturbAdapter.elicitation_family` (see
 tasks/perturb/adapters.py). Benchmarks whose elicitation doesn't fit any of
-these (elicitation_family == "generic", e.g. rolemodel's open-ended "list role
+these (elicitation_family == "generic", e.g. role_model_bias's open-ended "list role
 models" prompt) are skipped by this family entirely — see
 tasks/perturb/build.py::build_perturbed_task.
 

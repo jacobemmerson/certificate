@@ -29,34 +29,27 @@ def load_graders(path: str | Path | None = None) -> list[str]:
         raise ValueError(f"No grader models found in {path}")
     return models
 
-def load_models_with_check(model_id: str = None) -> tuple[list[dict], int]:
+def load_models_with_check(model_id: str | None = None) -> tuple[list[dict], int]:
     '''
-    Return a JSON array of the models and index where the model lies if model_id is given; returns index = -1 if model not found
+    Return the models list and the index of `model_id` within it (-1 if not
+    found, or if no model_id is given).
     '''
-    
-    model_path = REPO_ROOT / "models" / "models.json"
-    path = Path(model_path)
-
+    path = REPO_ROOT / "models" / "models.json"
     if not path.exists():
         raise FileNotFoundError(f"Model results file not found: {path}")
-    
+
     try:
-        with open('models/models.json', 'r') as f:
+        with open(path, 'r') as f:
             models = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         models = []
 
-    if not model_id:
-        return models, -1
-    
-    found = False
-    for i, m in enumerate(models):
-        if m['id'] == model_id:
-            # Update file
-            found = True
-            break
+    if model_id:
+        for i, m in enumerate(models):
+            if m['id'] == model_id:
+                return models, i
 
-    return models, i if found else -1
+    return models, -1
 
 
 def aggregate_score(task_results: list[EvalLog]) -> tuple[float, dict]:
