@@ -15,7 +15,7 @@ shared public dataset directory so the Inspect script has a stable, canonical pa
 No transformation is applied — the output is byte-identical to the source.
 
 Usage:
-  python scripts/prepare_lhr_data.py
+  python tasks/data/prepare_lhr_data.py
 """
 import csv
 import shutil

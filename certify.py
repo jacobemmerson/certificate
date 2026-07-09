@@ -9,10 +9,8 @@ import json
 from argparse import ArgumentParser
 
 from inspect_ai import eval
-from tasks.benchmarks import init_benchmarks
-from tasks.utils.graders import load_graders, load_models_with_check, aggregate_score
-
-# ----- Argument Parser -----
+from tasks.benchmarks import init_benchmarks, apply_perturbations, ALL_PERTURB_FAMILIES
+from tasks.utils.graders import load_graders, load_models_with_check, aggregate_score, alignment_rate
 
 def parse():
     
@@ -42,12 +40,8 @@ def parse():
         "--rerun", required=False, action='store_true', help="Reruns all results regardless of whether they are present in an existing file."
     )
     args.add_argument(
-        "--only", "-o", required=False, nargs="+", metavar="BENCHMARK",
-        help="Run only these benchmark keys (e.g. --only harm harm_adv). Other existing results are preserved."
-    )
-    args.add_argument(
-        "--attacker", "-a", required=False, default="openrouter/meta-llama/llama-3.1-8b-instruct",
-        help="Attacker model for adversarial benchmarks (default: openrouter/meta-llama/llama-3.1-8b-instruct)."
+        "--attacker", "-a", required=False, default="openrouter/deepseek/deepseek-v4-flash",
+        help="Attacker model for perutrbation or adversarial benchmarks (default: openrouter/deepseek/deepseek-v4-flash)."
     )
     args.add_argument(
         "--llamaguard", required=False, default="openrouter/meta-llama/llama-guard-4-12b",
@@ -56,6 +50,23 @@ def parse():
     args.add_argument(
         "--limit", "-l", required=False, type=int, default=None,
         help="Randomly sample this many examples per task (default: run the full dataset). WARNING: if limit is present, results will not be saved. They can still be accessed in logs/MODEL_NAME/"
+    )
+    args.add_argument(
+        "--only", "-o", required=False, nargs="+", metavar="BENCHMARK",
+        help="Run only these benchmark keys (e.g. --only harm harm_adv). Other existing results are preserved."
+    )
+    args.add_argument(
+        "--perturb", required=False, nargs="+", default=ALL_PERTURB_FAMILIES, choices=sorted(ALL_PERTURB_FAMILIES),
+        metavar="FAMILY",
+        help="Run surface-perturbation reliability auditing (see PERTURB.MD) for these families "
+             "(e.g. --perturb paraphrase reconsideration) on top of every benchmark in --only "
+             "(or all benchmarks if --only is omitted). All by default. Reuses --attacker as the "
+             "rewrite/paraphrase model."
+    )
+    args.add_argument(
+        "--perturb-k", required=False, type=int, default=1,
+        help="Number of perturbed variants per item for the generative perturbation families "
+             "(paraphrase, register, identity_strip); default=1."
     )
 
     return args.parse_args()
@@ -74,9 +85,28 @@ def update(results, models, idx):
     # ----- store ------
     # if idx != -1, model results already exist
     if idx != -1:
+        prev = models[idx]
+        prev_status = prev.get('status', {})
+
+        # never overwrite a previously-complete benchmark result with a
+        # partial/failed rerun — drop the demoted rerun and keep the old one
+        for benchmark, status in list(results.get('status', {}).items()):
+            previously_complete = (
+                benchmark in prev.get('scores', {})
+                and prev_status.get(benchmark, {}).get('status', 'success') == 'success'
+            )
+            if status.get('status') != 'success' and previously_complete:
+                print(f"[WARNING] {benchmark}: rerun was {status.get('status')}; keeping previous complete result")
+                results['scores'].pop(benchmark, None)
+                results['scores_meta'].pop(benchmark, None)
+                results['perturbations'].pop(benchmark, None)
+                results['status'].pop(benchmark, None)
+
         # take values from overlapping keys from the new results (right side of pipe operator)
-        results['scores'] = models[idx].get('scores', {}) | results['scores'] 
-        results['scores_meta'] = models[idx].get('scores_meta', {}) | results['scores_meta']
+        results['scores'] = prev.get('scores', {}) | results['scores']
+        results['scores_meta'] = prev.get('scores_meta', {}) | results['scores_meta']
+        results['perturbations'] = prev.get('perturbations', {}) | results.get('perturbations', {})
+        results['status'] = prev_status | results.get('status', {})
         models[idx] = results
     else:
         # add new entry
@@ -103,10 +133,31 @@ if __name__ == "__main__":
     # ----- task master list -----
     BENCHMARKS = init_benchmarks(grader, attacker=args.attacker, llamaguard_model=args.llamaguard)  # see tasks/benchmarks.py for all tasks
 
+    del BENCHMARKS['harm_adv'] # temporary fix; we aren't using the adversarial attacks right now
+
+    if args.perturb:
+        # Attaches one solver per requested perturbation family directly onto
+        # each benchmark's own Task (see tasks/benchmarks.py::apply_perturbations
+        # and PERTURB.MD) — same benchmark keys/log paths as without --perturb.
+        BENCHMARKS = apply_perturbations(
+            BENCHMARKS,
+            families=args.perturb,
+            rewrite_model=args.attacker,
+            k=args.perturb_k,
+        )
+
     def check_status(evaluations):
-        if evaluations['status'] != 'success':
-            pass
-        # TODO: implement a catch to see when a task fails
+        '''
+        Summarise a benchmark's EvalLogs into a status record:
+        success (every task log succeeded), partial (some did), or failed —
+        plus completed/total sample counts. Stored per benchmark in
+        models.json so an incomplete run is distinguishable from a clean one.
+        '''
+        ok = sum(1 for log in evaluations if log.status == "success")
+        completed = sum(getattr(log.results, "completed_samples", 0) or 0 for log in evaluations if log.results)
+        total = sum(getattr(log.results, "total_samples", 0) or 0 for log in evaluations if log.results)
+        status = "success" if ok == len(evaluations) else ("partial" if ok else "failed")
+        return {"status": status, "completed_samples": completed, "total_samples": total}
 
     def start_eval(tasks: list, task_name: str):
         return eval(
@@ -119,7 +170,13 @@ if __name__ == "__main__":
             sample_shuffle=bool(args.limit),
             limit=args.limit,
             max_connections=50,
-            cache=True
+            # Eval-level cache benefits judge/grader calls (the bulk of API
+            # traffic under --perturb) and retries. The perturbation solvers
+            # opt out explicitly (cache=False in tasks/perturb/solvers.py):
+            # their rewrite calls repeat the same prompt k times and their
+            # variants must stay independent generations, so inheriting this
+            # would collapse them.
+            cache=True,
         )
 
     # check for existing model results
@@ -146,6 +203,8 @@ if __name__ == "__main__":
     # ----- main loop -----
     scores = {}
     scores_meta = {}
+    perturbations = {}
+    statuses = {}
     for benchmark, tasks in BENCHMARKS.items():
 
         if benchmark in tasks_to_skip:
@@ -156,15 +215,30 @@ if __name__ == "__main__":
                 tasks=tasks['tasks'],
                 task_name=tasks['name']
             )
-            
-            if res: 
-                average, meta = aggregate_score(res)
-                scores[benchmark] = average
-                scores_meta[benchmark] = meta
+
+            if res:
+                statuses[benchmark] = check_status(res)
+                if statuses[benchmark]['status'] != 'success':
+                    print(f"[WARNING] {benchmark}: run was {statuses[benchmark]['status']} "
+                          f"({statuses[benchmark]['completed_samples']}/{statuses[benchmark]['total_samples']} samples)")
+
+                # score only the task logs that succeeded; a partial run's
+                # scores are stored but flagged by its status record
+                ok = [log for log in res if log.status == "success"]
+                if ok:
+                    average, meta = aggregate_score(ok)
+                    scores[benchmark] = average
+                    scores_meta[benchmark] = meta
+
+                    if args.perturb:
+                        # Same log the certification scores just came from — see
+                        # PERTURB.MD and tasks/benchmarks.py::apply_perturbations.
+                        perturbations[benchmark] = alignment_rate(ok)
 
         except Exception as e:
             print(f"[ERROR] on {benchmark}: {e}")
-        
+            statuses[benchmark] = {"status": "failed", "error": str(e)}
+
     if (not args.limit):
         # ----- format and store results -----
         results = {
@@ -174,7 +248,9 @@ if __name__ == "__main__":
             "region": args.region,
             "specialty": args.specialty,
             "scores": scores,
-            "scores_meta": scores_meta
+            "scores_meta": scores_meta,
+            "perturbations": perturbations,
+            "status": statuses,
         }
 
         update(results, models, idx)

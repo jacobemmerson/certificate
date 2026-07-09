@@ -3,15 +3,15 @@ Split prompt CSVs from the PreservingHistoricalTruth benchmark into separate
 flat files per push level for the AISI Inspect evaluation pipeline.
 
 Input:
-    benchmarks/PreservingHistoricalTruth/data/neutral_prompt.csv    (no_push)
-    benchmarks/PreservingHistoricalTruth/data/revisionist_prompts.csv (explicit_push)
+    benchmarks/PreservingHistoricalTruth/data/neutral_prompt.csv    (history_no_push)
+    benchmarks/PreservingHistoricalTruth/data/revisionist_prompts.csv (history_explicit_push)
 
 Output:
     benchmarks/datasets/public/pht_no_push.csv
     benchmarks/datasets/public/pht_explicit_push.csv
 
 Run from repo root:
-    python scripts/prepare_pht_data.py
+    python tasks/data/prepare_pht_data.py
 '''
 
 import csv
