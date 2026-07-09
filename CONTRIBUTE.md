@@ -18,29 +18,17 @@ Follow the existing files (`socialharmbench.py` is the simplest model). The
 pattern:
 
 ```python
-from pathlib import Path
-
 from inspect_ai import Task, task
-from inspect_ai.dataset import Sample, csv_dataset
 from inspect_ai.solver import generate
 
-from tasks.scorers.harm import llm_judge_scorer, llamaguard_scorer
+from tasks.evals.common import csv_samples, with_llamaguard
+from tasks.scorers.harm import llm_judge_scorer
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-
-
-def to_sample(row: dict) -> Sample:
-    return Sample(
-        input=row["prompt_text"],          # what the target model sees
-        id=str(row["prompt_id"]),          # stable per-item id
-        # target=row["label"],             # only if you have ground truth
-        metadata={...},                    # anything scorers/analysis need
-    )
-
-
-dataset = csv_dataset(
-    str(REPO_ROOT / "benchmarks" / "datasets" / "public" / "your_benchmark.csv"),
-    to_sample,
+dataset = csv_samples(
+    "your_benchmark.csv",              # under benchmarks/datasets/public/
+    input_col="prompt_text",           # what the target model sees
+    id_col="prompt_id",                # stable per-item id
+    metadata_cols=["category", ...],   # anything scorers/analysis need
 )
 
 
@@ -49,11 +37,22 @@ def your_benchmark(
     grader: str | list[str] = "openai/gpt-4o",
     llamaguard_model: str = "openrouter/meta-llama/llama-guard-4-12b",
 ):
-    scorers = [llm_judge_scorer(model=grader, template=YOUR_JUDGE_TEMPLATE)]
-    if llamaguard_model:
-        scorers.append(llamaguard_scorer(model=llamaguard_model))
-    return Task(dataset=dataset, solver=generate(), scorer=scorers)
+    return Task(
+        dataset=dataset,
+        solver=generate(),
+        scorer=with_llamaguard(
+            llm_judge_scorer(model=grader, template=YOUR_JUDGE_TEMPLATE),
+            llamaguard_model,
+        ),
+    )
 ```
+
+`tasks/evals/common.py` supplies the shared plumbing:
+`csv_samples(...)` loads a CSV from `benchmarks/datasets/public/` and maps
+each row to a `Sample` (pass `to_sample=<fn>` instead of column names when
+the mapping isn't a straight column pick — templated input, computed ids);
+`with_llamaguard(scorers, llamaguard_model)` puts your scorer(s) first and
+appends LlamaGuard when configured.
 
 Conventions that matter:
 
@@ -128,18 +127,18 @@ entry, so the framing family is skipped for that task while every other
 family still runs. That's the deliberate fail-safe: a wrong wrapper would
 violate the content-equivalence requirement (PERTURB.MD, "What Counts as a
 Valid Surface Perturbation"), so the default is skip, not guess.
-`rolemodel` is the in-repo example — its open-ended "list role models"
+`role_model_bias` is the in-repo example — its open-ended "list role models"
 elicitation fits no family, so it's intentionally unregistered.
 
 ### b. Rigid output formats: custom `item_text`/`render`
 
 If the target must reply in a rigid, directly machine-parsed format (a JSON
-contract, fixed scale options — like `fscale`/`favscore`), a naive rewrite
+contract, fixed scale options — like `fscale`/`leader_favorability`), a naive rewrite
 of the whole prompt would corrupt the format instructions and break the
 parser. Register an adapter whose `item_text(state)` extracts only the raw
 statement/question (usually from `state.metadata`) and whose
 `render(state, new_text)` re-injects the format wrapper verbatim via your
-benchmark's own prompt-builder function. See the `fscale`/`favscore`
+benchmark's own prompt-builder function. See the `fscale`/`leader_favorability`
 entries in `adapters.py`.
 
 ### c. Scorer polarity
@@ -149,7 +148,7 @@ Perturbation reporting picks each sample's **worst** condition and counts
 (`value_to_float` lower = worse, `< 1.0` = failing). If your scorer is
 inverted — a higher value means a *worse* outcome — register it in
 `tasks/perturb/scoring.py::SCORER_POLARITY` with `badness` and `failing`
-functions, as `rolemodel_scorer` does. Otherwise worst-case scores and ASR
+functions, as `role_model_bias_scorer` does. Otherwise worst-case scores and ASR
 for your benchmark will be backwards.
 
 ## 5. Scoring conventions
