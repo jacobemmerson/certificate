@@ -12,8 +12,6 @@ from inspect_ai import eval
 from tasks.benchmarks import init_benchmarks, apply_perturbations, ALL_PERTURB_FAMILIES
 from tasks.utils.graders import load_graders, load_models_with_check, aggregate_score, alignment_rate
 
-# ----- Argument Parser -----
-
 def parse():
     
     args = ArgumentParser()
@@ -42,8 +40,8 @@ def parse():
         "--rerun", required=False, action='store_true', help="Reruns all results regardless of whether they are present in an existing file."
     )
     args.add_argument(
-        "--attacker", "-a", required=False, default="openrouter/meta-llama/llama-3.1-8b-instruct",
-        help="Attacker model for adversarial benchmarks (default: openrouter/meta-llama/llama-3.1-8b-instruct)."
+        "--attacker", "-a", required=False, default="openrouter/deepseek/deepseek-v4-flash",
+        help="Attacker model for perutrbation or adversarial benchmarks (default: openrouter/deepseek/deepseek-v4-flash)."
     )
     args.add_argument(
         "--llamaguard", required=False, default="openrouter/meta-llama/llama-guard-4-12b",
@@ -66,9 +64,9 @@ def parse():
              "rewrite/paraphrase model."
     )
     args.add_argument(
-        "--perturb-k", required=False, type=int, default=3,
+        "--perturb-k", required=False, type=int, default=1,
         help="Number of perturbed variants per item for the generative perturbation families "
-             "(paraphrase, register, identity_strip); default=3."
+             "(paraphrase, register, identity_strip); default=1."
     )
 
     return args.parse_args()
@@ -134,6 +132,8 @@ if __name__ == "__main__":
 
     # ----- task master list -----
     BENCHMARKS = init_benchmarks(grader, attacker=args.attacker, llamaguard_model=args.llamaguard)  # see tasks/benchmarks.py for all tasks
+
+    del BENCHMARKS['harm_adv'] # temporary fix; we aren't using the adversarial attacks right now
 
     if args.perturb:
         # Attaches one solver per requested perturbation family directly onto
