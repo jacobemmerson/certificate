@@ -15,6 +15,8 @@ dirtyjson
 inspect-ai
 huggingface_hub
 transformers
+sentence_transformers
+gdm-concordia
 litellm[proxy]
 torch>=2.4.0
 vllm>=0.4.0

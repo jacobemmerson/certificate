@@ -26,7 +26,7 @@ This pipeline relies heavily on the AISI Inspect framework for tracking model pe
 The packages are managed by `uv`; the instructions for installing it can be found [here](https://docs.astral.sh/uv/getting-started/installation/). After installing according to the latest documentation, create your virtual environment with `python=3.10` and download the required packages.
 
 ```
-uv venv --python 3.10
+uv venv --python 3.12
 uv pip install -r requirements.txt
 ```
 

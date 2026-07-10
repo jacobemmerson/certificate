@@ -5,6 +5,7 @@ Runs all benchmarks.
 Tasks are defined in tasks/evals
 '''
 
+import os
 import json
 from argparse import ArgumentParser
 
@@ -73,13 +74,15 @@ def parse():
 
 # ----- Updates models/models.json -----
 
-def update(results, models, idx):
+def update(results, models, idx, path='models/models.json'):
     '''
-    Summarises results and updates models/models.json
+    Summarises results and updates the models JSON file at `path`
+    (defaults to models/models.json; overridden per-task for parallel runs).
     '''
 
     if models: # store previous only if previous results exist
-        with open('models/models_previous.json', 'w') as f: # store as a safety net
+        previous_path = path.replace('.json', '_previous.json')
+        with open(previous_path, 'w') as f: # store as a safety net
             json.dump(models, f, indent=4)
 
     # ----- store ------
@@ -113,7 +116,7 @@ def update(results, models, idx):
         models.append(results)
 
     # write models file back
-    with open('models/models.json', 'w') as f:
+    with open(path, 'w') as f:
         json.dump(models, f, indent=4)
 
 
@@ -125,10 +128,14 @@ if __name__ == "__main__":
     grader = args.grader if args.grader else load_graders()
     model_id = args.model.split("/")[-1]
     log_dir = f"logs/{model_id}"
+    # Output file override — parallel runs point each task at its own partial
+    # file to avoid races on the shared models/models.json.
+    models_path = os.environ.get("CERTIFY_MODELS_PATH", "models/models.json")
 
     print(f"Model: {model_id}")
     print(f"Grader(s): {grader}")
     print(f"Log Directory: {log_dir}")
+    print(f"Models File: {models_path}")
 
     # ----- task master list -----
     BENCHMARKS = init_benchmarks(grader, attacker=args.attacker, llamaguard_model=args.llamaguard)  # see tasks/benchmarks.py for all tasks
@@ -180,7 +187,7 @@ if __name__ == "__main__":
         )
 
     # check for existing model results
-    models, idx = load_models_with_check(model_id)
+    models, idx = load_models_with_check(model_id, path=models_path)
     if idx != -1:
         print(f"Results Found: Model index at {idx}")
 
@@ -253,4 +260,4 @@ if __name__ == "__main__":
             "status": statuses,
         }
 
-        update(results, models, idx)
+        update(results, models, idx, path=models_path)
