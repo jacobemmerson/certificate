@@ -29,20 +29,14 @@ def load_graders(path: str | Path | None = None) -> list[str]:
         raise ValueError(f"No grader models found in {path}")
     return models
 
-def load_models_with_check(model_id: str | None = None, path: str | Path | None = None) -> tuple[list[dict], int]:
+def load_models_with_check(model_id: str | None = None) -> tuple[list[dict], int]:
     '''
     Return the models list and the index of `model_id` within it (-1 if not
     found, or if no model_id is given).
-
-    `path` overrides the default models/models.json (used for per-task partial
-    files in parallel runs). A missing file is treated as an empty list rather
-    than an error, so a fresh partial can be written from scratch.
     '''
-    if path is None:
-        path = REPO_ROOT / "models" / "models.json"
-    path = Path(path)
+    path = REPO_ROOT / "models" / "models.json"
     if not path.exists():
-        return [], -1
+        raise FileNotFoundError(f"Model results file not found: {path}")
 
     try:
         with open(path, 'r') as f:

@@ -14,8 +14,8 @@
         "scores_meta": {
             "auth": {
                 "fscale": 73.33333333333333,
-                "leader_favorability": 53.30242270649248,
-                "role_model_bias": 68.73123123123123
+                "favscore": 53.30242270649248,
+                "rolemodel": 68.73123123123123
             },
             "harm": {
                 "social_harm_bench": 92.63698630136986
@@ -29,8 +29,8 @@
                 "echr_government": 5.882352941176471
             },
             "hist": {
-                "history_no_push": 87.16363636363637,
-                "history_explicit_push": 17.768444119795472
+                "no_push": 87.16363636363637,
+                "explicit_push": 17.768444119795472
             }
         }
     },
@@ -49,8 +49,8 @@
         "scores_meta": {
             "auth": {
                 "fscale": 85.33333333333333,
-                "leader_favorability": 54.833215879727504,
-                "role_model_bias": 63.888888888888886
+                "favscore": 54.833215879727504,
+                "rolemodel": 63.888888888888886
             },
             "harm": {
                 "social_harm_bench": 95.2054794520548
@@ -64,8 +64,8 @@
                 "echr_government": 1.2254901960784315
             },
             "hist": {
-                "history_no_push": 92.0909090909091,
-                "history_explicit_push": 17.856490779623883
+                "no_push": 92.0909090909091,
+                "explicit_push": 17.856490779623883
             }
         }
     },
@@ -84,8 +84,8 @@
         "scores_meta": {
             "auth": {
                 "fscale": 66.0,
-                "leader_favorability": 52.36533492347446,
-                "role_model_bias": 67.992992992993
+                "favscore": 52.36533492347446,
+                "rolemodel": 67.992992992993
             },
             "harm": {
                 "social_harm_bench": 87.32876712328768
@@ -99,8 +99,8 @@
                 "echr_government": 0.0
             },
             "hist": {
-                "history_no_push": 93.61818181818182,
-                "history_explicit_push": 16.684921504198613
+                "no_push": 93.61818181818182,
+                "explicit_push": 16.684921504198613
             }
         }
     },
@@ -119,8 +119,8 @@
         "scores_meta": {
             "auth": {
                 "fscale": 89.33333333333333,
-                "leader_favorability": 52.4460278093999,
-                "role_model_bias": 70.15765765765767
+                "favscore": 52.4460278093999,
+                "rolemodel": 70.15765765765767
             },
             "harm": {
                 "social_harm_bench": 96.06164383561644
@@ -134,8 +134,8 @@
                 "echr_government": 31.944444444444446
             },
             "hist": {
-                "history_no_push": 89.3090909090909,
-                "history_explicit_push": 28.441036874771815
+                "no_push": 89.3090909090909,
+                "explicit_push": 28.441036874771815
             }
         }
     },
@@ -154,8 +154,8 @@
         "scores_meta": {
             "auth": {
                 "fscale": 82.0,
-                "leader_favorability": 55.18902125006776,
-                "role_model_bias": 68.24324324324324
+                "favscore": 55.18902125006776,
+                "rolemodel": 68.24324324324324
             },
             "harm": {
                 "social_harm_bench": 92.63698630136986
@@ -169,8 +169,8 @@
                 "echr_government": 0.16339869281045752
             },
             "hist": {
-                "history_no_push": 92.49090909090908,
-                "history_explicit_push": 20.964207450693937
+                "no_push": 92.49090909090908,
+                "explicit_push": 20.964207450693937
             }
         }
     },
@@ -189,8 +189,8 @@
         "scores_meta": {
             "auth": {
                 "fscale": 77.33333333333333,
-                "leader_favorability": 54.54505926889648,
-                "role_model_bias": 70.65815815815816
+                "favscore": 54.54505926889648,
+                "rolemodel": 70.65815815815816
             },
             "harm": {
                 "social_harm_bench": 96.23287671232876
@@ -204,8 +204,8 @@
                 "echr_government": 2.9411764705882355
             },
             "hist": {
-                "history_no_push": 90.7090909090909,
-                "history_explicit_push": 24.155559612926787
+                "no_push": 90.7090909090909,
+                "explicit_push": 24.155559612926787
             }
         }
     },
@@ -224,8 +224,8 @@
         "scores_meta": {
             "auth": {
                 "fscale": 82.66666666666667,
-                "leader_favorability": 53.8372883576372,
-                "role_model_bias": 67.24438724438724
+                "favscore": 53.8372883576372,
+                "rolemodel": 67.24438724438724
             },
             "harm": {
                 "social_harm_bench": 96.23287671232876
@@ -239,8 +239,8 @@
                 "echr_government": 9.967320261437909
             },
             "hist": {
-                "history_no_push": 89.65454545454546,
-                "history_explicit_push": 18.356164383561644
+                "no_push": 89.65454545454546,
+                "explicit_push": 18.356164383561644
             }
         }
     },
@@ -259,8 +259,8 @@
         "scores_meta": {
             "auth": {
                 "fscale": 84.0,
-                "leader_favorability": 56.02079606440071,
-                "role_model_bias": 60.270270270270274
+                "favscore": 56.02079606440071,
+                "rolemodel": 60.270270270270274
             },
             "harm": {
                 "social_harm_bench": 78.25342465753424
@@ -274,8 +274,8 @@
                 "echr_government": 0.32679738562091504
             },
             "hist": {
-                "history_no_push": 93.0,
-                "history_explicit_push": 16.867469879518072
+                "no_push": 93.0,
+                "explicit_push": 16.867469879518072
             }
         }
     },
@@ -294,8 +294,8 @@
         "scores_meta": {
             "auth": {
                 "fscale": 75.33333333333333,
-                "leader_favorability": 54.55262599157948,
-                "role_model_bias": 58.620763620763626
+                "favscore": 54.55262599157948,
+                "rolemodel": 58.620763620763626
             },
             "harm": {
                 "social_harm_bench": 67.63698630136986
@@ -309,8 +309,8 @@
                 "echr_government": 0.24509803921568626
             },
             "hist": {
-                "history_no_push": 94.94545454545454,
-                "history_explicit_push": 37.961271465107785
+                "no_push": 94.94545454545454,
+                "explicit_push": 37.961271465107785
             }
         }
     },
@@ -329,8 +329,8 @@
         "scores_meta": {
             "auth": {
                 "fscale": 72.0,
-                "leader_favorability": 55.10968359805569,
-                "role_model_bias": 60.459550459550464
+                "favscore": 55.10968359805569,
+                "rolemodel": 60.459550459550464
             },
             "harm": {
                 "social_harm_bench": 96.23287671232876
@@ -344,8 +344,8 @@
                 "echr_government": 6.699346405228758
             },
             "hist": {
-                "history_no_push": 94.10909090909091,
-                "history_explicit_push": 51.60701241782323
+                "no_push": 94.10909090909091,
+                "explicit_push": 51.60701241782323
             }
         }
     },
@@ -364,8 +364,8 @@
         "scores_meta": {
             "auth": {
                 "fscale": 78.66666666666667,
-                "leader_favorability": 56.323352035561335,
-                "role_model_bias": 69.14914914914914
+                "favscore": 56.323352035561335,
+                "rolemodel": 69.14914914914914
             },
             "harm": {
                 "social_harm_bench": 99.82876712328768
@@ -379,8 +379,8 @@
                 "echr_government": 50.898692810457526
             },
             "hist": {
-                "history_no_push": 94.74545454545455,
-                "history_explicit_push": 65.18802482657904
+                "no_push": 94.74545454545455,
+                "explicit_push": 65.18802482657904
             }
         }
     },
@@ -399,8 +399,8 @@
         "scores_meta": {
             "auth": {
                 "fscale": 75.33333333333333,
-                "leader_favorability": 54.46662510615999,
-                "role_model_bias": 62.73916773916774
+                "favscore": 54.46662510615999,
+                "rolemodel": 62.73916773916774
             },
             "harm": {
                 "social_harm_bench": 100.0
@@ -414,8 +414,8 @@
                 "echr_government": 53.267973856209146
             },
             "hist": {
-                "history_no_push": 95.05454545454546,
-                "history_explicit_push": 72.90982110259219
+                "no_push": 95.05454545454546,
+                "explicit_push": 72.90982110259219
             }
         }
     },
@@ -434,8 +434,8 @@
         "scores_meta": {
             "auth": {
                 "fscale": 72.0,
-                "leader_favorability": 54.88561825771128,
-                "role_model_bias": 66.3038038038038
+                "favscore": 54.88561825771128,
+                "rolemodel": 66.3038038038038
             },
             "harm": {
                 "social_harm_bench": 100.0
@@ -449,8 +449,8 @@
                 "echr_government": 48.692810457516345
             },
             "hist": {
-                "history_no_push": 92.85454545454546,
-                "history_explicit_push": 64.96896677619569
+                "no_push": 92.85454545454546,
+                "explicit_push": 64.96896677619569
             }
         }
     },
@@ -469,8 +469,8 @@
         "scores_meta": {
             "auth": {
                 "fscale": 78.0,
-                "leader_favorability": 54.95648569776476,
-                "role_model_bias": 63.353353353353356
+                "favscore": 54.95648569776476,
+                "rolemodel": 63.353353353353356
             },
             "harm": {
                 "social_harm_bench": 99.31506849315068
@@ -484,8 +484,8 @@
                 "echr_government": 15.60457516339869
             },
             "hist": {
-                "history_no_push": 93.52727272727273,
-                "history_explicit_push": 53.5949098621421
+                "no_push": 93.52727272727273,
+                "explicit_push": 53.5949098621421
             }
         }
     },
@@ -504,8 +504,8 @@
         "scores_meta": {
             "auth": {
                 "fscale": 78.0,
-                "leader_favorability": 55.28761451726568,
-                "role_model_bias": 69.7072072072072
+                "favscore": 55.28761451726568,
+                "rolemodel": 69.7072072072072
             },
             "harm": {
                 "social_harm_bench": 100.0
@@ -519,8 +519,8 @@
                 "echr_government": 67.40196078431373
             },
             "hist": {
-                "history_no_push": 95.56363636363636,
-                "history_explicit_push": 90.52573932092004
+                "no_push": 95.56363636363636,
+                "explicit_push": 90.52573932092004
             }
         }
     },
@@ -539,8 +539,8 @@
         "scores_meta": {
             "auth": {
                 "fscale": 76.0,
-                "leader_favorability": 55.42500135523392,
-                "role_model_bias": 65.26347776347777
+                "favscore": 55.42500135523392,
+                "rolemodel": 65.26347776347777
             },
             "harm": {
                 "social_harm_bench": 100.0
@@ -554,9 +554,18 @@
                 "echr_government": 54.248366013071895
             },
             "hist": {
-                "history_no_push": 95.2909090909091,
-                "history_explicit_push": 75.93573123972978
+                "no_push": 95.2909090909091,
+                "explicit_push": 75.93573123972978
             }
         }
+    },
+    {
+        "id": "claude-sonnet-4.5",
+        "name": null,
+        "company": null,
+        "region": null,
+        "specialty": null,
+        "scores": {},
+        "scores_meta": {}
     }
 ]
