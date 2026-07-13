@@ -77,15 +77,9 @@ CUDA_VISIBLE_DEVICES=0 setsid python -m vllm.entrypoints.openai.api_server \
 ATTACKER_PID=$!
 
 # ── vLLM: HarmBench classifier on GPU 1 ──────────────────────────────────────
-# cais/HarmBench-Llama-2-13b-cls ships no chat_template (it's a completion-style
-# classifier, not a chat model), so vLLM's chat/responses endpoints 400 on every
-# request without one. _HARMBENCH_PROMPT in tasks/scorers/harm.py already sends
-# the fully pre-formatted official HarmBench prompt as a single message, so the
-# template must pass it through unchanged rather than re-wrapping it.
 CUDA_VISIBLE_DEVICES=1 setsid python -m vllm.entrypoints.openai.api_server \
     --model "cais/HarmBench-Llama-2-13b-cls" \
     --served-model-name harmbench-cls \
-    --chat-template scripts/harmbench_chat_template.jinja \
     --port 8002 &
 HARMBENCH_PID=$!
 
@@ -124,7 +118,7 @@ inspect eval tasks/evals/socialharmbench.py@social_harm_bench_adversarial \
     --limit 3 \
     --log-dir out/ \
     -T attacks="["cipher", "deep_inception", "pair", "crescendo"]"\
-    -T "grader=openrouter/google/gemini-2.5-flash" \
+    -T "grader=openrouter/google/gemini-flash-1.5" \
     -T "attacker=openai/hermes-attacker" \
     -T "llamaguard_model=openrouter/meta-llama/llama-guard-4-12b" \
     -T "harmbench_model=openai/harmbench-cls" \
