@@ -4,6 +4,7 @@ from pipeline.stage1_evaluation.evals.preserving_historical_truth import history
 from pipeline.stage1_evaluation.evals.socialharmbench import social_harm_bench
 
 from pipeline.stage2_perturbation.build import build_perturbed_task
+from pipeline.stage3_simulation.build import build_simulation_task
 
 ALL_PERTURB_FAMILIES = {"paraphrase", "register", "identity_strip", "framing", "reconsideration"}
 
@@ -79,6 +80,37 @@ def apply_perturbations(
     return {
         key: {
             'tasks': [build_perturbed_task(t, families, rewrite_model, k) for t in entry['tasks']],
+            'name': entry['name'],
+        }
+        for key, entry in benchmarks.items()
+    }
+
+
+def apply_simulation(
+    benchmarks: dict,
+    sim_model: str = "openrouter/deepseek/deepseek-v4-flash",
+    k: int = 1,
+):
+    '''
+    Attach stage-3 scenario simulation directly onto an already-built
+    BENCHMARKS dict (from init_benchmarks), the same way apply_perturbations
+    attaches stage 2. For every Task in every benchmark,
+    pipeline/stage3_simulation/build.py::build_simulation_task appends a
+    `simulate` solver that reframes each item into k realistic deployment
+    scenarios, runs the target on them, and records them as the `scenario`
+    condition family — then reuses stage 2's scoring/reporting spine to judge
+    the control (bald query) against the scenario condition.
+
+    Keeps the same benchmark keys/'name' as `benchmarks`, so the result runs
+    through the exact same log path as an unsimulated run — no separate Task
+    or log directory.
+
+    sim_model is the scenario-reframing model; by convention certify.py reuses
+    its --attacker model for this (it should differ from the target model).
+    '''
+    return {
+        key: {
+            'tasks': [build_simulation_task(t, sim_model, k) for t in entry['tasks']],
             'name': entry['name'],
         }
         for key, entry in benchmarks.items()
