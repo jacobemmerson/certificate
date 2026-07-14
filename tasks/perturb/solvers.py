@@ -40,6 +40,7 @@ original item text, never the control's completion.
 """
 from __future__ import annotations
 
+import asyncio
 import copy
 
 from inspect_ai.log import transcript
@@ -57,16 +58,44 @@ def _record(state: TaskState, family: str, variants: list[dict]) -> None:
     state.metadata.setdefault("perturbations", {})[family] = variants
 
 
+async def _generate_variant(
+    generate: Generate,
+    test: TaskState,
+    label: str,
+    attempts: int = 3,
+) -> TaskState | None:
+    """Target generation for a perturbation variant, with retries.
+
+    These calls are cache=False, so unlike the base task's control generation
+    they hit the API on every run — and OpenRouter intermittently answers a
+    long request with a keep-alive/whitespace body that the OpenAI client
+    cannot parse (JSONDecodeError). That is not an APIError, so Inspect's own
+    retry layer does not catch it and a single bad response would otherwise
+    error the sample and fail the whole task. Retry here; on persistent
+    failure return None so the caller drops just this variant.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            return await generate(test, cache=False)
+        except Exception as exc:
+            transcript().info(f"{label}: target generation error (attempt {attempt}/{attempts}): {exc}")
+            if attempt < attempts:
+                await asyncio.sleep(2 ** attempt)
+    return None
+
+
 async def _rewrite_variant(
     state: TaskState,
     generate: Generate,
     family_name: str,
     rewrite_model: str,
     adapter: PerturbAdapter,
-) -> tuple[str, str]:
+) -> tuple[str, str] | None:
     """Generate one rewritten-prompt variant on a scratch copy of state —
     never touches the shared state.output. Returns (query, completion): the
-    rewritten prompt actually sent to the target model and its response.
+    rewritten prompt actually sent to the target model and its response, or
+    None if the target generation failed even after retries (the variant is
+    then skipped rather than failing the sample).
     """
     original_text = adapter.item_text(state)
     rewriter = get_model(rewrite_model)
@@ -81,7 +110,9 @@ async def _rewrite_variant(
     rendered = adapter.render(state, new_text)
     test = copy.deepcopy(state)
     test.messages = [ChatMessageUser(content=rendered)]
-    test = await generate(test, cache=False)
+    test = await _generate_variant(generate, test, family_name)
+    if test is None:
+        return None
     return rendered, (test.output.completion if test.output else "")
 
 
@@ -90,7 +121,10 @@ def paraphrase(rewrite_model: str, k: int, adapter: PerturbAdapter) -> Solver:
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         variants = []
         for i in range(k):
-            query, completion = await _rewrite_variant(state, generate, "paraphrase", rewrite_model, adapter)
+            variant = await _rewrite_variant(state, generate, "paraphrase", rewrite_model, adapter)
+            if variant is None:
+                continue
+            query, completion = variant
             variants.append({"condition": f"paraphrase_variant_{i + 1}", "query": query, "completion": completion})
         _record(state, "paraphrase", variants)
         return state
@@ -103,7 +137,10 @@ def register(rewrite_model: str, k: int, adapter: PerturbAdapter) -> Solver:
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         variants = []
         for i in range(k):
-            query, completion = await _rewrite_variant(state, generate, "register", rewrite_model, adapter)
+            variant = await _rewrite_variant(state, generate, "register", rewrite_model, adapter)
+            if variant is None:
+                continue
+            query, completion = variant
             variants.append({"condition": f"register_variant_{i + 1}", "query": query, "completion": completion})
         _record(state, "register", variants)
         return state
@@ -116,7 +153,10 @@ def identity_strip(rewrite_model: str, k: int, adapter: PerturbAdapter) -> Solve
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         variants = []
         for i in range(k):
-            query, completion = await _rewrite_variant(state, generate, "identity_strip", rewrite_model, adapter)
+            variant = await _rewrite_variant(state, generate, "identity_strip", rewrite_model, adapter)
+            if variant is None:
+                continue
+            query, completion = variant
             variants.append({"condition": f"identity_strip_variant_{i + 1}", "query": query, "completion": completion})
         _record(state, "identity_strip", variants)
         return state
@@ -138,7 +178,9 @@ def framing(adapter: PerturbAdapter) -> Solver:
             rendered = adapter.render(state, templated_text)
             test = copy.deepcopy(state)
             test.messages = [ChatMessageUser(content=rendered)]
-            test = await generate(test, cache=False)
+            test = await _generate_variant(generate, test, f"framing_{name}")
+            if test is None:
+                continue
             variants.append({
                 "condition": f"framing_{name}",
                 "query": rendered,
@@ -163,7 +205,10 @@ def reconsideration(challenge_text: str = DEFAULT_CHALLENGE) -> Solver:
         test = copy.deepcopy(state)
         test.messages.append(ChatMessageAssistant(content=original_completion))
         test.messages.append(ChatMessageUser(content=challenge_text))
-        test = await generate(test, cache=False)
+        test = await _generate_variant(generate, test, "reconsideration")
+        if test is None:
+            _record(state, "reconsideration", [])
+            return state
 
         _record(state, "reconsideration", [{
             "condition": "reconsidered",

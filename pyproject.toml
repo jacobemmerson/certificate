@@ -1,0 +1,38 @@
+[project]
+name = "certificate"
+version = "0.1.0"
+description = "Model certification benchmarks (AISI inspect) + MAS simulation pipeline"
+requires-python = ">=3.12"
+dependencies = [
+    # eval stack — inspect-ai >= 0.3.246 required: its OpenRouter provider
+    # retries keep-alive/non-JSON bodies (JSONDecodeError) that older
+    # versions (e.g. 0.3.69) let crash entire tasks. Exact versions of
+    # everything (including transitives) are pinned by uv.lock — keep it
+    # committed, and upgrade deliberately via `uv lock --upgrade-package X`.
+    "inspect-ai==0.3.246",
+    "openai>=2.45.0",
+    "anthropic>=0.116.0",
+    # models / inference — the adversarial-attack extras (litellm[proxy],
+    # vllm) live on the adversarial branch, not here
+    "torch>=2.4.0",
+    "transformers>=5",
+    "huggingface-hub",
+    # MAS / Concordia simulation pipeline (mas/)
+    "gdm-concordia>=2.4.0",
+    "sentence-transformers>=5",
+    # analysis / plotting
+    "requests",
+    "tqdm",
+    "pandas>=3",
+    "numpy>=2",
+    "scipy",
+    "matplotlib",
+    "seaborn",
+    "geopandas",
+    "ipython",
+    "dirtyjson",
+]
+
+[tool.uv]
+# this repo is a script collection, not an installable package
+package = false

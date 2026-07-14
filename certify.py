@@ -166,10 +166,14 @@ if __name__ == "__main__":
             log_dir=log_dir + f"/{task_name}",
             continue_on_fail=True,
             retry_on_error=2,
+            # tolerate scattered sample-level errors (e.g. an unparseable
+            # OpenRouter response that slips past retries) instead of failing
+            # the whole task — only fail if >10% of samples error
+            fail_on_error=0.1,
             epochs=args.epochs,
             sample_shuffle=bool(args.limit),
             limit=args.limit,
-            max_connections=50,
+            max_connections=100,
             # Eval-level cache benefits judge/grader calls (the bulk of API
             # traffic under --perturb) and retries. The perturbation solvers
             # opt out explicitly (cache=False in tasks/perturb/solvers.py):
