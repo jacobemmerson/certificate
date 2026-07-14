@@ -23,11 +23,10 @@ This repository contains the pipeline and datasets required for evaluating front
 
 This pipeline relies heavily on the AISI Inspect framework for tracking model performance, grading, and logging. You'll need an API key from a supported provider, a full list can be found [here](https://inspect.aisi.org.uk/providers.html). Store this key as an environment variable.
 
-The packages are managed by `uv`; the instructions for installing it can be found [here](https://docs.astral.sh/uv/getting-started/installation/). After installing according to the latest documentation, create your virtual environment with `python=3.10` and download the required packages.
+The packages are managed by `uv`; the instructions for installing it can be found [here](https://docs.astral.sh/uv/getting-started/installation/). After installing according to the latest documentation, create the virtual environment and install the (locked) dependencies with:
 
 ```
-uv venv --python 3.10
-uv pip install -r requirements.txt
+uv sync
 ```
 
 To run the certification pipeline using `uv`, use the following:
@@ -41,8 +40,8 @@ uv run certify.py \
   --specialty   {OPTIONAL: the model's primary task (i.e. coding, math)} \
   --epochs      {OPTIONAL: the number of epochs to run, default=1} \
   --rerun       {OPTIONAL: rerun results that are already present for the model} \
-  --only        {OPTIONAL: run only these benchmark keys, i.e. --only harm harm_adv, see tasks/benchmarks.py for the keys} \
-  --attacker    {OPTIONAL: attacker model for adversarial benchmarks, default=openrouter/meta-llama/llama-3.1-8b-instruct} \
+  --only        {OPTIONAL: run only these benchmark keys, i.e. --only harm hr, see pipeline/registry.py for the keys} \
+  --attacker    {OPTIONAL: rewrite/paraphrase model for the perturbation stage, default=openrouter/deepseek/deepseek-v4-flash} \
   --llamaguard  {OPTIONAL: LlamaGuard model used for harm scoring across all tasks, default=openrouter/meta-llama/llama-guard-4-12b; pass an empty string to disable it (i.e. "")} \
   --limit       {OPTIONAL: randomly sample this many examples per task instead of running the full dataset}
 ```
@@ -54,14 +53,18 @@ Runs using `--limit` are treated as smoke tests: since they only cover a random 
 
 **You can also use any package manager of your choice** (i.e. anaconda); install the requirements by omitting `uv` and execute the pipeline using `python certify.py` with the appropriate arguments.
 
-To evaluate on individual benchmarks, you can use AISI Inspect's CLI `uv run inspect eval scripts/evals/{file}@{task}.py`. Note that you wil have to set certain parameters, like the model to be evaluated, which can be found [here](https://inspect.aisi.org.uk/reference/inspect_eval.html).
+To evaluate on individual benchmarks, you can use AISI Inspect's CLI `uv run inspect eval pipeline/stage1_evaluation/evals/{file}.py@{task}`. Note that you wil have to set certain parameters, like the model to be evaluated, which can be found [here](https://inspect.aisi.org.uk/reference/inspect_eval.html).
+
+### Repository structure
+
+The source lives in [`pipeline/`](pipeline/README.md), organized into three stages: `stage1_evaluation/` (plain benchmark evals), `stage2_perturbation/` (surface-perturbation reliability auditing, enabled via `--perturb`), and `stage3_simulation/` (agentic simulation — placeholder, coming next). Evaluation data lives in [`datasets/`](datasets/README.md) (`raw/` sources → `prepare/` scripts → `public/` CSVs); see [CONTRIBUTE.md](CONTRIBUTE.md) for adding a new benchmark. The adversarial attack suite (jailbreaks, attack-retry solver, multi-classifier harm scoring) lives on the **`adversarial-attacks`** branch.
 
 ## Future Tasks / TODOs
 
 In order of urgency:
 1. ~~Write the summarization/metric scripts to calculate overall model performance on benchmarks with multiple tasks (i.e. Democratic vs. Authoritarian Bias).~~
 2. ~~Modify `certify.py` to allow the specification of individual tasks.~~ Not Implementing
-3. Update `scripts/README.md` and `benchmarks/README.md` to outline how to incorporate new benchmarks and define the repository's structure.
+3. ~~Update `scripts/README.md` and `benchmarks/README.md` to outline how to incorporate new benchmarks and define the repository's structure.~~ See `pipeline/README.md`, `datasets/README.md`, and `CONTRIBUTE.md`.
 4. Support locally run models as well as api-models.
 5. Generate private/held out datasets.
 6. ~~Rename `scripts` directory to something more fitting~~ 

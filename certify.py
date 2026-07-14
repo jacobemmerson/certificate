@@ -1,16 +1,19 @@
 '''
 author: @tae
 
-Runs all benchmarks.
-Tasks are defined in tasks/evals
+Runs the certification pipeline:
+  stage 1 — plain benchmark evals (pipeline/stage1_evaluation)
+  stage 2 — surface-perturbation reliability auditing (pipeline/stage2_perturbation)
+  stage 3 — agentic simulation (pipeline/stage3_simulation, not yet implemented)
+Benchmarks are registered in pipeline/registry.py.
 '''
 
 import json
 from argparse import ArgumentParser
 
 from inspect_ai import eval
-from tasks.benchmarks import init_benchmarks, apply_perturbations, ALL_PERTURB_FAMILIES
-from tasks.utils.graders import load_graders, load_models_with_check, aggregate_score, alignment_rate
+from pipeline.registry import init_benchmarks, apply_perturbations, ALL_PERTURB_FAMILIES
+from pipeline.utils.graders import load_graders, load_models_with_check, aggregate_score, alignment_rate
 
 def parse():
     
@@ -41,7 +44,7 @@ def parse():
     )
     args.add_argument(
         "--attacker", "-a", required=False, default="openrouter/deepseek/deepseek-v4-flash",
-        help="Attacker model for perutrbation or adversarial benchmarks (default: openrouter/deepseek/deepseek-v4-flash)."
+        help="Rewrite/paraphrase model for the perturbation stage (default: openrouter/deepseek/deepseek-v4-flash)."
     )
     args.add_argument(
         "--llamaguard", required=False, default="openrouter/meta-llama/llama-guard-4-12b",
@@ -53,12 +56,12 @@ def parse():
     )
     args.add_argument(
         "--only", "-o", required=False, nargs="+", metavar="BENCHMARK",
-        help="Run only these benchmark keys (e.g. --only harm harm_adv). Other existing results are preserved."
+        help="Run only these benchmark keys (e.g. --only harm hr). Other existing results are preserved."
     )
     args.add_argument(
         "--perturb", required=False, nargs="+", default=ALL_PERTURB_FAMILIES, choices=sorted(ALL_PERTURB_FAMILIES),
         metavar="FAMILY",
-        help="Run surface-perturbation reliability auditing (see PERTURB.MD) for these families "
+        help="Run surface-perturbation reliability auditing (see pipeline/stage2_perturbation/) for these families "
              "(e.g. --perturb paraphrase reconsideration) on top of every benchmark in --only "
              "(or all benchmarks if --only is omitted). All by default. Reuses --attacker as the "
              "rewrite/paraphrase model."
@@ -131,14 +134,12 @@ if __name__ == "__main__":
     print(f"Log Directory: {log_dir}")
 
     # ----- task master list -----
-    BENCHMARKS = init_benchmarks(grader, attacker=args.attacker, llamaguard_model=args.llamaguard)  # see tasks/benchmarks.py for all tasks
-
-    del BENCHMARKS['harm_adv'] # temporary fix; we aren't using the adversarial attacks right now
+    BENCHMARKS = init_benchmarks(grader, llamaguard_model=args.llamaguard)  # see pipeline/registry.py for all tasks
 
     if args.perturb:
         # Attaches one solver per requested perturbation family directly onto
-        # each benchmark's own Task (see tasks/benchmarks.py::apply_perturbations
-        # and PERTURB.MD) — same benchmark keys/log paths as without --perturb.
+        # each benchmark's own Task (see pipeline/registry.py::apply_perturbations)
+        # — same benchmark keys/log paths as without --perturb.
         BENCHMARKS = apply_perturbations(
             BENCHMARKS,
             families=args.perturb,
@@ -176,7 +177,7 @@ if __name__ == "__main__":
             max_connections=100,
             # Eval-level cache benefits judge/grader calls (the bulk of API
             # traffic under --perturb) and retries. The perturbation solvers
-            # opt out explicitly (cache=False in tasks/perturb/solvers.py):
+            # opt out explicitly (cache=False in pipeline/stage2_perturbation/solvers.py):
             # their rewrite calls repeat the same prompt k times and their
             # variants must stay independent generations, so inheriting this
             # would collapse them.
@@ -236,7 +237,7 @@ if __name__ == "__main__":
 
                     if args.perturb:
                         # Same log the certification scores just came from — see
-                        # PERTURB.MD and tasks/benchmarks.py::apply_perturbations.
+                        # pipeline/registry.py::apply_perturbations.
                         perturbations[benchmark] = alignment_rate(ok)
 
         except Exception as e:

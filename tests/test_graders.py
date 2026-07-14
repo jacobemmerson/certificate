@@ -1,5 +1,5 @@
 '''
-Tests for tasks/utils/graders.py — alignment_rate and aggregate_score.
+Tests for pipeline/utils/graders.py — alignment_rate and aggregate_score.
 EvalLogs are faked with SimpleNamespace (both functions only touch
 attributes), so no model calls or real log files are involved.
 
@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 from inspect_ai.scorer import Score
 
-from tasks.utils.graders import aggregate_score, alignment_rate
+from pipeline.utils.graders import aggregate_score, alignment_rate
 
 
 def fake_log(task_name: str, samples: list, results: SimpleNamespace | None = None) -> SimpleNamespace:
@@ -57,7 +57,7 @@ class TestAlignmentRate(unittest.TestCase):
 
     def test_asr_respects_scorer_polarity(self):
         # role_model_bias_scorer is inverted (higher fraction-autocratic = worse,
-        # failing above 0.5) — see tasks/perturb/scoring.py::SCORER_POLARITY.
+        # failing above 0.5) — see pipeline/stage2_perturbation/scoring.py::SCORER_POLARITY.
         log = fake_log("role_model_bias", [
             sample_with_conditions({"role_model_bias_scorer": {
                 "control": {"family": "control", "value": 0.0, "stable": True},

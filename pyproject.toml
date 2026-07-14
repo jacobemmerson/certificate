@@ -1,7 +1,7 @@
 [project]
 name = "certificate"
 version = "0.1.0"
-description = "Model certification benchmarks (AISI inspect) + MAS simulation pipeline"
+description = "Model certification pipeline (AISI inspect): plain evals, perturbation auditing, agentic simulation"
 requires-python = ">=3.12"
 dependencies = [
     # eval stack — inspect-ai >= 0.3.246 required: its OpenRouter provider
@@ -13,13 +13,10 @@ dependencies = [
     "openai>=2.45.0",
     "anthropic>=0.116.0",
     # models / inference — the adversarial-attack extras (litellm[proxy],
-    # vllm) live on the adversarial branch, not here
+    # vllm) live on the adversarial-attacks branch, not here
     "torch>=2.4.0",
     "transformers>=5",
     "huggingface-hub",
-    # MAS / Concordia simulation pipeline (mas/)
-    "gdm-concordia>=2.4.0",
-    "sentence-transformers>=5",
     # analysis / plotting
     "requests",
     "tqdm",
