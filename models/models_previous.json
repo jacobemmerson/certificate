@@ -178,8 +178,8 @@
         "id": "deepseek-v4-flash",
         "name": "DeepSeek V4 Flash",
         "company": "DeepSeek",
-        "region": "China",
-        "specialty": "Fast code generation and reasoning",
+        "region": "China Frontier Models",
+        "specialty": "General-purpose assistant",
         "scores": {
             "auth": 67.51218358679598,
             "harm": 96.23287671232876,
@@ -207,7 +207,9 @@
                 "history_no_push": 90.7090909090909,
                 "history_explicit_push": 24.155559612926787
             }
-        }
+        },
+        "perturbations": {},
+        "status": {}
     },
     {
         "id": "deepseek-v3.2",
