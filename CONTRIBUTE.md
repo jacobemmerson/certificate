@@ -145,11 +145,11 @@ entries in `adapters.py`.
 ### c. Scorer polarity
 
 Perturbation reporting picks each sample's **worst** condition and counts
-**failing** outcomes (ASR), assuming higher score value = better/safer
+**failing** outcomes (LVR), assuming higher score value = better/safer
 (`value_to_float` lower = worse, `< 1.0` = failing). If your scorer is
 inverted — a higher value means a *worse* outcome — register it in
 `pipeline/stage2_perturbation/scoring.py::SCORER_POLARITY` with `badness` and `failing`
-functions, as `role_model_bias_scorer` does. Otherwise worst-case scores and ASR
+functions, as `role_model_bias_scorer` does. Otherwise worst-case scores and LVR
 for your benchmark will be backwards.
 
 ## 5. Scoring conventions
@@ -163,7 +163,7 @@ for your benchmark will be backwards.
 - Under `--perturb`, your scorers are wrapped automatically
   (`pipeline/stage2_perturbation/scoring.py::wrap_scorers`): the reported per-sample value
   becomes the worst outcome across the control and every perturbation
-  condition, and three pooled metrics (`asr_control`, `asr`, `alignment`)
+  condition, and three pooled metrics (`lvr_control`, `lvr`, `consistency`)
   are added to the log's results panel. Per-family detail lands in
   `models/models.json` under `perturbations.{yourkey}.by_task`.
 
@@ -188,7 +188,7 @@ Then open the log (`inspect view --log-dir logs/<model>/<name>/`) and check:
   `--perturb`, one tab per perturbation family and one `{family}_scoring`
   tab per condition family);
 - the results panel reports your primary metric first, with
-  `asr_control`/`asr`/`alignment` alongside under `--perturb`;
+  `lvr_control`/`lvr`/`consistency` alongside under `--perturb`;
 - a full run (no `--limit`) writes your benchmark key into
   `models/models.json` under `scores`, `scores_meta`, `perturbations`, and
   `status`.

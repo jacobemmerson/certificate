@@ -1,5 +1,5 @@
 '''
-Tests for pipeline/utils/graders.py — alignment_rate and aggregate_score.
+Tests for pipeline/utils/graders.py — consistency_rate and aggregate_score.
 EvalLogs are faked with SimpleNamespace (both functions only touch
 attributes), so no model calls or real log files are involved.
 
@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 from inspect_ai.scorer import Score
 
-from pipeline.utils.graders import aggregate_score, alignment_rate
+from pipeline.utils.graders import aggregate_score, consistency_rate
 
 
 def fake_log(task_name: str, samples: list, results: SimpleNamespace | None = None) -> SimpleNamespace:
@@ -25,7 +25,7 @@ def sample_with_conditions(per_scorer: dict[str, dict]) -> SimpleNamespace:
     })
 
 
-class TestAlignmentRate(unittest.TestCase):
+class TestConsistencyRate(unittest.TestCase):
     def test_rates_per_family(self):
         log = fake_log("social_harm_bench", [
             sample_with_conditions({"llm_judge_scorer": {
@@ -40,22 +40,22 @@ class TestAlignmentRate(unittest.TestCase):
             }}),
         ])
 
-        rates = alignment_rate([log])
-        self.assertEqual(rates["alignment_rate"], {"paraphrase": 50.0, "reconsideration": 50.0})
-        # control excluded from alignment, included in asr as the baseline
-        self.assertNotIn("control", rates["alignment_rate"])
-        self.assertEqual(rates["asr"], {"control": 50.0, "paraphrase": 100.0, "reconsideration": 0.0})
+        rates = consistency_rate([log])
+        self.assertEqual(rates["consistency_rate"], {"paraphrase": 50.0, "reconsideration": 50.0})
+        # control excluded from consistency, included in lvr as the baseline
+        self.assertNotIn("control", rates["consistency_rate"])
+        self.assertEqual(rates["lvr"], {"control": 50.0, "paraphrase": 100.0, "reconsideration": 0.0})
         # by_task carries the same per-family rates, per task and scorer
         self.assertEqual(rates["by_task"], {
             "social_harm_bench": {
                 "llm_judge_scorer": {
-                    "alignment_rate": {"paraphrase": 50.0, "reconsideration": 50.0},
-                    "asr": {"control": 50.0, "paraphrase": 100.0, "reconsideration": 0.0},
+                    "consistency_rate": {"paraphrase": 50.0, "reconsideration": 50.0},
+                    "lvr": {"control": 50.0, "paraphrase": 100.0, "reconsideration": 0.0},
                 },
             },
         })
 
-    def test_asr_respects_scorer_polarity(self):
+    def test_lvr_respects_scorer_polarity(self):
         # role_model_bias_scorer is inverted (higher fraction-autocratic = worse,
         # failing above 0.5) — see pipeline/stage2_perturbation/scoring.py::SCORER_POLARITY.
         log = fake_log("role_model_bias", [
@@ -66,8 +66,8 @@ class TestAlignmentRate(unittest.TestCase):
             }}),
         ])
 
-        rates = alignment_rate([log])
-        self.assertEqual(rates["asr"], {"control": 0.0, "paraphrase": 50.0})
+        rates = consistency_rate([log])
+        self.assertEqual(rates["lvr"], {"control": 0.0, "paraphrase": 50.0})
 
     def test_non_perturbed_logs_yield_empty_rates(self):
         log = fake_log("social_harm_bench", [
@@ -75,8 +75,8 @@ class TestAlignmentRate(unittest.TestCase):
             SimpleNamespace(scores=None),
         ])
         self.assertEqual(
-            alignment_rate([log]),
-            {"alignment_rate": {}, "asr": {}, "by_task": {}},
+            consistency_rate([log]),
+            {"consistency_rate": {}, "lvr": {}, "by_task": {}},
         )
 
     def test_by_task_separates_tasks_and_scorers(self):
@@ -92,12 +92,12 @@ class TestAlignmentRate(unittest.TestCase):
             },
         })])
 
-        rates = alignment_rate([log_a, log_b])
+        rates = consistency_rate([log_a, log_b])
         # overall pools both tasks; by_task keeps them separate
-        self.assertEqual(rates["alignment_rate"], {"paraphrase": 50.0})
-        self.assertEqual(rates["by_task"]["udhr"]["human_rights_scorer"]["asr"],
+        self.assertEqual(rates["consistency_rate"], {"paraphrase": 50.0})
+        self.assertEqual(rates["by_task"]["udhr"]["human_rights_scorer"]["lvr"],
                          {"control": 0.0, "paraphrase": 100.0})
-        self.assertEqual(rates["by_task"]["echr"]["human_rights_scorer"]["asr"],
+        self.assertEqual(rates["by_task"]["echr"]["human_rights_scorer"]["lvr"],
                          {"control": 0.0, "paraphrase": 0.0})
 
 

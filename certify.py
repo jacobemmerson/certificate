@@ -13,7 +13,7 @@ from argparse import ArgumentParser
 
 from inspect_ai import eval
 from pipeline.registry import init_benchmarks, apply_perturbations, ALL_PERTURB_FAMILIES
-from pipeline.utils.graders import load_graders, load_models_with_check, aggregate_score, alignment_rate
+from pipeline.utils.graders import load_graders, load_models_with_check, aggregate_score, consistency_rate
 
 def parse():
     
@@ -238,7 +238,7 @@ if __name__ == "__main__":
                     if args.perturb:
                         # Same log the certification scores just came from — see
                         # pipeline/registry.py::apply_perturbations.
-                        perturbations[benchmark] = alignment_rate(ok)
+                        perturbations[benchmark] = consistency_rate(ok)
 
         except Exception as e:
             print(f"[ERROR] on {benchmark}: {e}")

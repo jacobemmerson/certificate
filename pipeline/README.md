@@ -10,7 +10,7 @@ organized by pipeline stage. To add a new benchmark, see
 | Directory | Stage | Contents |
 |---|---|---|
 | `stage1_evaluation/` | 1 — plain evals | `evals/` has one file per benchmark: a `csv_dataset` + `@task` definition(s), with shared CSV→`Sample`/scorer-assembly helpers in `evals/common.py`. `scorers/harm.py` holds the reusable harm classifiers (LLM judge, LlamaGuard). |
-| `stage2_perturbation/` | 2 — perturbation auditing | Surface-perturbation reliability auditing: solvers that generate perturbed variants (paraphrase, register, identity_strip, framing, reconsideration), per-benchmark adapters, and the scoring wrappers that report alignment/ASR. Layered onto stage-1 tasks by `registry.py::apply_perturbations` (`--perturb`). |
+| `stage2_perturbation/` | 2 — perturbation auditing | Surface-perturbation reliability auditing: solvers that generate perturbed variants (paraphrase, register, identity_strip, framing, reconsideration), per-benchmark adapters, and the scoring wrappers that report consistency/LVR (legal violation rate). Layered onto stage-1 tasks by `registry.py::apply_perturbations` (`--perturb`). |
 | `stage3_simulation/` | 3 — agentic simulation | Placeholder — no code yet. |
 
 ## Shared

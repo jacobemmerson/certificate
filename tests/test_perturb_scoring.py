@@ -1,6 +1,6 @@
 '''
 Tests for pipeline/stage2_perturbation/scoring.py — the perturbation-auditing wrapper
-scorer, polarity registry, and eval-level asr/alignment metrics. All
+scorer, polarity registry, and eval-level lvr/consistency metrics. All
 synthetic (no model calls): fake per-condition results are written into
 state.metadata["perturbation_scores"] the way scoring_step would.
 
@@ -16,8 +16,8 @@ from inspect_ai.solver import TaskState
 from pipeline.stage2_perturbation.scoring import (
     CONTROL,
     SCORER_POLARITY,
-    _alignment_metric,
-    _asr_metric,
+    _consistency_metric,
+    _lvr_metric,
     badness,
     is_failing,
     wrap_scorers,
@@ -92,10 +92,10 @@ class TestWrapScorer(unittest.TestCase):
         self.assertEqual(s.metadata["worst_query"], "query-for-paraphrase_variant_1")
         self.assertEqual(s.metadata["control_value"], "C")
 
-    def test_per_family_asr(self):
+    def test_per_family_lvr(self):
         s = run_wrapper(self.wrapped, make_state("dummy_judge", self.CONDITIONS))
         self.assertEqual(
-            s.metadata["asr"],
+            s.metadata["lvr"],
             {CONTROL: 0.0, "paraphrase": 50.0, "reconsideration": 0.0},
         )
 
@@ -114,9 +114,9 @@ class TestWrapScorer(unittest.TestCase):
         }
         s = run_wrapper(self.wrapped, make_state("dummy_judge", conditions))
         self.assertEqual(s.value, "C")
-        self.assertEqual(s.metadata["asr"], {CONTROL: 0.0, "reconsideration": 0.0})
+        self.assertEqual(s.metadata["lvr"], {CONTROL: 0.0, "reconsideration": 0.0})
 
-    def test_inverted_polarity_worst_and_asr(self):
+    def test_inverted_polarity_worst_and_lvr(self):
         # An inverted scorer (higher = worse) must pick the *highest* value
         # as worst and count failures per its own threshold.
         name = "test_inverted_scorer"
@@ -138,7 +138,7 @@ class TestWrapScorer(unittest.TestCase):
             s = run_wrapper(wrapped, make_state(name, conditions))
             self.assertEqual(s.value, 0.75)
             self.assertEqual(s.metadata["worst_condition"], "paraphrase_variant_1")
-            self.assertEqual(s.metadata["asr"], {CONTROL: 0.0, "paraphrase": 50.0})
+            self.assertEqual(s.metadata["lvr"], {CONTROL: 0.0, "paraphrase": 50.0})
         finally:
             del SCORER_POLARITY[name]
 
@@ -162,22 +162,22 @@ class TestEvalLevelMetrics(unittest.TestCase):
             }),
         ]
 
-    def test_asr_metric_pools_perturbation_conditions(self):
-        compute = _asr_metric("llm_judge_scorer", control=False)
+    def test_lvr_metric_pools_perturbation_conditions(self):
+        compute = _lvr_metric("llm_judge_scorer", control=False)
         self.assertEqual(compute(self.sample_scores()), 50.0)
 
-    def test_asr_control_metric(self):
-        compute = _asr_metric("llm_judge_scorer", control=True)
+    def test_lvr_control_metric(self):
+        compute = _lvr_metric("llm_judge_scorer", control=True)
         self.assertEqual(compute(self.sample_scores()), 0.0)
 
-    def test_alignment_metric_pools_families(self):
-        compute = _alignment_metric()
+    def test_consistency_metric_pools_families(self):
+        compute = _consistency_metric()
         self.assertEqual(compute(self.sample_scores()), 50.0)
 
     def test_metrics_empty_conditions_are_zero(self):
         empty = [SampleScore(score=Score(value="C"), sample_id="s")]
-        self.assertEqual(_asr_metric("llm_judge_scorer", control=False)(empty), 0.0)
-        self.assertEqual(_alignment_metric()(empty), 0.0)
+        self.assertEqual(_lvr_metric("llm_judge_scorer", control=False)(empty), 0.0)
+        self.assertEqual(_consistency_metric()(empty), 0.0)
 
 
 if __name__ == "__main__":
