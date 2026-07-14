@@ -43,7 +43,9 @@ uv run certify.py \
   --only        {OPTIONAL: run only these benchmark keys, i.e. --only harm hr, see pipeline/registry.py for the keys} \
   --attacker    {OPTIONAL: rewrite/paraphrase model for the perturbation stage, default=openrouter/deepseek/deepseek-v4-flash} \
   --llamaguard  {OPTIONAL: LlamaGuard model used for harm scoring across all tasks, default=openrouter/meta-llama/llama-guard-4-12b; pass an empty string to disable it (i.e. "")} \
-  --limit       {OPTIONAL: randomly sample this many examples per task instead of running the full dataset}
+  --limit       {OPTIONAL: randomly sample this many examples per task instead of running the full dataset} \
+  --simulate    {OPTIONAL: run stage-3 scenario simulation — reframe each item into a realistic deployment scenario and re-run the target on it; reuses --attacker as the reframing model} \
+  --sim-k       {OPTIONAL: number of reframed scenarios generated per item under --simulate, default=1}
 ```
 If a grader model is not specified with `--grader`, a group of models is used for LLM-as-a-judge grading as specified in `GRADERS.md`.
 
@@ -57,20 +59,4 @@ To evaluate on individual benchmarks, you can use AISI Inspect's CLI `uv run ins
 
 ### Repository structure
 
-The source lives in [`pipeline/`](pipeline/README.md), organized into three stages: `stage1_evaluation/` (plain benchmark evals), `stage2_perturbation/` (surface-perturbation reliability auditing, enabled via `--perturb`), and `stage3_simulation/` (agentic simulation — placeholder, coming next). Evaluation data lives in [`datasets/`](datasets/README.md) (`raw/` sources → `prepare/` scripts → `public/` CSVs); see [CONTRIBUTE.md](CONTRIBUTE.md) for adding a new benchmark. The adversarial attack suite (jailbreaks, attack-retry solver, multi-classifier harm scoring) lives on the **`adversarial-attacks`** branch.
-
-## Future Tasks / TODOs
-
-In order of urgency:
-1. ~~Write the summarization/metric scripts to calculate overall model performance on benchmarks with multiple tasks (i.e. Democratic vs. Authoritarian Bias).~~
-2. ~~Modify `certify.py` to allow the specification of individual tasks.~~ Not Implementing
-3. ~~Update `scripts/README.md` and `benchmarks/README.md` to outline how to incorporate new benchmarks and define the repository's structure.~~ See `pipeline/README.md`, `datasets/README.md`, and `CONTRIBUTE.md`.
-4. Support locally run models as well as api-models.
-5. Generate private/held out datasets.
-6. ~~Rename `scripts` directory to something more fitting~~ 
-7. Connect repo to ESAI's certificate page to automatically flag for updates when new models are run.
-  - Will need a personal access token
-8. Impement Majority Voting for LLM-as-a-judge grading
-9. Combine UDHR and ECHR datasets for the human rights limitations; currently benchmarking on UDHR.
-10. Use the UDHR and ECHR individual and government steering in evaluations.
-11. Add file to process results from logs incase of a crash --- avoiding crashes with try, except, but logs are always stored and can be used as a fallback
+The source lives in [`pipeline/`](pipeline/README.md), organized into three stages: `stage1_evaluation/` (plain benchmark evals), `stage2_perturbation/` (surface-perturbation reliability auditing, enabled via `--perturb`), and `stage3_simulation/` (single-turn scenario simulation, enabled via `--simulate`). Evaluation data lives in [`datasets/`](datasets/README.md) (`raw/` sources → `prepare/` scripts → `public/` CSVs); see [CONTRIBUTE.md](CONTRIBUTE.md) for adding a new benchmark. The adversarial attack suite (jailbreaks, attack-retry solver, multi-classifier harm scoring) lives on the **`adversarial-attacks`** branch.

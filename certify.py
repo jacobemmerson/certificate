@@ -12,7 +12,7 @@ import json
 from argparse import ArgumentParser
 
 from inspect_ai import eval
-from pipeline.registry import init_benchmarks, apply_perturbations, ALL_PERTURB_FAMILIES
+from pipeline.registry import init_benchmarks, apply_perturbations, apply_simulation, ALL_PERTURB_FAMILIES
 from pipeline.utils.graders import load_graders, load_models_with_check, aggregate_score, consistency_rate
 
 def parse():
@@ -71,6 +71,17 @@ def parse():
         help="Number of perturbed variants per item for the generative perturbation families "
              "(paraphrase, register, identity_strip); default=1."
     )
+    args.add_argument(
+        "--simulate", required=False, action='store_true',
+        help="Run stage-3 scenario simulation (see pipeline/stage3_simulation/) on top of every "
+             "benchmark in --only (or all benchmarks if --only is omitted): each item is reframed "
+             "into a realistic deployment scenario and the target is re-run on it. Reuses --attacker "
+             "as the scenario-reframing model. Not designed to compose with --perturb in one run."
+    )
+    args.add_argument(
+        "--sim-k", required=False, type=int, default=1,
+        help="Number of reframed scenarios generated per item under --simulate; default=1."
+    )
 
     return args.parse_args()
 
@@ -103,12 +114,14 @@ def update(results, models, idx):
                 results['scores'].pop(benchmark, None)
                 results['scores_meta'].pop(benchmark, None)
                 results['perturbations'].pop(benchmark, None)
+                results['simulations'].pop(benchmark, None)
                 results['status'].pop(benchmark, None)
 
         # take values from overlapping keys from the new results (right side of pipe operator)
         results['scores'] = prev.get('scores', {}) | results['scores']
         results['scores_meta'] = prev.get('scores_meta', {}) | results['scores_meta']
         results['perturbations'] = prev.get('perturbations', {}) | results.get('perturbations', {})
+        results['simulations'] = prev.get('simulations', {}) | results.get('simulations', {})
         results['status'] = prev_status | results.get('status', {})
         models[idx] = results
     else:
@@ -136,7 +149,15 @@ if __name__ == "__main__":
     # ----- task master list -----
     BENCHMARKS = init_benchmarks(grader, llamaguard_model=args.llamaguard)  # see pipeline/registry.py for all tasks
 
-    if args.perturb:
+    # Stage 2 and stage 3 both layer condition families onto each Task's own
+    # `perturbations` metadata and are not designed to compose in one run (they
+    # would pool into a single worst-case). --perturb is on by default, so a
+    # --simulate run supersedes it: stage 3 runs and stage-2 auditing is skipped.
+    run_perturb = bool(args.perturb) and not args.simulate
+    if args.perturb and args.simulate:
+        print("[INFO] --simulate is set; skipping stage-2 perturbation auditing (they don't compose in one run).")
+
+    if run_perturb:
         # Attaches one solver per requested perturbation family directly onto
         # each benchmark's own Task (see pipeline/registry.py::apply_perturbations)
         # — same benchmark keys/log paths as without --perturb.
@@ -145,6 +166,16 @@ if __name__ == "__main__":
             families=args.perturb,
             rewrite_model=args.attacker,
             k=args.perturb_k,
+        )
+
+    if args.simulate:
+        # Attaches a scenario-reframing solver onto each benchmark's own Task
+        # (see pipeline/registry.py::apply_simulation) — same benchmark keys/log
+        # paths as without --simulate. Reuses --attacker as the reframing model.
+        BENCHMARKS = apply_simulation(
+            BENCHMARKS,
+            sim_model=args.attacker,
+            k=args.sim_k,
         )
 
     def check_status(evaluations):
@@ -209,6 +240,7 @@ if __name__ == "__main__":
     scores = {}
     scores_meta = {}
     perturbations = {}
+    simulations = {}
     statuses = {}
     for benchmark, tasks in BENCHMARKS.items():
 
@@ -235,10 +267,17 @@ if __name__ == "__main__":
                     scores[benchmark] = average
                     scores_meta[benchmark] = meta
 
-                    if args.perturb:
+                    if run_perturb:
                         # Same log the certification scores just came from — see
                         # pipeline/registry.py::apply_perturbations.
                         perturbations[benchmark] = consistency_rate(ok)
+
+                    if args.simulate:
+                        # consistency_rate is condition-family generic: for a
+                        # simulation run it reports lvr_control (bald-query harm
+                        # rate) vs. the `scenario` family's lvr, from the same log
+                        # — see pipeline/registry.py::apply_simulation.
+                        simulations[benchmark] = consistency_rate(ok)
 
         except Exception as e:
             print(f"[ERROR] on {benchmark}: {e}")
@@ -255,6 +294,7 @@ if __name__ == "__main__":
             "scores": scores,
             "scores_meta": scores_meta,
             "perturbations": perturbations,
+            "simulations": simulations,
             "status": statuses,
         }
 
