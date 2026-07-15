@@ -25,7 +25,7 @@ import asyncio
 from dataclasses import dataclass, field
 
 from inspect_ai.dataset import Sample
-from inspect_ai.model import get_model
+from inspect_ai.model import Model, get_model
 
 from pipeline.stage2_perturbation.adapters import PerturbAdapter
 from pipeline.stage2_perturbation.framing import FRAMING_TEMPLATES
@@ -69,7 +69,7 @@ async def generate_rewrites(
     samples: list[Sample],
     adapter: PerturbAdapter,
     family: str,
-    attacker_model: str,
+    attacker_model: str | Model,
     k: int,
     *,
     existing: set[tuple[str, int]] | None = None,
@@ -139,7 +139,7 @@ def generate_framing(samples: list[Sample], adapter: PerturbAdapter) -> list[dic
 async def generate_scenarios(
     samples: list[Sample],
     adapter: PerturbAdapter,
-    attacker_model: str,
+    attacker_model: str | Model,
     k: int,
     *,
     existing: set[tuple[str, int]] | None = None,
