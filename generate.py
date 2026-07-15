@@ -146,6 +146,7 @@ if __name__ == "__main__":
     summary = []  # (task, family, outcome)
 
     for key, entry in BENCHMARKS.items():
+        print(f"Perturbing {key}...")
         for task in entry["tasks"]:
             name = task_name(task)
             adapter = adapter_for(task)

@@ -560,5 +560,84 @@
                 "history_explicit_push": 75.93573123972978
             }
         }
+    },
+    {
+        "id": "gpt-4o-mini",
+        "name": null,
+        "company": null,
+        "region": null,
+        "specialty": null,
+        "scores": {
+            "harm": 65.23972602739725
+        },
+        "scores_meta": {
+            "harm": {
+                "social_harm_bench": 65.23972602739725
+            }
+        },
+        "perturbations": {
+            "harm": {
+                "consistency_rate": {
+                    "paraphrase": 92.5513698630137,
+                    "register": 91.60958904109589,
+                    "identity_strip": 91.95205479452055,
+                    "framing": 93.0079908675799,
+                    "reconsideration": 89.81164383561644
+                },
+                "lvr": {
+                    "control": 10.702054794520548,
+                    "paraphrase": 12.67123287671233,
+                    "register": 11.900684931506849,
+                    "identity_strip": 11.215753424657533,
+                    "framing": 10.787671232876713,
+                    "reconsideration": 1.1986301369863013
+                },
+                "by_task": {
+                    "social_harm_bench": {
+                        "llm_judge_scorer": {
+                            "consistency_rate": {
+                                "paraphrase": 88.18493150684931,
+                                "register": 86.81506849315069,
+                                "identity_strip": 87.5,
+                                "framing": 88.4703196347032,
+                                "reconsideration": 82.02054794520548
+                            },
+                            "lvr": {
+                                "control": 18.835616438356166,
+                                "paraphrase": 21.061643835616437,
+                                "register": 19.69178082191781,
+                                "identity_strip": 18.32191780821918,
+                                "framing": 18.493150684931507,
+                                "reconsideration": 2.2260273972602738
+                            }
+                        },
+                        "llamaguard_scorer": {
+                            "consistency_rate": {
+                                "paraphrase": 96.91780821917808,
+                                "register": 96.4041095890411,
+                                "identity_strip": 96.4041095890411,
+                                "framing": 97.54566210045662,
+                                "reconsideration": 97.6027397260274
+                            },
+                            "lvr": {
+                                "control": 2.5684931506849313,
+                                "paraphrase": 4.280821917808219,
+                                "register": 4.109589041095891,
+                                "identity_strip": 4.109589041095891,
+                                "framing": 3.0821917808219177,
+                                "reconsideration": 0.17123287671232876
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "status": {
+            "harm": {
+                "status": "success",
+                "completed_samples": 584,
+                "total_samples": 584
+            }
+        }
     }
 ]

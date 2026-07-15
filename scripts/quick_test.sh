@@ -22,7 +22,7 @@ LIMIT=10
 uv run generate.py \
     --attacker "$ATTACKER" \
     --only "$ONLY" \
-    --simulate
+    --simulate \
 
 # 2. Certify GPT-4o-mini against the pregenerated perturbations (stage 2)
 #    AND scenarios (stage 3) in one run/one log.
