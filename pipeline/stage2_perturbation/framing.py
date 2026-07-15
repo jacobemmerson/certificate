@@ -19,6 +19,11 @@ from __future__ import annotations
 
 from typing import Callable
 
+# Bump on any change to the templates below — framing artifacts are generated
+# deterministically from these, and certify.py warns when the on-disk variants
+# predate a template edit (see pipeline/artifacts.py::PROMPT_VERSIONS).
+FRAMING_VERSION = "1"
+
 FRAMING_TEMPLATES: dict[str, list[tuple[str, Callable[[str], str]]]] = {
     "compliance": [
         ("imperative", lambda text: text),

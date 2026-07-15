@@ -15,6 +15,7 @@ from inspect_ai.solver import TaskState
 
 from pipeline.stage2_perturbation.scoring import (
     CONTROL,
+    SCENARIO,
     SCORER_POLARITY,
     _consistency_metric,
     _lvr_metric,
@@ -22,6 +23,8 @@ from pipeline.stage2_perturbation.scoring import (
     is_failing,
     wrap_scorers,
 )
+
+FAMILIES = ["paraphrase", "reconsideration"]
 
 
 @scorer(metrics=[accuracy()])
@@ -81,7 +84,7 @@ class TestWrapScorer(unittest.TestCase):
     }
 
     def setUp(self):
-        self.wrapped = wrap_scorers(dummy_judge())[0]
+        self.wrapped = wrap_scorers(dummy_judge(), FAMILIES)[0]
 
     def test_reports_worst_condition(self):
         s = run_wrapper(self.wrapped, make_state("dummy_judge", self.CONDITIONS))
@@ -129,7 +132,7 @@ class TestWrapScorer(unittest.TestCase):
 
                 return score
 
-            wrapped = wrap_scorers(inverted_judge())[0]
+            wrapped = wrap_scorers(inverted_judge(), FAMILIES)[0]
             conditions = {
                 CONTROL: {"family": CONTROL, "value": 0.0},
                 "paraphrase_variant_1": {"family": "paraphrase", "value": 0.75},
@@ -155,29 +158,59 @@ class TestEvalLevelMetrics(unittest.TestCase):
             entry({
                 CONTROL: {"family": CONTROL, "value": "C", "stable": True},
                 "paraphrase_variant_1": {"family": "paraphrase", "value": "I", "stable": False},
+                "scenario_variant_1": {"family": SCENARIO, "value": "I", "stable": False},
             }),
             entry({
                 CONTROL: {"family": CONTROL, "value": "C", "stable": True},
                 "paraphrase_variant_1": {"family": "paraphrase", "value": "C", "stable": True},
+                "scenario_variant_1": {"family": SCENARIO, "value": "C", "stable": True},
             }),
         ]
 
     def test_lvr_metric_pools_perturbation_conditions(self):
-        compute = _lvr_metric("llm_judge_scorer", control=False)
+        # the perturb pool excludes both the control and the scenario family
+        compute = _lvr_metric("llm_judge_scorer", "lvr", "perturb")
         self.assertEqual(compute(self.sample_scores()), 50.0)
 
     def test_lvr_control_metric(self):
-        compute = _lvr_metric("llm_judge_scorer", control=True)
+        compute = _lvr_metric("llm_judge_scorer", "lvr_control", CONTROL)
         self.assertEqual(compute(self.sample_scores()), 0.0)
 
+    def test_scenario_metrics_pool_only_scenario_conditions(self):
+        self.assertEqual(
+            _lvr_metric("llm_judge_scorer", "lvr_scenario", SCENARIO)(self.sample_scores()), 50.0
+        )
+        self.assertEqual(
+            _consistency_metric("consistency_scenario", SCENARIO)(self.sample_scores()), 50.0
+        )
+
     def test_consistency_metric_pools_families(self):
-        compute = _consistency_metric()
+        compute = _consistency_metric("consistency", "perturb")
         self.assertEqual(compute(self.sample_scores()), 50.0)
 
     def test_metrics_empty_conditions_are_zero(self):
         empty = [SampleScore(score=Score(value="C"), sample_id="s")]
-        self.assertEqual(_lvr_metric("llm_judge_scorer", control=False)(empty), 0.0)
-        self.assertEqual(_consistency_metric()(empty), 0.0)
+        self.assertEqual(_lvr_metric("llm_judge_scorer", "lvr", "perturb")(empty), 0.0)
+        self.assertEqual(_consistency_metric("consistency", "perturb")(empty), 0.0)
+
+    def test_registered_metric_pools_follow_applied_families(self):
+        def metric_names(families):
+            from inspect_ai._util.registry import registry_info
+            wrapped = wrap_scorers(dummy_judge(), families)[0]
+            return {registry_info(m).name.split("/")[-1] for m in registry_info(wrapped).metadata["metrics"]}
+
+        self.assertEqual(
+            metric_names(["paraphrase"]) & {"lvr", "consistency", "lvr_scenario", "consistency_scenario"},
+            {"lvr", "consistency"},
+        )
+        self.assertEqual(
+            metric_names([SCENARIO]) & {"lvr", "consistency", "lvr_scenario", "consistency_scenario"},
+            {"lvr_scenario", "consistency_scenario"},
+        )
+        self.assertEqual(
+            metric_names(["paraphrase", SCENARIO]) & {"lvr", "consistency", "lvr_scenario", "consistency_scenario"},
+            {"lvr", "consistency", "lvr_scenario", "consistency_scenario"},
+        )
 
 
 if __name__ == "__main__":

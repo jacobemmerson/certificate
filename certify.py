@@ -4,15 +4,24 @@ author: @tae
 Runs the certification pipeline:
   stage 1 — plain benchmark evals (pipeline/stage1_evaluation)
   stage 2 — surface-perturbation reliability auditing (pipeline/stage2_perturbation)
-  stage 3 — agentic simulation (pipeline/stage3_simulation, not yet implemented)
+  stage 3 — scenario simulation (pipeline/stage3_simulation)
 Benchmarks are registered in pipeline/registry.py.
+
+Stages 2 and 3 replay *pregenerated* artifacts from datasets/generated/
+(produced once by generate.py) — the only models called here are the target
+and the judges, and every evaluated model sees the exact same perturbed
+variants and scenarios. Run generate.py before the first --perturb/--simulate
+certification (this script validates the artifacts and fails fast with the
+exact command otherwise).
 '''
 
 import json
 from argparse import ArgumentParser
 
 from inspect_ai import eval
-from pipeline.registry import init_benchmarks, apply_perturbations, apply_simulation, ALL_PERTURB_FAMILIES
+from pipeline.artifacts import validate_artifacts
+from pipeline.registry import init_benchmarks, apply_stages, ALL_PERTURB_FAMILIES
+from pipeline.stage2_perturbation.scoring import SCENARIO
 from pipeline.utils.graders import load_graders, load_models_with_check, aggregate_score, consistency_rate
 
 def parse():
@@ -43,10 +52,6 @@ def parse():
         "--rerun", required=False, action='store_true', help="Reruns all results regardless of whether they are present in an existing file."
     )
     args.add_argument(
-        "--attacker", "-a", required=False, default="openrouter/deepseek/deepseek-v4-flash",
-        help="Rewrite/paraphrase model for the perturbation stage (default: openrouter/deepseek/deepseek-v4-flash)."
-    )
-    args.add_argument(
         "--llamaguard", required=False, default="openrouter/meta-llama/llama-guard-4-12b",
         help="LlamaGuard model for adversarial harm scoring (default: openrouter/meta-llama/llama-guard-4-12b)."
     )
@@ -63,24 +68,31 @@ def parse():
         metavar="FAMILY",
         help="Run surface-perturbation reliability auditing (see pipeline/stage2_perturbation/) for these families "
              "(e.g. --perturb paraphrase reconsideration) on top of every benchmark in --only "
-             "(or all benchmarks if --only is omitted). All by default. Reuses --attacker as the "
-             "rewrite/paraphrase model."
+             "(or all benchmarks if --only is omitted). All by default. Replays the pregenerated "
+             "variants from datasets/generated/ (run generate.py first); reconsideration runs live."
+    )
+    args.add_argument(
+        "--no-perturb", required=False, action='store_true',
+        help="Skip stage-2 perturbation auditing entirely (e.g. for a --simulate-only run — "
+             "--perturb is on by default)."
     )
     args.add_argument(
         "--perturb-k", required=False, type=int, default=1,
-        help="Number of perturbed variants per item for the generative perturbation families "
-             "(paraphrase, register, identity_strip); default=1."
+        help="Use up to this many stored variants per item for the rewrite families "
+             "(paraphrase, register, identity_strip); default=1. Must not exceed the k the "
+             "artifacts were generated with."
     )
     args.add_argument(
         "--simulate", required=False, action='store_true',
         help="Run stage-3 scenario simulation (see pipeline/stage3_simulation/) on top of every "
-             "benchmark in --only (or all benchmarks if --only is omitted): each item is reframed "
-             "into a realistic deployment scenario and the target is re-run on it. Reuses --attacker "
-             "as the scenario-reframing model. Not designed to compose with --perturb in one run."
+             "benchmark in --only (or all benchmarks if --only is omitted): the target is re-run "
+             "on the pregenerated deployment-scenario reframings from datasets/generated/ "
+             "(run generate.py --simulate first). Composes with --perturb in one run/one log: "
+             "the panel reports lvr_scenario/consistency_scenario next to stage 2's lvr/consistency."
     )
     args.add_argument(
         "--sim-k", required=False, type=int, default=1,
-        help="Number of reframed scenarios generated per item under --simulate; default=1."
+        help="Use up to this many stored scenarios per item under --simulate; default=1."
     )
 
     return args.parse_args()
@@ -149,33 +161,60 @@ if __name__ == "__main__":
     # ----- task master list -----
     BENCHMARKS = init_benchmarks(grader, llamaguard_model=args.llamaguard)  # see pipeline/registry.py for all tasks
 
-    # Stage 2 and stage 3 both layer condition families onto each Task's own
-    # `perturbations` metadata and are not designed to compose in one run (they
-    # would pool into a single worst-case). --perturb is on by default, so a
-    # --simulate run supersedes it: stage 3 runs and stage-2 auditing is skipped.
-    run_perturb = bool(args.perturb) and not args.simulate
-    if args.perturb and args.simulate:
-        print("[INFO] --simulate is set; skipping stage-2 perturbation auditing (they don't compose in one run).")
+    # Stage 2 and stage 3 compose in one run: both layer condition families
+    # onto the same Task (one control generation, one log), and the wrapped
+    # scorers report them under separate metric pools — lvr/consistency for
+    # the perturbation families, lvr_scenario/consistency_scenario for the
+    # scenario family. The certification score is the worst condition across
+    # every enabled family (see pipeline/stage2_perturbation/scoring.py).
+    run_perturb = bool(args.perturb) and not args.no_perturb
 
-    if run_perturb:
-        # Attaches one solver per requested perturbation family directly onto
-        # each benchmark's own Task (see pipeline/registry.py::apply_perturbations)
-        # — same benchmark keys/log paths as without --perturb.
-        BENCHMARKS = apply_perturbations(
+    # check for existing model results
+    models, idx = load_models_with_check(model_id)
+    if idx != -1:
+        print(f"Results Found: Model index at {idx}")
+
+    only = set(args.only) if args.only else None
+
+    tasks_to_skip = set()
+    if only:
+        # run only the requested benchmarks; skip everything else
+        tasks_to_skip = set(BENCHMARKS.keys()) - only
+        unknown = only - set(BENCHMARKS.keys())
+        if unknown:
+            print(f"[WARNING] Unknown benchmark keys (ignored): {', '.join(sorted(unknown))}")
+    elif idx != -1 and not args.rerun:
+        # default: skip benchmarks that already have results
+        tasks_to_skip = set(models[idx]['scores'].keys())
+
+    if tasks_to_skip:
+        print(f"Skipping: {', '.join(sorted(tasks_to_skip))}")
+        BENCHMARKS = {key: entry for key, entry in BENCHMARKS.items() if key not in tasks_to_skip}
+
+    # Fail fast — before any eval spends money — unless every benchmark that
+    # will run has complete pregenerated artifacts in datasets/generated/
+    # (see pipeline/artifacts.py; the error names the generate.py command).
+    validate_artifacts(
+        BENCHMARKS,
+        families=args.perturb if run_perturb else None,
+        simulate=args.simulate,
+        perturb_k=args.perturb_k,
+        sim_k=args.sim_k,
+        limit=args.limit,
+    )
+
+    if run_perturb or args.simulate:
+        # Attaches one replay solver per enabled condition family (stage-2
+        # perturbations and/or the stage-3 scenario) directly onto each
+        # benchmark's own Task (see pipeline/registry.py::apply_stages) — same
+        # benchmark keys/log paths as a plain run, one log per benchmark. The
+        # variants come from datasets/generated/; no rewrite/reframing model
+        # is called (reconsideration runs live).
+        BENCHMARKS = apply_stages(
             BENCHMARKS,
-            families=args.perturb,
-            rewrite_model=args.attacker,
+            families=args.perturb if run_perturb else [],
             k=args.perturb_k,
-        )
-
-    if args.simulate:
-        # Attaches a scenario-reframing solver onto each benchmark's own Task
-        # (see pipeline/registry.py::apply_simulation) — same benchmark keys/log
-        # paths as without --simulate. Reuses --attacker as the reframing model.
-        BENCHMARKS = apply_simulation(
-            BENCHMARKS,
-            sim_model=args.attacker,
-            k=args.sim_k,
+            sim_k=args.sim_k if args.simulate else None,
         )
 
     def check_status(evaluations):
@@ -207,34 +246,13 @@ if __name__ == "__main__":
             limit=args.limit,
             max_connections=100,
             # Eval-level cache benefits judge/grader calls (the bulk of API
-            # traffic under --perturb) and retries. The perturbation solvers
-            # opt out explicitly (cache=False in pipeline/stage2_perturbation/solvers.py):
-            # their rewrite calls repeat the same prompt k times and their
-            # variants must stay independent generations, so inheriting this
-            # would collapse them.
+            # traffic under --perturb) and retries. The replay/reconsideration
+            # solvers opt out explicitly (cache=False in
+            # pipeline/stage2_perturbation/solvers.py): their target calls
+            # replay identical prompts across epochs and must stay independent
+            # generations, so inheriting this would collapse them.
             cache=True,
         )
-
-    # check for existing model results
-    models, idx = load_models_with_check(model_id)
-    if idx != -1:
-        print(f"Results Found: Model index at {idx}")
-
-    only = set(args.only) if args.only else None
-
-    tasks_to_skip = set()
-    if only:
-        # run only the requested benchmarks; skip everything else
-        tasks_to_skip = set(BENCHMARKS.keys()) - only
-        unknown = only - set(BENCHMARKS.keys())
-        if unknown:
-            print(f"[WARNING] Unknown benchmark keys (ignored): {', '.join(sorted(unknown))}")
-    elif idx != -1 and not args.rerun:
-        # default: skip benchmarks that already have results
-        tasks_to_skip = set(models[idx]['scores'].keys())
-
-    if tasks_to_skip:
-        print(f"Skipping: {', '.join(sorted(tasks_to_skip))}")
 
     # ----- main loop -----
     scores = {}
@@ -243,9 +261,6 @@ if __name__ == "__main__":
     simulations = {}
     statuses = {}
     for benchmark, tasks in BENCHMARKS.items():
-
-        if benchmark in tasks_to_skip:
-            continue
 
         try:
             res = start_eval(
@@ -267,17 +282,15 @@ if __name__ == "__main__":
                     scores[benchmark] = average
                     scores_meta[benchmark] = meta
 
+                    # Both stages come out of the same log the certification
+                    # scores just came from (see pipeline/registry.py::apply_stages);
+                    # consistency_rate's family filter splits them into their
+                    # separate models.json sections, control included in each
+                    # as the shared baseline.
                     if run_perturb:
-                        # Same log the certification scores just came from — see
-                        # pipeline/registry.py::apply_perturbations.
-                        perturbations[benchmark] = consistency_rate(ok)
-
+                        perturbations[benchmark] = consistency_rate(ok, families=set(args.perturb))
                     if args.simulate:
-                        # consistency_rate is condition-family generic: for a
-                        # simulation run it reports lvr_control (bald-query harm
-                        # rate) vs. the `scenario` family's lvr, from the same log
-                        # — see pipeline/registry.py::apply_simulation.
-                        simulations[benchmark] = consistency_rate(ok)
+                        simulations[benchmark] = consistency_rate(ok, families={SCENARIO})
 
         except Exception as e:
             print(f"[ERROR] on {benchmark}: {e}")

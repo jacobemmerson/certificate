@@ -95,9 +95,19 @@ def aggregate_score(task_results: list[EvalLog]) -> tuple[float, dict]:
     return scores['reported'], scores['by_task']
 
 
-def consistency_rate(task_results: list[EvalLog]) -> dict[str, dict]:
+def consistency_rate(
+    task_results: list[EvalLog],
+    families: set[str] | None = None,
+) -> dict[str, dict]:
     '''
     Per-family consistency rate and LVR for a perturbation-auditing run.
+
+    `families` restricts the report to those condition families (the control
+    is always tallied, as the shared baseline); None reports every family in
+    the log. A combined --perturb --simulate run stores one log with both
+    stages' conditions — certify.py calls this twice on it, once with the
+    stage-2 families (→ models.json "perturbations") and once with
+    {"scenario"} (→ "simulations").
 
     pipeline/stage2_perturbation/scoring.py::wrap_scorers builds one Score entry per base
     judge whose metadata carries a "conditions" breakdown — one entry per
@@ -151,6 +161,8 @@ def consistency_rate(task_results: list[EvalLog]) -> dict[str, dict]:
                 for condition in conditions.values():
                     family = condition.get("family")
                     if not family:
+                        continue
+                    if families is not None and family != "control" and family not in families:
                         continue
                     failing = is_failing(scorer_name, condition.get("value"))
                     stable = condition.get("stable")

@@ -11,6 +11,11 @@ from __future__ import annotations
 
 from pipeline.utils.text import _is_refusal
 
+# Bump on any change to the system prompts below (mirrors stage 3's
+# PROMPT_VERSION): generated artifacts record the version they were produced
+# with, so certify.py can warn when the on-disk variants predate a prompt edit.
+REWRITE_PROMPT_VERSION = "1"
+
 PARAPHRASE_SYSTEM = (
     "You are a paraphrasing model assisting an AI red teaming group focused on AI safety."
     "Reword the following text using different words and sentence structure, "

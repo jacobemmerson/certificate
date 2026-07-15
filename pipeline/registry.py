@@ -4,9 +4,13 @@ from pipeline.stage1_evaluation.evals.preserving_historical_truth import history
 from pipeline.stage1_evaluation.evals.socialharmbench import social_harm_bench
 
 from pipeline.stage2_perturbation.build import build_perturbed_task
-from pipeline.stage3_simulation.build import build_simulation_task
 
 ALL_PERTURB_FAMILIES = {"paraphrase", "register", "identity_strip", "framing", "reconsideration"}
+
+# The families generate.py pregenerates to datasets/generated/ and certify.py
+# replays. reconsideration is the one live-only family: it challenges the
+# target's own control completion, so it cannot exist before the eval runs.
+PREGENERATED_FAMILIES = ALL_PERTURB_FAMILIES - {"reconsideration"}
 
 def init_benchmarks(grader, llamaguard_model: str = "openrouter/meta-llama/llama-guard-4-12b"):
 
@@ -49,68 +53,45 @@ def init_benchmarks(grader, llamaguard_model: str = "openrouter/meta-llama/llama
     return BENCHMARKS
 
 
-def apply_perturbations(
+def apply_stages(
     benchmarks: dict,
     families: list[str] | None = None,
-    rewrite_model: str = "openrouter/meta-llama/llama-3.1-8b-instruct",
-    k: int = 3,
+    k: int = 1,
+    sim_k: int | None = None,
 ):
     '''
-    Attach surface-perturbation auditing directly onto an already-built
-    BENCHMARKS dict (from init_benchmarks), in place of running a separate
-    perturbation Task/log. For every Task in every benchmark,
+    Attach stage-2 surface-perturbation auditing (`families`) and/or stage-3
+    scenario simulation (`sim_k` — None means "no simulation") directly onto
+    an already-built BENCHMARKS dict (from init_benchmarks), in place of
+    running separate Tasks/logs. For every Task in every benchmark,
     pipeline/stage2_perturbation/build.py::build_perturbed_task appends one
-    solver per requested, applicable family onto that Task's own solver —
-    its own solver stays first in the array as the control condition.
+    solver per requested, applicable condition family onto that Task's own
+    solver — its own solver stays first in the array as the control
+    condition, generated and judged exactly once no matter how many stages
+    are enabled.
 
     Keeps the same benchmark keys/'name' as `benchmarks`, so the result runs
-    through the exact same log path as an unperturbed run — no separate
-    "_perturb" Task or log directory.
+    through the exact same log path as a plain run — a combined --perturb
+    --simulate certification is one task run and ONE log, with the stages
+    reported under separate metric pools (lvr/consistency for stage 2,
+    lvr_scenario/consistency_scenario for stage 3).
 
-    rewrite_model is the paraphrase/rewrite model for the generative
-    families (paraphrase, register, identity_strip); it should
-    differ from both the target and grader models (certify.py's --attacker
-    default is used for this by convention).
+    All pregenerated families replay fixed variants from datasets/generated/
+    (produced once by generate.py — no rewrite/reframing model runs at eval
+    time), using up to `k` stored variants per item for the rewrite families
+    and up to `sim_k` stored scenarios. Building raises FileNotFoundError if
+    the artifacts were never generated; certify.py validates them first
+    (pipeline/artifacts.py::validate_artifacts) so the error carries the
+    exact generate.py command.
     '''
-    families = families if families is not None else sorted(ALL_PERTURB_FAMILIES)
+    families = list(families) if families is not None else []
     unknown = set(families) - ALL_PERTURB_FAMILIES
     if unknown:
         raise ValueError(f"Unknown perturbation families: {sorted(unknown)}")
 
     return {
         key: {
-            'tasks': [build_perturbed_task(t, families, rewrite_model, k) for t in entry['tasks']],
-            'name': entry['name'],
-        }
-        for key, entry in benchmarks.items()
-    }
-
-
-def apply_simulation(
-    benchmarks: dict,
-    sim_model: str = "openrouter/deepseek/deepseek-v4-flash",
-    k: int = 1,
-):
-    '''
-    Attach stage-3 scenario simulation directly onto an already-built
-    BENCHMARKS dict (from init_benchmarks), the same way apply_perturbations
-    attaches stage 2. For every Task in every benchmark,
-    pipeline/stage3_simulation/build.py::build_simulation_task appends a
-    `simulate` solver that reframes each item into k realistic deployment
-    scenarios, runs the target on them, and records them as the `scenario`
-    condition family — then reuses stage 2's scoring/reporting spine to judge
-    the control (bald query) against the scenario condition.
-
-    Keeps the same benchmark keys/'name' as `benchmarks`, so the result runs
-    through the exact same log path as an unsimulated run — no separate Task
-    or log directory.
-
-    sim_model is the scenario-reframing model; by convention certify.py reuses
-    its --attacker model for this (it should differ from the target model).
-    '''
-    return {
-        key: {
-            'tasks': [build_simulation_task(t, sim_model, k) for t in entry['tasks']],
+            'tasks': [build_perturbed_task(t, families, k, sim_k=sim_k) for t in entry['tasks']],
             'name': entry['name'],
         }
         for key, entry in benchmarks.items()

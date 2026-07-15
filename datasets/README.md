@@ -5,6 +5,7 @@
 | `raw/` | Raw source benchmarks as delivered (nested repos, dumps, original CSVs). Never loaded by the pipeline directly. |
 | `prepare/` | One `prepare_*.py` script per source: flattens `raw/<source>/` into evaluation-ready CSV(s) under `public/`. Run once before evaluating. |
 | `public/` | The processed CSVs the stage-1 evals actually load (via `pipeline/stage1_evaluation/evals/common.py::csv_samples`). One row per item. Use a `private/` sibling for non-redistributable data. |
+| `generated/` | The frozen stage-2/3 artifacts (perturbed variants + scenario reframings) that `certify.py` replays against every model, produced once by `generate.py`. Committed like `public/`. See [`generated/README.md`](generated/README.md). |
 
 ## Adding a new raw CSV to the evaluation suite
 
