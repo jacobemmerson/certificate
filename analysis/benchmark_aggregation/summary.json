@@ -1,0 +1,172 @@
+{
+  "input": "models/models.json",
+  "models": 16,
+  "skipped_models": [
+    "gpt-4o-mini"
+  ],
+  "tie_threshold": 2.0,
+  "primary_construct": {
+    "name": "political_pressure_resistance",
+    "benchmarks": [
+      "lhr_government",
+      "pht_explicit",
+      "social_harm"
+    ],
+    "ranking": [
+      {
+        "model_id": "claude-sonnet-4.6",
+        "model_name": "Claude Sonnet 4.6",
+        "pressure_bt_score": 92.35147179197092,
+        "pressure_bt_log_strength": 3.7673492023532966,
+        "pressure_bt_rating": 1.7080115805172074,
+        "pressure_bt_rank": 1.0,
+        "gpa": 4.0
+      },
+      {
+        "model_id": "claude-opus-4.6",
+        "model_name": "Claude Opus 4.6",
+        "pressure_bt_score": 87.13860366326412,
+        "pressure_bt_log_strength": 3.150512623713758,
+        "pressure_bt_rating": 1.42835499361392,
+        "pressure_bt_rank": 2.0,
+        "gpa": 3.6833333333333336
+      },
+      {
+        "model_id": "gpt-5.4",
+        "model_name": "GPT-5.4",
+        "pressure_bt_score": 82.93337600373927,
+        "pressure_bt_log_strength": 2.7199227061717592,
+        "pressure_bt_rating": 1.2331374743151307,
+        "pressure_bt_rank": 3.0,
+        "gpa": 3.494444444444445
+      },
+      {
+        "model_id": "gpt-5.5",
+        "model_name": "GPT-5.5",
+        "pressure_bt_score": 78.71366545156863,
+        "pressure_bt_log_strength": 2.315401892262721,
+        "pressure_bt_rating": 1.049738963158986,
+        "pressure_bt_rank": 4.5,
+        "gpa": 3.0555555555555554
+      },
+      {
+        "model_id": "gpt-5.4-mini",
+        "model_name": "GPT-5.4 Mini",
+        "pressure_bt_score": 78.71366545156863,
+        "pressure_bt_log_strength": 2.315401892262721,
+        "pressure_bt_rating": 1.049738963158986,
+        "pressure_bt_rank": 4.5,
+        "gpa": 3.1
+      },
+      {
+        "model_id": "gpt-5.3-chat",
+        "model_name": "GPT-5.3 Chat",
+        "pressure_bt_score": 68.14267007483255,
+        "pressure_bt_log_strength": 1.3431938224020243,
+        "pressure_bt_rating": 0.6089668040617926,
+        "pressure_bt_rank": 6.0,
+        "gpa": 2.6611111111111114
+      },
+      {
+        "model_id": "gemini-3.1-pro-preview",
+        "model_name": "Gemini 3.1 Pro",
+        "pressure_bt_score": 53.29960586853154,
+        "pressure_bt_log_strength": 0.06070944674474422,
+        "pressure_bt_rating": 0.027523978404243376,
+        "pressure_bt_rank": 7.0,
+        "gpa": 2.2888888888888888
+      },
+      {
+        "model_id": "grok-4.20",
+        "model_name": "Grok 4.20",
+        "pressure_bt_score": 50.10637510791259,
+        "pressure_bt_log_strength": -0.19147519159492662,
+        "pressure_bt_rating": -0.08680953823489398,
+        "pressure_bt_rank": 8.0,
+        "gpa": 2.138888888888889
+      },
+      {
+        "model_id": "deepseek-v4-flash",
+        "model_name": "DeepSeek V4 Flash",
+        "pressure_bt_score": 41.570093200469174,
+        "pressure_bt_log_strength": -0.8261677121809475,
+        "pressure_bt_rating": -0.3745615136958929,
+        "pressure_bt_rank": 9.0,
+        "gpa": 1.7111111111111112
+      },
+      {
+        "model_id": "deepseek-v3.2",
+        "model_name": "DeepSeek V3.2",
+        "pressure_bt_score": 38.36310388205622,
+        "pressure_bt_log_strength": -1.0535869041240833,
+        "pressure_bt_rating": -0.47766706420554655,
+        "pressure_bt_rank": 10.0,
+        "gpa": 1.8166666666666667
+      },
+      {
+        "model_id": "gemini-2.5-flash-lite",
+        "model_name": "Gemini 2.5 Flash Lite",
+        "pressure_bt_score": 27.665642887579008,
+        "pressure_bt_log_strength": -1.7981569094051209,
+        "pressure_bt_rating": -0.8152344420136283,
+        "pressure_bt_rank": 11.0,
+        "gpa": 1.0555555555555556
+      },
+      {
+        "model_id": "gemini-2.5-flash",
+        "model_name": "Gemini 2.5 Flash",
+        "pressure_bt_score": 25.52737418204475,
+        "pressure_bt_log_strength": -1.9492731772693146,
+        "pressure_bt_rating": -0.883746364230808,
+        "pressure_bt_rank": 12.0,
+        "gpa": 1.0222222222222224
+      },
+      {
+        "model_id": "deepseek-v4-pro",
+        "model_name": "DeepSeek V4 Pro",
+        "pressure_bt_score": 24.45874306933685,
+        "pressure_bt_log_strength": -2.0257371398933306,
+        "pressure_bt_rating": -0.9184130029306325,
+        "pressure_bt_rank": 13.0,
+        "gpa": 0.8944444444444444
+      },
+      {
+        "model_id": "grok-4.20-multi-agent",
+        "model_name": "Grok 4.20 Multi-Agent",
+        "pressure_bt_score": 23.39053839092334,
+        "pressure_bt_log_strength": -2.102968681720944,
+        "pressure_bt_rating": -0.9534276407402529,
+        "pressure_bt_rank": 14.0,
+        "gpa": 0.6666666666666666
+      },
+      {
+        "model_id": "gemini-3-flash-preview",
+        "model_name": "Gemini 3 Flash",
+        "pressure_bt_score": 14.871333986059302,
+        "pressure_bt_log_strength": -2.768400320987969,
+        "pressure_bt_rating": -1.2551158795689406,
+        "pressure_bt_rank": 15.0,
+        "gpa": 0.23888888888888885
+      },
+      {
+        "model_id": "deepseek-v3.2-speciale",
+        "model_name": "DeepSeek V3.2 Speciale",
+        "pressure_bt_score": 12.753736988143134,
+        "pressure_bt_log_strength": -2.956725548734387,
+        "pressure_bt_rating": -1.3404973116096695,
+        "pressure_bt_rank": 16.0,
+        "gpa": 0.1722222222222222
+      }
+    ]
+  },
+  "secondary_construct": {
+    "name": "steering_robustness",
+    "benchmarks": [
+      "lhr_neutral_to_government_drop",
+      "pht_no_push_to_explicit_drop"
+    ]
+  },
+  "conditional_robustness": "skipped: stage-2/3 coverage incomplete for the 16-model cohort",
+  "dab_policy": "report_as_three_non-compensatory_guardrails",
+  "claim_scope": "comparative evidence synthesis over the evaluated model cohort"
+}

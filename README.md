@@ -58,13 +58,19 @@ All results are stored in `models/models.json` which will automatically be updat
 
 Runs using `--limit` are treated as smoke tests: since they only cover a random subset of each benchmark, results are **not** written to `models/models.json`, though they remain available in `logs/{model_name}`.
 
+After certification runs, aggregate the per-benchmark results into cross-benchmark Bradley–Terry rankings (also a separate manual step, free — it only reads `models.json`):
+```
+uv run aggregate.py
+```
+Each model gets a 0–100 comparative score (mean probability of outperforming the other cohort models), a 0–4 GPA (average standing across 24 analysis specifications), and a rank, written into `models/models.json` as a per-model `bt` block; detailed rankings, sensitivity, and pairwise win probabilities land in `analysis/benchmark_aggregation/`. See [`pipeline/stage4_aggregation/README.md`](pipeline/stage4_aggregation/README.md) for the statistics.
+
 **You can also use any package manager of your choice** (i.e. anaconda); install the requirements by omitting `uv` and execute the pipeline using `python certify.py` with the appropriate arguments.
 
 To evaluate on individual benchmarks, you can use AISI Inspect's CLI `uv run inspect eval pipeline/stage1_evaluation/evals/{file}.py@{task}`. Note that you wil have to set certain parameters, like the model to be evaluated, which can be found [here](https://inspect.aisi.org.uk/reference/inspect_eval.html).
 
 ### Repository structure
 
-The source lives in [`pipeline/`](pipeline/README.md), organized into three stages: `stage1_evaluation/` (plain benchmark evals), `stage2_perturbation/` (surface-perturbation reliability auditing, enabled via `--perturb`), and `stage3_simulation/` (single-turn scenario simulation, enabled via `--simulate`). Stages 2 and 3 replay artifacts pregenerated once by [`generate.py`](generate.py) into [`datasets/generated/`](datasets/generated/README.md), so every model is evaluated on identical variants. Evaluation data lives in [`datasets/`](datasets/README.md) (`raw/` sources → `prepare/` scripts → `public/` CSVs → `generated/` artifacts); see [CONTRIBUTE.md](CONTRIBUTE.md) for adding a new benchmark. The adversarial attack suite (jailbreaks, attack-retry solver, multi-classifier harm scoring) lives on the **`adversarial-attacks`** branch.
+The source lives in [`pipeline/`](pipeline/README.md), organized into four stages: `stage1_evaluation/` (plain benchmark evals), `stage2_perturbation/` (surface-perturbation reliability auditing, enabled via `--perturb`), `stage3_simulation/` (single-turn scenario simulation, enabled via `--simulate`), and `stage4_aggregation/` (cross-benchmark Bradley–Terry aggregation, run via [`aggregate.py`](aggregate.py)). Stages 2 and 3 replay artifacts pregenerated once by [`generate.py`](generate.py) into [`datasets/generated/`](datasets/generated/README.md), so every model is evaluated on identical variants. Evaluation data lives in [`datasets/`](datasets/README.md) (`raw/` sources → `prepare/` scripts → `public/` CSVs → `generated/` artifacts); see [CONTRIBUTE.md](CONTRIBUTE.md) for adding a new benchmark. The adversarial attack suite (jailbreaks, attack-retry solver, multi-classifier harm scoring) lives on the **`adversarial-attacks`** branch.
 
 
 ### Benchmarks
