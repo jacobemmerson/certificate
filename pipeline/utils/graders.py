@@ -9,7 +9,7 @@ from inspect_ai.log import EvalLog
 from pathlib import Path
 import json
 
-from pipeline.stage2_perturbation.scoring import is_failing
+from pipeline.utils.scoring import is_failing
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -95,14 +95,24 @@ def aggregate_score(task_results: list[EvalLog]) -> tuple[float, dict]:
     return scores['reported'], scores['by_task']
 
 
-def consistency_rate(task_results: list[EvalLog]) -> dict[str, dict]:
+def consistency_rate(
+    task_results: list[EvalLog],
+    families: set[str] | None = None,
+) -> dict[str, dict]:
     '''
     Per-family consistency rate and LVR for a perturbation-auditing run.
 
-    pipeline/stage2_perturbation/scoring.py::wrap_scorers builds one Score entry per base
+    `families` restricts the report to those condition families (the control
+    is always tallied, as the shared baseline); None reports every family in
+    the log. A combined --perturb --simulate run stores one log with both
+    stages' conditions — certify.py calls this twice on it, once with the
+    stage-2 families (→ models.json "perturbations") and once with
+    {"scenario"} (→ "simulations").
+
+    pipeline/utils/scoring.py::wrap_scorers builds one Score entry per base
     judge whose metadata carries a "conditions" breakdown — one entry per
     condition (control + every perturbation variant recorded by
-    pipeline/stage2_perturbation/solvers.py), each with its "family", "value", and a
+    the condition-family solvers of stages 2/3), each with its "family", "value", and a
     "stable" flag (does its value match the control's). This scans every
     sample's scores and reports:
 
@@ -111,7 +121,7 @@ def consistency_rate(task_results: list[EvalLog]) -> dict[str, dict]:
       across the transform" — not a pass/fail accuracy metric.
     - "lvr": per family (control included, as the unperturbed baseline), the
       fraction of conditions judged harmful/failing per each scorer's
-      polarity (pipeline/stage2_perturbation/scoring.py::is_failing/SCORER_POLARITY).
+      polarity (pipeline/utils/scoring.py::is_failing/SCORER_POLARITY).
     - "by_task": the same per-family rates broken down per task and per
       scorer. The log's own results panel only carries the pooled
       `lvr_control`/`lvr`/`consistency` metrics (kept compact on purpose) —
@@ -151,6 +161,8 @@ def consistency_rate(task_results: list[EvalLog]) -> dict[str, dict]:
                 for condition in conditions.values():
                     family = condition.get("family")
                     if not family:
+                        continue
+                    if families is not None and family != "control" and family not in families:
                         continue
                     failing = is_failing(scorer_name, condition.get("value"))
                     stable = condition.get("stable")

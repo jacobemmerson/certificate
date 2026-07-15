@@ -8,7 +8,7 @@ Template families are keyed by `PerturbAdapter.elicitation_family` (see
 pipeline/stage2_perturbation/adapters.py). Benchmarks whose elicitation doesn't fit any of
 these (elicitation_family == "generic", e.g. role_model_bias's open-ended "list role
 models" prompt) are skipped by this family entirely — see
-pipeline/stage2_perturbation/build.py::build_perturbed_task.
+pipeline/registry.py::_build_task.
 
 pipeline/stage2_perturbation/solvers.py::framing_solver generates one completion per
 template here (never touching the shared control state.output), so the
@@ -18,6 +18,11 @@ one of these templates.
 from __future__ import annotations
 
 from typing import Callable
+
+# Bump on any change to the templates below — framing artifacts are generated
+# deterministically from these, and certify.py warns when the on-disk variants
+# predate a template edit (see pipeline/artifacts.py::PROMPT_VERSIONS).
+FRAMING_VERSION = "1"
 
 FRAMING_TEMPLATES: dict[str, list[tuple[str, Callable[[str], str]]]] = {
     "compliance": [

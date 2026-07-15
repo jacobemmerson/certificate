@@ -57,7 +57,7 @@ class TestConsistencyRate(unittest.TestCase):
 
     def test_lvr_respects_scorer_polarity(self):
         # role_model_bias_scorer is inverted (higher fraction-autocratic = worse,
-        # failing above 0.5) — see pipeline/stage2_perturbation/scoring.py::SCORER_POLARITY.
+        # failing above 0.5) — see pipeline/utils/scoring.py::SCORER_POLARITY.
         log = fake_log("role_model_bias", [
             sample_with_conditions({"role_model_bias_scorer": {
                 "control": {"family": "control", "value": 0.0, "stable": True},
@@ -68,6 +68,28 @@ class TestConsistencyRate(unittest.TestCase):
 
         rates = consistency_rate([log])
         self.assertEqual(rates["lvr"], {"control": 0.0, "paraphrase": 50.0})
+
+    def test_families_filter_splits_stages_from_one_log(self):
+        # A combined --perturb --simulate run stores one log; certify.py calls
+        # consistency_rate twice with a families filter to split it into the
+        # models.json "perturbations" and "simulations" sections. The control
+        # is always tallied as the shared baseline.
+        log = fake_log("social_harm_bench", [
+            sample_with_conditions({"llm_judge_scorer": {
+                "control": {"family": "control", "value": "C", "stable": True},
+                "paraphrase_variant_1": {"family": "paraphrase", "value": "I", "stable": False},
+                "scenario_variant_1": {"family": "scenario", "value": "C", "stable": True},
+            }}),
+        ])
+
+        perturb = consistency_rate([log], families={"paraphrase"})
+        self.assertEqual(perturb["lvr"], {"control": 0.0, "paraphrase": 100.0})
+        self.assertNotIn("scenario", perturb["consistency_rate"])
+
+        sim = consistency_rate([log], families={"scenario"})
+        self.assertEqual(sim["lvr"], {"control": 0.0, "scenario": 0.0})
+        self.assertEqual(sim["consistency_rate"], {"scenario": 100.0})
+        self.assertNotIn("paraphrase", sim["lvr"])
 
     def test_non_perturbed_logs_yield_empty_rates(self):
         log = fake_log("social_harm_bench", [

@@ -18,7 +18,21 @@ The packages are managed by `uv`; the instructions for installing it can be foun
 uv sync
 ```
 
-To run the certification pipeline using `uv`, use the following:
+The certification runs in two steps. Stages 2 (`--perturb`) and 3 (`--simulate`) replay **pregenerated** perturbed prompts and scenarios so every evaluated model sees the exact same variants and the attacker model runs once total instead of once per model. Generate those artifacts first (only needed once per artifact refresh, or when adding a benchmark):
+```
+uv run generate.py \
+  --attacker    {OPTIONAL: rewrite/reframing model, default=openrouter/deepseek/deepseek-v4-flash} \
+  --perturb     {OPTIONAL: stage-2 families to generate, default=all; e.g. --perturb paraphrase framing} \
+  --perturb-k   {OPTIONAL: variants per item for the rewrite families, default=1} \
+  --simulate    {OPTIONAL: also generate stage-3 scenario reframings} \
+  --sim-k       {OPTIONAL: scenarios per item under --simulate, default=1} \
+  --only        {OPTIONAL: generate only for these benchmark keys, i.e. --only harm hr} \
+  --missing-only {OPTIONAL: fill gaps in existing artifacts instead of skipping complete files} \
+  --force       {OPTIONAL: regenerate everything from scratch}
+```
+The artifacts land in [`datasets/generated/`](datasets/generated/README.md) and are committed to the repo. See its README for the schema. `reconsideration` is the one perturbation family with no artifact — it challenges the target's own answer, so it always runs live.
+
+Then evaluate each model (cheap — no attacker calls; only the target and judges run):
 ```
 uv run certify.py \
   --model       {api-formatted model name for testing, i.e. openrouter/google/gemini-3-flash-preview} \
@@ -30,13 +44,15 @@ uv run certify.py \
   --epochs      {OPTIONAL: the number of epochs to run, default=1} \
   --rerun       {OPTIONAL: rerun results that are already present for the model} \
   --only        {OPTIONAL: run only these benchmark keys, i.e. --only harm hr, see pipeline/registry.py for the keys} \
-  --attacker    {OPTIONAL: rewrite/paraphrase model for the perturbation stage, default=openrouter/deepseek/deepseek-v4-flash} \
+  --perturb     {OPTIONAL: stage-2 families to replay, default=all; reconsideration runs live} \
+  --no-perturb  {OPTIONAL: skip stage 2 entirely, e.g. for a --simulate-only run} \
+  --perturb-k   {OPTIONAL: use up to this many stored variants per item, default=1} \
   --llamaguard  {OPTIONAL: LlamaGuard model used for harm scoring across all tasks, default=openrouter/meta-llama/llama-guard-4-12b; pass an empty string to disable it (i.e. "")} \
   --limit       {OPTIONAL: randomly sample this many examples per task instead of running the full dataset} \
-  --simulate    {OPTIONAL: run stage-3 scenario simulation — reframe each item into a realistic deployment scenario and re-run the target on it; reuses --attacker as the reframing model} \
-  --sim-k       {OPTIONAL: number of reframed scenarios generated per item under --simulate, default=1}
+  --simulate    {OPTIONAL: run stage-3 scenario simulation by replaying the pregenerated reframings} \
+  --sim-k       {OPTIONAL: use up to this many stored scenarios per item under --simulate, default=1}
 ```
-If a grader model is not specified with `--grader`, a group of models is used for LLM-as-a-judge grading as specified in `GRADERS.md`.
+`--perturb` and `--simulate` compose in one run: each benchmark gets a single eval log in which the control is generated and judged once, stage 2 reports under the `lvr`/`consistency` metrics and stage 3 under `lvr_scenario`/`consistency_scenario` (the certification score is the worst condition across every enabled family). `certify.py` checks that the artifacts for the requested `--perturb`/`--simulate` families exist before spending anything, and fails fast with the exact `generate.py` command if they don't. If a grader model is not specified with `--grader`, a group of models is used for LLM-as-a-judge grading as specified in `GRADERS.md`.
 
 All results are stored in `models/models.json` which will automatically be updated with new models or replace previously run models. By default, the script will skip benchmarks that have already been processed; however, you can override this with by adding `--rerun` argument to `certify.py`. All logs will be in `logs/{benchmark_name}`; these can be accessed to use unreported metrics or other metadata about the samples.
 
@@ -48,7 +64,7 @@ To evaluate on individual benchmarks, you can use AISI Inspect's CLI `uv run ins
 
 ### Repository structure
 
-The source lives in [`pipeline/`](pipeline/README.md), organized into three stages: `stage1_evaluation/` (plain benchmark evals), `stage2_perturbation/` (surface-perturbation reliability auditing, enabled via `--perturb`), and `stage3_simulation/` (single-turn scenario simulation, enabled via `--simulate`). Evaluation data lives in [`datasets/`](datasets/README.md) (`raw/` sources → `prepare/` scripts → `public/` CSVs); see [CONTRIBUTE.md](CONTRIBUTE.md) for adding a new benchmark. The adversarial attack suite (jailbreaks, attack-retry solver, multi-classifier harm scoring) lives on the **`adversarial-attacks`** branch.
+The source lives in [`pipeline/`](pipeline/README.md), organized into three stages: `stage1_evaluation/` (plain benchmark evals), `stage2_perturbation/` (surface-perturbation reliability auditing, enabled via `--perturb`), and `stage3_simulation/` (single-turn scenario simulation, enabled via `--simulate`). Stages 2 and 3 replay artifacts pregenerated once by [`generate.py`](generate.py) into [`datasets/generated/`](datasets/generated/README.md), so every model is evaluated on identical variants. Evaluation data lives in [`datasets/`](datasets/README.md) (`raw/` sources → `prepare/` scripts → `public/` CSVs → `generated/` artifacts); see [CONTRIBUTE.md](CONTRIBUTE.md) for adding a new benchmark. The adversarial attack suite (jailbreaks, attack-retry solver, multi-classifier harm scoring) lives on the **`adversarial-attacks`** branch.
 
 
 ### Benchmarks

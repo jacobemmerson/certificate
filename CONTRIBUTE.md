@@ -90,7 +90,20 @@ Import your `@task` function and add an entry to the `BENCHMARKS` dict:
   `'auth'`); their scores are averaged into one benchmark score.
 
 That's all the wiring — `certify.py` iterates `init_benchmarks` and
-`apply_perturbations` covers every registered Task automatically.
+`apply_stages` covers every registered Task automatically. One extra
+step for the new pipeline: stages 2/3 replay **pregenerated** perturbed prompts,
+so once your task is registered, generate its artifacts before running
+`--perturb`/`--simulate`:
+
+```bash
+uv run python3 generate.py --only yourkey            # all pregenerated families
+uv run python3 generate.py --only yourkey --simulate # + scenario reframings
+```
+
+The artifacts land in `datasets/generated/<task_name>/` (committed to the repo);
+`certify.py` validates they exist and fails fast with the exact command
+otherwise. `reconsideration` needs no artifact (it runs live). See
+[`datasets/generated/README.md`](datasets/generated/README.md).
 
 ## 4. Perturbation integration (`pipeline/stage2_perturbation/`)
 
@@ -148,7 +161,7 @@ Perturbation reporting picks each sample's **worst** condition and counts
 **failing** outcomes (LVR), assuming higher score value = better/safer
 (`value_to_float` lower = worse, `< 1.0` = failing). If your scorer is
 inverted — a higher value means a *worse* outcome — register it in
-`pipeline/stage2_perturbation/scoring.py::SCORER_POLARITY` with `badness` and `failing`
+`pipeline/utils/scoring.py::SCORER_POLARITY` with `badness` and `failing`
 functions, as `role_model_bias_scorer` does. Otherwise worst-case scores and LVR
 for your benchmark will be backwards.
 
@@ -160,12 +173,14 @@ for your benchmark will be backwards.
   primary metric is a 0–1 fraction (e.g. `accuracy()`), either rescale in
   the scorer/metric or add your task to the scaling special-case in
   `aggregate_score` (as `social_harm_bench` does).
-- Under `--perturb`, your scorers are wrapped automatically
-  (`pipeline/stage2_perturbation/scoring.py::wrap_scorers`): the reported per-sample value
-  becomes the worst outcome across the control and every perturbation
-  condition, and three pooled metrics (`lvr_control`, `lvr`, `consistency`)
-  are added to the log's results panel. Per-family detail lands in
-  `models/models.json` under `perturbations.{yourkey}.by_task`.
+- Under `--perturb`/`--simulate`, your scorers are wrapped automatically
+  (`pipeline/utils/scoring.py::wrap_scorers`): the reported per-sample value
+  becomes the worst outcome across the control and every enabled condition
+  (scenario included), and pooled metrics are added to the log's results
+  panel — `lvr_control` always, `lvr` + `consistency` for the stage-2
+  families, `lvr_scenario` + `consistency_scenario` for stage 3. Per-family
+  detail lands in `models/models.json` under `perturbations.{yourkey}.by_task`
+  and `simulations.{yourkey}.by_task`.
 
 ## 6. Test it
 
@@ -177,7 +192,9 @@ uv run python3 -m unittest discover tests
 uv run python3 certify.py -m <target-model> -g <grader-model> \
     --only yourkey --limit 2
 
-# with perturbations (k=1 keeps it cheap)
+# with perturbations: generate the artifacts once, then replay them (k=1 keeps
+# it cheap). --limit produces partial artifacts, fine for a smoke test.
+uv run python3 generate.py --only yourkey --perturb paraphrase --perturb-k 1 --limit 2
 uv run python3 certify.py -m <target-model> -g <grader-model> \
     --only yourkey --limit 2 --perturb paraphrase reconsideration --perturb-k 1
 ```
@@ -188,7 +205,8 @@ Then open the log (`inspect view --log-dir logs/<model>/<name>/`) and check:
   `--perturb`, one tab per perturbation family and one `{family}_scoring`
   tab per condition family);
 - the results panel reports your primary metric first, with
-  `lvr_control`/`lvr`/`consistency` alongside under `--perturb`;
+  `lvr_control`/`lvr`/`consistency` alongside under `--perturb` (plus
+  `lvr_scenario`/`consistency_scenario` under `--simulate`);
 - a full run (no `--limit`) writes your benchmark key into
   `models/models.json` under `scores`, `scores_meta`, `perturbations`, and
   `status`.
