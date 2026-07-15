@@ -19,8 +19,9 @@
 # at exit — no separate serving job or Ray cluster needed at this size.
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
-mkdir -p logs
+# Under sbatch, $0 points at slurm's spooled copy of this script, not the
+# repo — so navigate from the submit directory (submit from the repo root).
+cd "$SLURM_SUBMIT_DIR"
 
 # Adjust to your cluster's convention (module load cuda/12.4, conda, etc.).
 # HF caches belong on scratch, not $HOME — the weights are ~140 GB.
@@ -31,7 +32,7 @@ MODEL="NousResearch/Hermes-4-70B"
 
 # --missing-only makes this safe to requeue after preemption or timeout:
 # finished families are skipped, interrupted ones are filled in and merged.
-uv run generate.py \
+uv run python generate.py \
     --attacker "vllm/$MODEL" \
     -M tensor_parallel_size=4 \
     -M gpu_memory_utilization=0.90 \
