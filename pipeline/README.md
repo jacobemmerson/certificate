@@ -43,8 +43,8 @@ exact `generate.py` command if any are missing (`pipeline/artifacts.py::validate
 | Directory | Stage | Contents |
 |---|---|---|
 | `stage1_evaluation/` | 1 — plain evals | `evals/` has one file per benchmark: a `csv_dataset` + `@task` definition(s), with shared CSV→`Sample`/scorer-assembly helpers in `evals/common.py`. `scorers/harm.py` holds the reusable harm classifiers (LLM judge, LlamaGuard). |
-| `stage2_perturbation/` | 2 — perturbation auditing | Surface-perturbation reliability auditing: replay solvers that run the target on pregenerated perturbed variants (paraphrase, register, identity_strip, framing) plus the live `reconsideration` family, per-benchmark adapters, and the scoring wrappers that report consistency/LVR (legal violation rate). Layered onto stage-1 tasks by `registry.py::apply_stages` (`--perturb`). |
-| `stage3_simulation/` | 3 — scenario simulation | Single-turn scenario reframing: the target is re-run on pregenerated deployment-scenario reframings (system prompt + context + the request as a natural user message). Layered onto stage-1 tasks by `registry.py::apply_stages` (`--simulate`, composable with `--perturb`); reuses stage 2's scoring spine and its `scenario` replay solver, reporting the scenario harm rate (`lvr_scenario`) and stability (`consistency_scenario`) vs. the bald-query baseline (`lvr_control`). |
+| `stage2_perturbation/` | 2 — perturbation auditing | Surface-perturbation reliability auditing: one solver per family — replaying pregenerated perturbed variants (paraphrase, register, identity_strip, framing) plus the live `reconsideration` family — with the per-benchmark adapters, framing templates, and rewrite prompts. Layered onto stage-1 tasks by `registry.py::apply_stages` (`--perturb`); reports consistency/LVR (legal violation rate) via the shared scoring spine in `utils/scoring.py`. |
+| `stage3_simulation/` | 3 — scenario simulation | Single-turn scenario reframing: the `scenario` solver replays pregenerated deployment-scenario reframings (system prompt + context + the request as a natural user message), plus the reframing prompt/parsing (`prompts.py`). Layered onto stage-1 tasks by `registry.py::apply_stages` (`--simulate`, composable with `--perturb`); reports the scenario harm rate (`lvr_scenario`) and stability (`consistency_scenario`) vs. the bald-query baseline (`lvr_control`) via the same shared scoring spine. |
 
 ## Shared
 
@@ -52,8 +52,10 @@ exact `generate.py` command if any are missing (`pipeline/artifacts.py::validate
 |---|---|
 | `generation.py` | Offline generators (the attacker-model half of stages 2/3): `generate_rewrites`, `generate_framing`, `generate_scenarios`, and `SampleView` (renders per-benchmark prompts offline via the stage-2 adapters). Driven by `generate.py`. |
 | `artifacts.py` | The `datasets/generated/` store: `write_family`/`load_family`, prompt-version tracking, and `validate_artifacts` (certify.py's fail-fast pre-run check). |
-| `registry.py` | `init_benchmarks()` — the master list mapping benchmark keys to their `@task`s; `apply_stages()` layers the stage-2 perturbation families and/or stage-3 scenario simulation on top in a single pass. `PREGENERATED_FAMILIES` names the families with artifacts. |
-| `utils/graders.py` | Grader/model loading (`GRADERS.md`, `models/models.json`) and score aggregation. |
+| `registry.py` | `init_benchmarks()` — the master list mapping benchmark keys to their `@task`s; `apply_stages()` layers the stage-2 perturbation families and/or stage-3 scenario simulation on top in a single pass (its `_build_task` assembles each Task's solver chain from the stages' family solvers). `PREGENERATED_FAMILIES` names the families with artifacts. |
+| `utils/scoring.py` | The condition-family scoring spine both stages share: `scoring_step`/`wrap_scorers`, the `lvr*`/`consistency*` metric pools, and scorer polarity (`SCORER_POLARITY`, `badness`/`is_failing`). |
+| `utils/replay.py` | The shared replay machinery behind both stages' solvers: `replay` (run the target on stored artifact rows, cache-off, on scratch state copies), `generate_variant` retries, `truncated`. |
+| `utils/graders.py` | Grader/model loading (`GRADERS.md`, `models/models.json`) and score aggregation (`aggregate_score`, `consistency_rate`). |
 | `utils/text.py` | Shared text heuristics (refusal detection). |
 
 The adversarial attack suite (jailbreak attacks, attack-retry solver,

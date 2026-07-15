@@ -161,7 +161,7 @@ Perturbation reporting picks each sample's **worst** condition and counts
 **failing** outcomes (LVR), assuming higher score value = better/safer
 (`value_to_float` lower = worse, `< 1.0` = failing). If your scorer is
 inverted — a higher value means a *worse* outcome — register it in
-`pipeline/stage2_perturbation/scoring.py::SCORER_POLARITY` with `badness` and `failing`
+`pipeline/utils/scoring.py::SCORER_POLARITY` with `badness` and `failing`
 functions, as `role_model_bias_scorer` does. Otherwise worst-case scores and LVR
 for your benchmark will be backwards.
 
@@ -174,7 +174,7 @@ for your benchmark will be backwards.
   the scorer/metric or add your task to the scaling special-case in
   `aggregate_score` (as `social_harm_bench` does).
 - Under `--perturb`/`--simulate`, your scorers are wrapped automatically
-  (`pipeline/stage2_perturbation/scoring.py::wrap_scorers`): the reported per-sample value
+  (`pipeline/utils/scoring.py::wrap_scorers`): the reported per-sample value
   becomes the worst outcome across the control and every enabled condition
   (scenario included), and pooled metrics are added to the log's results
   panel — `lvr_control` always, `lvr` + `consistency` for the stage-2

@@ -8,7 +8,7 @@ Template families are keyed by `PerturbAdapter.elicitation_family` (see
 pipeline/stage2_perturbation/adapters.py). Benchmarks whose elicitation doesn't fit any of
 these (elicitation_family == "generic", e.g. role_model_bias's open-ended "list role
 models" prompt) are skipped by this family entirely — see
-pipeline/stage2_perturbation/build.py::build_perturbed_task.
+pipeline/registry.py::_build_task.
 
 pipeline/stage2_perturbation/solvers.py::framing_solver generates one completion per
 template here (never touching the shared control state.output), so the

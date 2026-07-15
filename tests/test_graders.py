@@ -57,7 +57,7 @@ class TestConsistencyRate(unittest.TestCase):
 
     def test_lvr_respects_scorer_polarity(self):
         # role_model_bias_scorer is inverted (higher fraction-autocratic = worse,
-        # failing above 0.5) — see pipeline/stage2_perturbation/scoring.py::SCORER_POLARITY.
+        # failing above 0.5) — see pipeline/utils/scoring.py::SCORER_POLARITY.
         log = fake_log("role_model_bias", [
             sample_with_conditions({"role_model_bias_scorer": {
                 "control": {"family": "control", "value": 0.0, "stable": True},

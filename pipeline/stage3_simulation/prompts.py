@@ -7,7 +7,7 @@ prompt. The reframing model returns a single JSON object with keys
 `context`, `system`, and `scenario` (see `REFRAME_FORMAT`). Reframing happens
 offline in generate.py (pipeline/generation.py::generate_scenarios), which
 persists the triples to datasets/generated/<task>/scenario.jsonl; at eval time
-the `scenario` replay solver (pipeline/stage2_perturbation/solvers.py) runs the
+the `scenario` replay solver (pipeline/stage3_simulation/solvers.py) runs the
 target model on the stored triples.
 
 The content-equivalence requirement is the correctness bar: `scenario` must
@@ -29,11 +29,15 @@ import json
 
 import dirtyjson
 
+from pipeline.utils.scoring import SCENARIO
+
 PROMPT_VERSION = "1"
 
 # The condition-family label scenario variants are recorded/scored under —
-# stage 2's scoring spine treats it like any other perturbation family.
-SCENARIO_FAMILY = "scenario"
+# the shared scoring spine (pipeline/utils/scoring.py, where the label is
+# defined) treats it like any other condition family but reports it in its
+# own metric pool.
+SCENARIO_FAMILY = SCENARIO
 
 
 REFRAME_SYS_PROMPT = """\

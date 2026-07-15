@@ -21,7 +21,7 @@ from argparse import ArgumentParser
 from inspect_ai import eval
 from pipeline.artifacts import validate_artifacts
 from pipeline.registry import init_benchmarks, apply_stages, ALL_PERTURB_FAMILIES
-from pipeline.stage2_perturbation.scoring import SCENARIO
+from pipeline.utils.scoring import SCENARIO
 from pipeline.utils.graders import load_graders, load_models_with_check, aggregate_score, consistency_rate
 
 def parse():
@@ -166,7 +166,7 @@ if __name__ == "__main__":
     # scorers report them under separate metric pools — lvr/consistency for
     # the perturbation families, lvr_scenario/consistency_scenario for the
     # scenario family. The certification score is the worst condition across
-    # every enabled family (see pipeline/stage2_perturbation/scoring.py).
+    # every enabled family (see pipeline/utils/scoring.py).
     run_perturb = bool(args.perturb) and not args.no_perturb
 
     # check for existing model results
@@ -248,7 +248,7 @@ if __name__ == "__main__":
             # Eval-level cache benefits judge/grader calls (the bulk of API
             # traffic under --perturb) and retries. The replay/reconsideration
             # solvers opt out explicitly (cache=False in
-            # pipeline/stage2_perturbation/solvers.py): their target calls
+            # pipeline/utils/replay.py): their target calls
             # replay identical prompts across epochs and must stay independent
             # generations, so inheriting this would collapse them.
             cache=True,

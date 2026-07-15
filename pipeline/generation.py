@@ -3,7 +3,8 @@
 These run *outside* any inspect eval (plain asyncio over a task's dataset,
 driven by generate.py) and produce the variant rows that
 pipeline/artifacts.py persists and the eval-time replay solvers
-(pipeline/stage2_perturbation/solvers.py) later send to each target model.
+(pipeline/stage2_perturbation/solvers.py, pipeline/stage3_simulation/solvers.py
+via pipeline/utils/replay.py) later send to each target model.
 They reuse the exact prompt logic the live solvers used to run per-model:
 rewrite.py's FAMILY_SYSTEM_PROMPTS/_extract_rewrite, framing.py's
 FRAMING_TEMPLATES, and stage 3's reframe_prompt/parse_reframing — nothing is
@@ -49,7 +50,7 @@ class SampleView:
 
 async def _attacker_call(model, prompt: str, label: str, attempts: int = 3) -> str | None:
     """One attacker generation with retries (same rationale as the replay
-    solvers' _generate_variant: OpenRouter intermittently returns unparseable
+    replay machinery's generate_variant: OpenRouter intermittently returns unparseable
     keep-alive bodies that aren't retried upstream). Returns the completion,
     or None after persistent failure.
     """

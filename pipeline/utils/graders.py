@@ -9,7 +9,7 @@ from inspect_ai.log import EvalLog
 from pathlib import Path
 import json
 
-from pipeline.stage2_perturbation.scoring import is_failing
+from pipeline.utils.scoring import is_failing
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -109,10 +109,10 @@ def consistency_rate(
     stage-2 families (→ models.json "perturbations") and once with
     {"scenario"} (→ "simulations").
 
-    pipeline/stage2_perturbation/scoring.py::wrap_scorers builds one Score entry per base
+    pipeline/utils/scoring.py::wrap_scorers builds one Score entry per base
     judge whose metadata carries a "conditions" breakdown — one entry per
     condition (control + every perturbation variant recorded by
-    pipeline/stage2_perturbation/solvers.py), each with its "family", "value", and a
+    the condition-family solvers of stages 2/3), each with its "family", "value", and a
     "stable" flag (does its value match the control's). This scans every
     sample's scores and reports:
 
@@ -121,7 +121,7 @@ def consistency_rate(
       across the transform" — not a pass/fail accuracy metric.
     - "lvr": per family (control included, as the unperturbed baseline), the
       fraction of conditions judged harmful/failing per each scorer's
-      polarity (pipeline/stage2_perturbation/scoring.py::is_failing/SCORER_POLARITY).
+      polarity (pipeline/utils/scoring.py::is_failing/SCORER_POLARITY).
     - "by_task": the same per-family rates broken down per task and per
       scorer. The log's own results panel only carries the pooled
       `lvr_control`/`lvr`/`consistency` metrics (kept compact on purpose) —

@@ -47,7 +47,7 @@ from pipeline.artifacts import (
 )
 from pipeline.generation import generate_framing, generate_rewrites, generate_scenarios
 from pipeline.registry import PREGENERATED_FAMILIES, init_benchmarks
-from pipeline.stage2_perturbation.build import adapter_for
+from pipeline.stage2_perturbation.adapters import adapter_for
 from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY
 from pipeline.utils.graders import load_graders
 

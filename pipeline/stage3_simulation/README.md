@@ -27,13 +27,13 @@ dropped the variant); any that never parse are dropped and listed in the artifac
 meta sidecar (`incomplete_ids`).
 
 At eval time, the `scenario` replay solver
-(`stage2_perturbation/solvers.py::scenario`) rebuilds the stored system+user message
+(`stage3_simulation/solvers.py::scenario`) rebuilds the stored system+user message
 pair and runs only the **target** model on it — so every evaluated model sees the exact
 same scenarios and no reframing model is called during certification.
 
 Stage 3 records its scenario condition into the same `state.metadata["perturbations"]`
 shape stage 2 uses (family label `"scenario"`) and **reuses stage 2's scoring/reporting
-spine unchanged** (`stage2_perturbation/scoring.py::scoring_step`/`wrap_scorers`,
+spine unchanged** (`pipeline/utils/scoring.py::scoring_step`/`wrap_scorers`,
 `utils/graders.py::consistency_rate`) and its per-benchmark adapters
 (`stage2_perturbation/adapters.py::get_adapter`, for item-text extraction). It adds no
 scoring code of its own.
@@ -43,11 +43,11 @@ scoring code of its own.
 | `prompts.py` | The reframing prompt (`reframe_prompt`, `REFRAME_SYS_PROMPT`) + tolerant JSON parsing (`parse_reframing`). `PROMPT_VERSION` traces recorded scenarios to the prompt; bump it to force regeneration (certify.py warns on a version mismatch between the on-disk scenarios and the current code). |
 
 `prompts.py` is stage 3's only module: reframing generation lives in
-`pipeline/generation.py::generate_scenarios`, the eval-time replay solver in
-`pipeline/stage2_perturbation/solvers.py::scenario`, and task building in
-`pipeline/stage2_perturbation/build.py::build_perturbed_task` (its `sim_k`
-argument appends the scenario solver + scoring step; wired up by
-`registry.py::apply_stages`).
+`pipeline/generation.py::generate_scenarios` (shared replay machinery:
+`pipeline/utils/replay.py`), the eval-time replay solver in
+`pipeline/stage3_simulation/solvers.py::scenario`, and task building in
+`pipeline/registry.py::_build_task` (its `sim_k` argument appends the
+scenario solver + scoring step, wired up by `registry.py::apply_stages`).
 
 ## Reported metrics
 

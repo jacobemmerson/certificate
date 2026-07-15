@@ -1,5 +1,5 @@
 '''
-Tests for pipeline/stage2_perturbation/scoring.py — the perturbation-auditing wrapper
+Tests for pipeline/utils/scoring.py — the perturbation-auditing wrapper
 scorer, polarity registry, and eval-level lvr/consistency metrics. All
 synthetic (no model calls): fake per-condition results are written into
 state.metadata["perturbation_scores"] the way scoring_step would.
@@ -13,7 +13,7 @@ import unittest
 from inspect_ai.scorer import Score, SampleScore, Target, accuracy, scorer
 from inspect_ai.solver import TaskState
 
-from pipeline.stage2_perturbation.scoring import (
+from pipeline.utils.scoring import (
     CONTROL,
     SCENARIO,
     SCORER_POLARITY,
@@ -37,7 +37,7 @@ def dummy_judge():
 
 def make_state(scorer_name: str, conditions: dict[str, dict]) -> TaskState:
     """A TaskState carrying precomputed per-condition results, shaped the
-    way pipeline/stage2_perturbation/scoring.py::scoring_step records them."""
+    way pipeline/utils/scoring.py::scoring_step records them."""
     state = TaskState(model="m", sample_id="s1", epoch=0, input="x", messages=[])
     state.metadata["perturbation_scores"] = {
         scorer_name: {

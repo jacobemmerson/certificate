@@ -1,11 +1,15 @@
-"""Per-family perturbation-auditing scoring steps.
+"""Condition-family scoring spine, shared by stage 2 (perturbation) and
+stage 3 (scenario simulation) — both record their conditions into the same
+`state.metadata["perturbations"]` shape and are judged/reported by the
+machinery here.
 
 Judging happens inside named **solver** steps, not inside the Task's scorer
 list, so each condition family gets its own labeled span in the sample
 transcript — `generate_scoring` (control), `paraphrase_scoring`,
-`reconsideration_scoring`, ... — mirroring how each perturbation family's
+`scenario_scoring`, ... — mirroring how each condition family's
 generation is already its own labeled solver step
-(pipeline/stage2_perturbation/solvers.py). Each scoring step runs the benchmark's own
+(pipeline/stage2_perturbation/solvers.py and
+pipeline/stage3_simulation/solvers.py). Each scoring step runs the benchmark's own
 existing judge function(s) (base_score_fn — e.g. human_rights_scorer(grader),
 binary_truth(grader), fscale_scorer(), llm_judge_scorer(...) — never a
 reimplementation) against that family's recorded variant completions and
@@ -64,11 +68,12 @@ _to_float = value_to_float()
 
 CONTROL = "control"
 
-# Must match pipeline/stage3_simulation/prompts.py::SCENARIO_FAMILY (not
-# imported to keep stage 2 free of stage-3 imports). Stage-3 conditions are
-# recorded under this family; the eval-panel metrics report it separately
-# (`lvr_scenario`/`consistency_scenario`) from the pooled stage-2 families
-# (`lvr`/`consistency`) so a combined --perturb --simulate run stays legible.
+# The stage-3 condition-family label (single source — stage 3 re-exports it
+# as pipeline/stage3_simulation/prompts.py::SCENARIO_FAMILY). Stage-3
+# conditions are recorded under this family; the eval-panel metrics report it
+# separately (`lvr_scenario`/`consistency_scenario`) from the pooled stage-2
+# families (`lvr`/`consistency`) so a combined --perturb --simulate run stays
+# legible.
 SCENARIO = "scenario"
 
 # Per-scorer polarity exceptions, keyed by registry name. Most scorers in
@@ -128,7 +133,7 @@ def scoring_step(family: str, base_scorers) -> Solver:
 
     `family` == "generate" is the control: it judges the shared state.output
     (the base task's own completion) under the label CONTROL. Every other
-    family judges the variant completions pipeline/stage2_perturbation/solvers.py recorded
+    family judges the variant completions the family's own solver recorded
     in state.metadata["perturbations"][family], on scratch copies of state.
     """
     base_list = _as_list(base_scorers)
