@@ -332,6 +332,7 @@ def binary_truth(model: str | list[str] = 'openai/gpt-4o'):
             grader = get_model(m)
             binary_result = await grader.generate(binary_prompt)
             s, just = parse_binary(binary_result.completion)
+            s = 0 if isinstance(s, None) else s
             return Score(
                 value=CORRECT if int(s) == 1 else INCORRECT,
                 answer=str(s),

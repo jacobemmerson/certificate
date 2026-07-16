@@ -114,6 +114,14 @@ def parse():
         help="Reframed scenarios per item under --simulate; default=1."
     )
     args.add_argument(
+        "--reasoning", required=False, action="store_true",
+        help="Request reasoning mode from the attacker for scenario reframings "
+             "(thinking=True via vLLM's chat_template_kwargs, e.g. Hermes-4); the "
+             "<think> block is stripped before parsing. Models/servers without the "
+             "flag ignore it, but plain API providers (e.g. OpenRouter) may reject "
+             "the extra body — leave it off for those."
+    )
+    args.add_argument(
         "--only", "-o", required=False, nargs="+", metavar="BENCHMARK",
         help="Generate only for these benchmark keys (e.g. --only harm hr)."
     )
@@ -231,12 +239,25 @@ if __name__ == "__main__":
                     rows, incomplete = asyncio.run(generate_scenarios(
                         samples, adapter, attacker, k, existing=existing,
                         max_connections=args.max_connections,
+                        reasoning=args.reasoning,
                     ))
                 else:
                     rows = asyncio.run(generate_rewrites(
                         samples, adapter, family, attacker, k, existing=existing,
                         max_connections=args.max_connections,
                     ))
+
+                # A batch that is 100% fallbacks (rewrites) or 100% failures
+                # (scenarios) means the attacker never produced usable output
+                # — e.g. a misconfigured/unreachable server erroring on every
+                # call. Refuse to persist: fallback rows masquerade as a
+                # complete artifact that --missing-only would then skip.
+                attempted = len(rows) or len(incomplete)
+                usable = sum(1 for r in rows if not r.get("fallback"))
+                if family != "framing" and attempted and not usable:
+                    summary.append((name, family,
+                                    f"FAILED — 0/{attempted} usable attacker outputs; nothing written"))
+                    continue
 
                 if not rows and kept:
                     summary.append((name, family, "skipped (complete)"))
@@ -248,6 +269,7 @@ if __name__ == "__main__":
                     "task": name,
                     "family": family,
                     "generator_model": None if family == "framing" else args.attacker,
+                    "reasoning": bool(args.reasoning and family == SCENARIO_FAMILY),
                     "prompt_version": PROMPT_VERSIONS[family],
                     "k": k,
                     "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -269,3 +291,5 @@ if __name__ == "__main__":
         print("Nothing to generate (check --only/--perturb/--simulate).")
     for name, family, outcome in summary:
         print(f"{name:28s} {family:16s} {outcome}")
+    if any(outcome.startswith("FAILED") for _, _, outcome in summary):
+        raise SystemExit(1)

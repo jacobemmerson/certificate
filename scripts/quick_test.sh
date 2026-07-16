@@ -12,23 +12,14 @@
 set -euo pipefail
 
 MODEL="openrouter/openai/gpt-4o-mini"
-ATTACKER="openrouter/openai/gpt-4o-mini"
 GRADER="openrouter/openai/gpt-4o-mini"
 ONLY="harm"
 LIMIT=10
-
-# 1. Generate the frozen artifacts (attacker model runs once) —
-#    both stage-2 perturbations and stage-3 scenarios, full coverage.
-uv run generate.py \
-    --attacker "$ATTACKER" \
-    --only "$ONLY" \
-    --simulate \
 
 # 2. Certify GPT-4o-mini against the pregenerated perturbations (stage 2)
 #    AND scenarios (stage 3) in one run/one log.
 uv run certify.py \
     --model "$MODEL" \
     --grader "$GRADER" \
-    --only "$ONLY" \
     --limit "$LIMIT" \
     --simulate

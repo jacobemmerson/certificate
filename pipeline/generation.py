@@ -22,10 +22,11 @@ collapse them into one generation.
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass, field
 
 from inspect_ai.dataset import Sample
-from inspect_ai.model import Model, get_model
+from inspect_ai.model import GenerateConfig, Model, get_model
 
 from pipeline.stage2_perturbation.adapters import PerturbAdapter
 from pipeline.stage2_perturbation.framing import FRAMING_TEMPLATES
@@ -48,16 +49,46 @@ class SampleView:
         return cls(input_text=text, metadata=dict(sample.metadata or {}))
 
 
-async def _attacker_call(model, prompt: str, label: str, attempts: int = 3) -> str | None:
+# Hermes-style deliberation block. Reasoning models emit their chain of
+# thought before the actual response; only the post-think text is the rewrite.
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+# vLLM forwards chat_template_kwargs to the model's chat template, where
+# Hermes-4 reads thinking=True. Servers/models without the flag ignore it.
+_REASONING_CONFIG = GenerateConfig(
+    extra_body={"chat_template_kwargs": {"thinking": True}},
+    # headroom for long chains of thought — a truncated CoT never reaches the
+    # closing </think>, which would strand the whole completion
+    max_tokens=8192,
+)
+
+
+async def _attacker_call(
+    model, prompt: str, label: str, attempts: int = 3, reasoning: bool = False
+) -> str | None:
     """One attacker generation with retries (same rationale as the replay
     replay machinery's generate_variant: OpenRouter intermittently returns unparseable
     keep-alive bodies that aren't retried upstream). Returns the completion,
     or None after persistent failure.
+
+    With reasoning=True the call requests Hermes-style deliberation
+    (thinking=True via the chat template) and strips the <think>...</think>
+    block, returning only the final response. An unclosed <think> (truncated
+    CoT) yields None so the caller's retry/fallback path handles it.
     """
     for attempt in range(1, attempts + 1):
         try:
-            result = await model.generate(prompt, cache=False)
-            return result.completion
+            result = await model.generate(
+                prompt, config=_REASONING_CONFIG if reasoning else GenerateConfig(), cache=False
+            )
+            completion = result.completion
+            if reasoning and completion:
+                if "<think>" in completion and "</think>" not in completion:
+                    print(f"[WARNING] {label}: truncated chain of thought "
+                          f"(attempt {attempt}/{attempts}) — retrying")
+                    continue
+                completion = _THINK_RE.sub("", completion).strip()
+            return completion
         except Exception as exc:  # noqa: BLE001
             print(f"[WARNING] {label}: attacker error (attempt {attempt}/{attempts}): {exc}")
             if attempt < attempts:
@@ -145,6 +176,7 @@ async def generate_scenarios(
     existing: set[tuple[str, int]] | None = None,
     parse_attempts: int = 3,
     max_connections: int = 20,
+    reasoning: bool = False,
 ) -> tuple[list[dict], list[str]]:
     """Rows for stage 3's scenario family: k reframed {context, system,
     scenario} triples per sample. Unparseable reframings are re-requested up
@@ -163,7 +195,7 @@ async def generate_scenarios(
         label = f"{SCENARIO_FAMILY} {sample.id} v{variant}"
         for _ in range(parse_attempts):
             async with semaphore:
-                completion = await _attacker_call(model, prompt, label)
+                completion = await _attacker_call(model, prompt, label, reasoning=reasoning)
             if completion is None:
                 return None
             block = parse_reframing(completion)
