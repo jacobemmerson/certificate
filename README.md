@@ -44,19 +44,26 @@ uv run certify.py \
   --epochs      {OPTIONAL: the number of epochs to run, default=1} \
   --rerun       {OPTIONAL: rerun results that are already present for the model} \
   --only        {OPTIONAL: run only these benchmark keys, i.e. --only harm hr, see pipeline/registry.py for the keys} \
+  --condition   {OPTIONAL: explicit c0 clean run, or agentic c1-c4; omitted preserves default stage 2} \
+  --analyst-model {OPTIONAL: C3/C4 analyst model} \
+  --critic-model  {OPTIONAL: C3/C4 critic model} \
+  --sample-seed {OPTIONAL: canonical-ID pairing seed, default=0} \
+  --sample-ids-in/--sample-ids-out {OPTIONAL: reuse/write paired canonical sample IDs} \
   --perturb     {OPTIONAL: stage-2 families to replay, default=all; reconsideration runs live} \
   --no-perturb  {OPTIONAL: skip stage 2 entirely, e.g. for a --simulate-only run} \
   --perturb-k   {OPTIONAL: use up to this many stored variants per item, default=1} \
   --llamaguard  {OPTIONAL: LlamaGuard model used for harm scoring across all tasks, default=openrouter/meta-llama/llama-guard-4-12b; pass an empty string to disable it (i.e. "")} \
-  --limit       {OPTIONAL: randomly sample this many examples per task instead of running the full dataset} \
+  --limit       {OPTIONAL: deterministically select this many canonical sample IDs per task} \
   --simulate    {OPTIONAL: run stage-3 scenario simulation by replaying the pregenerated reframings} \
   --sim-k       {OPTIONAL: use up to this many stored scenarios per item under --simulate, default=1}
 ```
 `--perturb` and `--simulate` compose in one run: each benchmark gets a single eval log in which the control is generated and judged once, stage 2 reports under the `lvr`/`consistency` metrics and stage 3 under `lvr_scenario`/`consistency_scenario` (the certification score is the worst condition across every enabled family). `certify.py` checks that the artifacts for the requested `--perturb`/`--simulate` families exist before spending anything, and fails fast with the exact `generate.py` command if they don't. If a grader model is not specified with `--grader`, a group of models is used for LLM-as-a-judge grading as specified in `GRADERS.md`.
 
+Agentic conditions are a separate, non-composable execution mode. Explicit `--condition c0` disables stages 2/3 and runs the untouched tasks; `--condition c1` through `c4` replaces only each task solver while retaining its native scorers. C1-C4 reject perturbation/simulation requests. Canonical-ID maps support paired comparisons, protocol-invalid agentic samples are excluded from reported aggregates, and mode-specific result keys prevent clean, replay, simulation, and agentic results from overwriting one another. See [`pipeline/agentic/README.md`](pipeline/agentic/README.md).
+
 All results are stored in `models/models.json` which will automatically be updated with new models or replace previously run models. By default, the script will skip benchmarks that have already been processed; however, you can override this with by adding `--rerun` argument to `certify.py`. All logs will be in `logs/{benchmark_name}`; these can be accessed to use unreported metrics or other metadata about the samples.
 
-Runs using `--limit` are treated as smoke tests: since they only cover a random subset of each benchmark, results are **not** written to `models/models.json`, though they remain available in `logs/{model_name}`.
+Runs using `--limit` are treated as smoke tests: since they only cover a deterministic subset of each benchmark, results are **not** written to `models/models.json`, though they remain available in `logs/{model_name}`.
 
 **You can also use any package manager of your choice** (i.e. anaconda); install the requirements by omitting `uv` and execute the pipeline using `python certify.py` with the appropriate arguments.
 
