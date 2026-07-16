@@ -42,7 +42,7 @@ from pipeline.agentic import (
 from pipeline.agentic.eval import agentic as registered_agentic_task
 from pipeline.stage1_evaluation.evals.democratic_authoritarian_bias import fscale
 from pipeline.stage1_evaluation.evals.preserving_historical_truth import history_no_push
-from pipeline.stage2_perturbation.build import build_perturbed_task
+from pipeline.registry import apply_stages
 
 TARGET_SENTINEL = "TARGET_SENTINEL_DO_NOT_LEAK_123456"
 METADATA_SENTINEL = "METADATA_SENTINEL_DO_NOT_LEAK_654321"
@@ -399,15 +399,21 @@ class TestAgenticConfiguration(unittest.TestCase):
             ModelRoles(analyst="same_role", critic="same_role")
 
     def test_all_public_composition_boundaries_reject_unsupported_tasks(self):
-        perturbed = build_perturbed_task(
-            base_task(), ["reconsideration"], "mockllm/rewrite", 1
-        )
+        benchmarks = {"tiny": {"name": "tiny", "tasks": [base_task()]}}
+        with patch("pipeline.registry.artifact_task_name", return_value="base_task"):
+            perturbed = apply_stages(benchmarks, families=["reconsideration"], k=1)[
+                "tiny"
+            ]["tasks"][0]
         with self.assertRaisesRegex(ValueError, "perturbation"):
             make_agentic_task(perturbed, AgenticConfig.default("c1"))
 
         agentic = make_agentic_task(base_task(), AgenticConfig.default("c1"))
         with self.assertRaisesRegex(ValueError, "agentic"):
-            build_perturbed_task(agentic, ["reconsideration"], "mockllm/rewrite", 1)
+            apply_stages(
+                {"tiny": {"name": "tiny", "tasks": [agentic]}},
+                families=["reconsideration"],
+                k=1,
+            )
 
         repeated = make_agentic_task(base_task(), AgenticConfig.default("c2"))
         with self.assertRaisesRegex(ValueError, "again"):

@@ -25,6 +25,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from inspect_ai import Task
+from inspect_ai._util.registry import registry_info
 from inspect_ai.solver import TaskState
 
 from pipeline.stage1_evaluation.evals.democratic_authoritarian_bias import (
@@ -78,7 +80,7 @@ def _leader_favorability_render(state: TaskState, new_text: str) -> str:
 
 
 # Keyed by the original @task function's registry name — see
-# pipeline/stage2_perturbation/build.py for how this is looked up via
+# pipeline/registry.py::_build_task for how this is looked up via
 # inspect_ai._util.registry.registry_info(task_instance).name.
 ADAPTERS: dict[str, PerturbAdapter] = {
     "fscale": PerturbAdapter(
@@ -109,3 +111,8 @@ ADAPTERS: dict[str, PerturbAdapter] = {
 
 def get_adapter(task_name: str) -> PerturbAdapter:
     return ADAPTERS.get(task_name, DEFAULT_ADAPTER)
+
+
+def adapter_for(base_task: Task) -> PerturbAdapter:
+    """The adapter for a built Task, looked up by its registered @task name."""
+    return get_adapter(registry_info(base_task).name)

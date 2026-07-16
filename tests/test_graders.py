@@ -143,6 +143,43 @@ class TestConsistencyRate(unittest.TestCase):
         rates = consistency_rate([log])
         self.assertEqual(rates["lvr"], {"control": 0.0, "paraphrase": 50.0})
 
+    def test_families_filter_splits_stages_from_one_log(self):
+        log = fake_log(
+            "social_harm_bench",
+            [
+                sample_with_conditions(
+                    {
+                        "llm_judge_scorer": {
+                            "control": {
+                                "family": "control",
+                                "value": "C",
+                                "stable": True,
+                            },
+                            "paraphrase_variant_1": {
+                                "family": "paraphrase",
+                                "value": "I",
+                                "stable": False,
+                            },
+                            "scenario_variant_1": {
+                                "family": "scenario",
+                                "value": "C",
+                                "stable": True,
+                            },
+                        }
+                    }
+                )
+            ],
+        )
+
+        perturb = consistency_rate([log], families={"paraphrase"})
+        self.assertEqual(perturb["lvr"], {"control": 0.0, "paraphrase": 100.0})
+        self.assertNotIn("scenario", perturb["consistency_rate"])
+
+        simulation = consistency_rate([log], families={"scenario"})
+        self.assertEqual(simulation["lvr"], {"control": 0.0, "scenario": 0.0})
+        self.assertEqual(simulation["consistency_rate"], {"scenario": 100.0})
+        self.assertNotIn("paraphrase", simulation["lvr"])
+
     def test_non_perturbed_logs_yield_empty_rates(self):
         log = fake_log(
             "social_harm_bench",

@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from inspect_ai import Task, eval, task_with
 from inspect_ai.dataset import Sample
@@ -15,6 +16,7 @@ from inspect_ai.solver import generate
 from certify import (
     _safe_exception,
     build_protocol_config,
+    execution_modes,
     parse,
     persisted_config,
     result_benchmark_key,
@@ -23,8 +25,9 @@ from certify import (
 )
 from pipeline.agentic import AUDIT_METADATA_KEY, AgenticConfig, Condition
 from pipeline.registry import (
+    ALL_PERTURB_FAMILIES,
     apply_condition,
-    apply_perturbations,
+    apply_stages,
     select_paired_samples,
     selected_ids_cover_benchmarks,
 )
@@ -62,12 +65,18 @@ def synthetic_benchmarks() -> dict:
 
 
 class TestCliValidation(unittest.TestCase):
-    def test_default_is_clean_c0_and_seed_zero_is_supported(self):
+    def test_omitted_condition_preserves_default_stage_behavior(self):
         args = parse(["--model", "mockllm/model"])
-        self.assertEqual(args.condition, "c0")
-        self.assertIsNone(args.perturb)
+        self.assertIsNone(args.condition)
+        self.assertEqual(set(args.perturb), set(ALL_PERTURB_FAMILIES))
+        self.assertEqual(execution_modes(args), (True, False))
         self.assertEqual(args.sample_seed, 0)
         self.assertIsNone(build_protocol_config(args).budget)
+
+    def test_explicit_c0_is_clean(self):
+        args = parse(["--model", "mockllm/model", "--condition", "c0"])
+        self.assertEqual(args.condition, "c0")
+        self.assertEqual(execution_modes(args), (False, False))
 
     def test_removed_compatibility_flags_are_rejected(self):
         for removed in ("--agentic-level", "--specialist", "--analyst", "--critic"):
@@ -117,16 +126,16 @@ class TestCliValidation(unittest.TestCase):
                     "--simulate",
                 ]
             )
-        with self.assertRaises(SystemExit):
-            parse(
-                [
-                    "--model",
-                    "mockllm/model",
-                    "--perturb",
-                    "framing",
-                    "--simulate",
-                ]
-            )
+        combined = parse(
+            [
+                "--model",
+                "mockllm/model",
+                "--perturb",
+                "framing",
+                "--simulate",
+            ]
+        )
+        self.assertEqual(execution_modes(combined), (True, True))
         with self.assertRaises(SystemExit):
             parse(
                 [
@@ -215,23 +224,16 @@ class TestBenchmarkConstruction(unittest.TestCase):
                     )
 
     def test_generalized_construction_rejects_both_composition_orders(self):
-        perturbed = apply_perturbations(
-            synthetic_benchmarks(),
-            families=["reconsideration"],
-            rewrite_model="mockllm/rewrite",
-            k=1,
-        )
+        with patch("pipeline.registry.artifact_task_name", return_value="tiny_task"):
+            perturbed = apply_stages(
+                synthetic_benchmarks(), families=["reconsideration"], k=1
+            )
         with self.assertRaisesRegex(ValueError, "perturbation"):
             apply_condition(perturbed, AgenticConfig.default("c2"))
 
         agentic = apply_condition(synthetic_benchmarks(), AgenticConfig.default("c2"))
         with self.assertRaisesRegex(ValueError, "agentic"):
-            apply_perturbations(
-                agentic,
-                families=["reconsideration"],
-                rewrite_model="mockllm/rewrite",
-                k=1,
-            )
+            apply_stages(agentic, families=["reconsideration"], k=1)
 
     def test_selected_id_coverage_controls_persistence_eligibility(self):
         source = synthetic_benchmarks()
@@ -282,7 +284,7 @@ class TestResultIdentity(unittest.TestCase):
             "clean": (
                 "tiny",
                 entry,
-                parse(["--model", "mockllm/model"]),
+                parse(["--model", "mockllm/model", "--condition", "c0"]),
             ),
             "perturbation": (
                 "tiny",
@@ -299,7 +301,7 @@ class TestResultIdentity(unittest.TestCase):
             "simulation": (
                 "tiny",
                 entry,
-                parse(["--model", "mockllm/model", "--simulate"]),
+                parse(["--model", "mockllm/model", "--no-perturb", "--simulate"]),
             ),
             "agentic": (
                 "tiny_agentic_c1",
@@ -340,7 +342,7 @@ class TestResultIdentity(unittest.TestCase):
 
     def test_legacy_transformed_record_does_not_suppress_clean_mode(self):
         benchmarks = {"tiny": {"name": "tiny", "tasks": []}}
-        clean = parse(["--model", "mockllm/model"])
+        clean = parse(["--model", "mockllm/model", "--condition", "c0"])
         perturb = parse(["--model", "mockllm/model", "--perturb", "reconsideration"])
         legacy_perturbation = {
             "scores": {"tiny": 42.0},
@@ -357,7 +359,7 @@ class TestResultIdentity(unittest.TestCase):
         )
 
     def test_only_selection_reruns_requested_mode(self):
-        args = parse(["--model", "mockllm/model", "--simulate"])
+        args = parse(["--model", "mockllm/model", "--no-perturb", "--simulate"])
         args.only = ["tiny"]
         benchmarks = {"tiny": {"name": "tiny", "tasks": []}}
         self.assertEqual(

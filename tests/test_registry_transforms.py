@@ -1,8 +1,9 @@
-"""Registry/task transform guards and field-preservation regressions."""
+"""Registry transform guards and agentic field-preservation regressions."""
 
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from inspect_ai import Task
 from inspect_ai.dataset import Sample
@@ -10,14 +11,8 @@ from inspect_ai.scorer import CORRECT, Score, accuracy, scorer
 from inspect_ai.solver import generate, system_message
 
 from pipeline.agentic import AgenticConfig, make_agentic_task
-from pipeline.registry import apply_condition, condition_benchmark_key
-from pipeline.stage2_perturbation.build import build_perturbed_task
-from pipeline.stage3_simulation.build import build_simulation_task
-from pipeline.utils.task_transforms import (
-    AGENTIC_METADATA_KEY,
-    PERTURBATION_METADATA_KEY,
-    SIMULATION_METADATA_KEY,
-)
+from pipeline.registry import apply_condition, apply_stages, condition_benchmark_key
+from pipeline.utils.task_transforms import AGENTIC_METADATA_KEY
 
 
 @scorer(metrics=[accuracy()])
@@ -49,63 +44,60 @@ def base_task(name: str = "transform_base") -> Task:
     )
 
 
-def transform(name: str, task: Task) -> Task:
-    if name == "agentic":
-        return make_agentic_task(task, AgenticConfig.default("c2"))
-    if name == "perturbation":
-        return build_perturbed_task(task, ["reconsideration"], "mockllm/rewrite", 1)
-    if name == "simulation":
-        return build_simulation_task(task, "mockllm/simulator", 1)
-    raise AssertionError(name)
-
-
 class TestTransformGuards(unittest.TestCase):
-    def test_all_cross_layer_orders_and_repeats_are_rejected(self):
-        names = ("agentic", "perturbation", "simulation")
-        for first in names:
-            transformed = transform(first, base_task())
-            for second in names:
-                with self.subTest(first=first, second=second):
-                    with self.assertRaises(ValueError):
-                        transform(second, transformed)
+    def test_registry_rejects_both_agentic_stage_composition_orders(self):
+        benchmarks = {"tiny": {"name": "tiny", "tasks": [base_task("tiny_task")]}}
+        with patch("pipeline.registry.artifact_task_name", return_value="tiny_task"):
+            staged = apply_stages(benchmarks, families=["reconsideration"], k=1)
+        with self.assertRaisesRegex(ValueError, "perturbation"):
+            apply_condition(staged, AgenticConfig.default("c2"))
 
-    def test_each_builder_preserves_unmodified_task_fields(self):
-        marker_by_transform = {
-            "agentic": AGENTIC_METADATA_KEY,
-            "perturbation": PERTURBATION_METADATA_KEY,
-            "simulation": SIMULATION_METADATA_KEY,
-        }
-        for name, marker in marker_by_transform.items():
-            with self.subTest(transform=name):
-                original = base_task()
-                adapted = transform(name, original)
-                self.assertIsNot(adapted, original)
-                for field in (
-                    "dataset",
-                    "setup",
-                    "cleanup",
-                    "metrics",
-                    "model",
-                    "config",
-                    "sandbox",
-                    "message_limit",
-                    "token_limit",
-                    "turn_limit",
-                    "time_limit",
-                    "working_limit",
-                    "cost_limit",
-                    "version",
-                ):
-                    self.assertIs(
-                        getattr(adapted, field), getattr(original, field), field
-                    )
-                self.assertEqual(original.metadata, {"base": True})
-                self.assertIn(marker, adapted.metadata)
-                self.assertIsNot(adapted.metadata, original.metadata)
-                if name == "agentic":
-                    self.assertIs(adapted.scorer, original.scorer)
-                else:
-                    self.assertEqual(len(adapted.scorer), 1)
+        agentic = apply_condition(benchmarks, AgenticConfig.default("c2"))
+        with self.assertRaisesRegex(ValueError, "agentic"):
+            apply_stages(agentic, families=["reconsideration"], k=1)
+
+    def test_stage2_and_stage3_remain_composable_in_one_registry_call(self):
+        benchmarks = {"tiny": {"name": "tiny", "tasks": [base_task("tiny_task")]}}
+        with (
+            patch("pipeline.registry.artifact_task_name", return_value="tiny_task"),
+            patch("pipeline.registry.load_family", return_value={}),
+        ):
+            staged = apply_stages(
+                benchmarks,
+                families=["reconsideration"],
+                k=1,
+                sim_k=1,
+            )
+        task = staged["tiny"]["tasks"][0]
+        self.assertIn("certificate_perturbation", task.metadata)
+        self.assertIn("certificate_simulation", task.metadata)
+        self.assertEqual(staged["tiny"]["name"], "tiny")
+
+    def test_agentic_builder_preserves_unmodified_task_fields(self):
+        original = base_task()
+        adapted = make_agentic_task(original, AgenticConfig.default("c2"))
+        self.assertIsNot(adapted, original)
+        for field in (
+            "dataset",
+            "setup",
+            "cleanup",
+            "metrics",
+            "model",
+            "config",
+            "sandbox",
+            "message_limit",
+            "token_limit",
+            "turn_limit",
+            "time_limit",
+            "working_limit",
+            "cost_limit",
+            "version",
+        ):
+            self.assertIs(getattr(adapted, field), getattr(original, field), field)
+        self.assertEqual(original.metadata, {"base": True})
+        self.assertIn(AGENTIC_METADATA_KEY, adapted.metadata)
+        self.assertIsNot(adapted.metadata, original.metadata)
+        self.assertIs(adapted.scorer, original.scorer)
 
     def test_registry_c0_is_identity_and_condition_keys_do_not_overwrite(self):
         benchmarks = {"tiny": {"name": "tiny", "tasks": [base_task("tiny_task")]}}

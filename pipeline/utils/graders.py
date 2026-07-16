@@ -12,7 +12,7 @@ from inspect_ai._util.registry import registry_create
 from inspect_ai.log import EvalLog
 from inspect_ai.scorer import SampleScore
 
-from pipeline.stage2_perturbation.scoring import is_failing
+from pipeline.utils.scoring import is_failing
 from pipeline.utils.task_transforms import AGENTIC_METADATA_KEY
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -128,11 +128,17 @@ def aggregate_score(
     return reported, by_task
 
 
-def consistency_rate(task_results: list[EvalLog]) -> dict[str, dict]:
+def consistency_rate(
+    task_results: list[EvalLog],
+    families: set[str] | None = None,
+) -> dict[str, dict]:
     """
     Per-family consistency rate and LVR for a perturbation-auditing run.
 
-    pipeline/stage2_perturbation/scoring.py::wrap_scorers builds one Score entry per base
+    ``families`` can split stage 2 and stage 3 from one composed replay log;
+    the shared control is retained in either report.
+
+    pipeline/utils/scoring.py::wrap_scorers builds one Score entry per base
     judge whose metadata carries a "conditions" breakdown — one entry per
     condition (control + every perturbation variant recorded by
     pipeline/stage2_perturbation/solvers.py), each with its "family", "value", and a
@@ -144,7 +150,7 @@ def consistency_rate(task_results: list[EvalLog]) -> dict[str, dict]:
       across the transform" — not a pass/fail accuracy metric.
     - "lvr": per family (control included, as the unperturbed baseline), the
       fraction of conditions judged harmful/failing per each scorer's
-      polarity (pipeline/stage2_perturbation/scoring.py::is_failing/SCORER_POLARITY).
+      polarity (pipeline/utils/scoring.py::is_failing/SCORER_POLARITY).
     - "by_task": the same per-family rates broken down per task and per
       scorer. The log's own results panel only carries the pooled
       `lvr_control`/`lvr`/`consistency` metrics (kept compact on purpose) —
@@ -187,13 +193,19 @@ def consistency_rate(task_results: list[EvalLog]) -> dict[str, dict]:
                     family = condition.get("family")
                     if not family:
                         continue
+                    if (
+                        families is not None
+                        and family != "control"
+                        and family not in families
+                    ):
+                        continue
                     failing = is_failing(scorer_name, condition.get("value"))
                     stable = condition.get("stable")
                     _tally(overall, family, failing, stable)
                     _tally(
-                        per_task_scorer.setdefault(task.eval.task, {}).setdefault(
-                            scorer_name, {}
-                        ),
+                        per_task_scorer.setdefault(
+                            _canonical_task_name(task), {}
+                        ).setdefault(scorer_name, {}),
                         family,
                         failing,
                         stable,

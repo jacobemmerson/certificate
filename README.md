@@ -18,7 +18,21 @@ The packages are managed by `uv`; the instructions for installing it can be foun
 uv sync
 ```
 
-To run the certification pipeline using `uv`, use the following:
+The certification runs in two steps. Stages 2 (`--perturb`) and 3 (`--simulate`) replay **pregenerated** perturbed prompts and scenarios so every evaluated model sees the exact same variants and the attacker model runs once total instead of once per model. Generate those artifacts first (only needed once per artifact refresh, or when adding a benchmark):
+```
+uv run generate.py \
+  --attacker    {OPTIONAL: rewrite/reframing model, default=openrouter/deepseek/deepseek-v4-flash} \
+  --perturb     {OPTIONAL: stage-2 families to generate, default=all; e.g. --perturb paraphrase framing} \
+  --perturb-k   {OPTIONAL: variants per item for the rewrite families, default=1} \
+  --simulate    {OPTIONAL: also generate stage-3 scenario reframings} \
+  --sim-k       {OPTIONAL: scenarios per item under --simulate, default=1} \
+  --only        {OPTIONAL: generate only for these benchmark keys, i.e. --only harm hr} \
+  --missing-only {OPTIONAL: fill gaps in existing artifacts instead of skipping complete files} \
+  --force       {OPTIONAL: regenerate everything from scratch}
+```
+The artifacts land in [`datasets/generated/`](datasets/generated/README.md) and are committed to the repo. See its README for the schema. `reconsideration` is the one perturbation family with no artifact — it challenges the target's own answer, so it always runs live.
+
+Then evaluate each model (cheap — no attacker calls; only the target and judges run):
 ```
 uv run certify.py \
   --model       {api-formatted model name for testing, i.e. openrouter/google/gemini-3-flash-preview} \
@@ -30,34 +44,34 @@ uv run certify.py \
   --epochs      {OPTIONAL: the number of epochs to run, default=1} \
   --rerun       {OPTIONAL: rerun results that are already present for the model} \
   --only        {OPTIONAL: run only these benchmark keys, i.e. --only harm hr, see pipeline/registry.py for the keys} \
-  --attacker    {OPTIONAL: rewrite/paraphrase model for the perturbation stage, default=openrouter/deepseek/deepseek-v4-flash} \
+  --condition   {OPTIONAL: explicit c0 clean run, or agentic c1-c4; omitted preserves default stage 2} \
+  --analyst-model {OPTIONAL: C3/C4 analyst model} \
+  --critic-model  {OPTIONAL: C3/C4 critic model} \
+  --sample-seed {OPTIONAL: canonical-ID pairing seed, default=0} \
+  --sample-ids-in/--sample-ids-out {OPTIONAL: reuse/write paired canonical sample IDs} \
+  --perturb     {OPTIONAL: stage-2 families to replay, default=all; reconsideration runs live} \
+  --no-perturb  {OPTIONAL: skip stage 2 entirely, e.g. for a --simulate-only run} \
+  --perturb-k   {OPTIONAL: use up to this many stored variants per item, default=1} \
   --llamaguard  {OPTIONAL: LlamaGuard model used for harm scoring across all tasks, default=openrouter/meta-llama/llama-guard-4-12b; pass an empty string to disable it (i.e. "")} \
-  --limit       {OPTIONAL: deterministically select this many canonical IDs per task} \
-  --condition   {OPTIONAL: c0, c1, c2, c3, or c4; default is clean c0} \
-  --analyst-model {OPTIONAL: C3/C4 analyst role model; defaults to --attacker} \
-  --critic-model  {OPTIONAL: C3/C4 critic role model; defaults to the first grader} \
-  --sample-seed {OPTIONAL: deterministic sample-pairing seed, default=0} \
-  --sample-ids-out {OPTIONAL: write the selected canonical-ID map} \
-  --sample-ids-in  {OPTIONAL: reuse an exact canonical-ID map} \
-  --perturb     {OPTIONAL: explicit stage-2 families; incompatible with --simulate and C1-C4} \
-  --simulate    {OPTIONAL: stage-3 scenario simulation; incompatible with --perturb and C1-C4} \
-  --sim-k       {OPTIONAL: reframed scenarios per item under --simulate, default=1}
+  --limit       {OPTIONAL: deterministically select this many canonical sample IDs per task} \
+  --simulate    {OPTIONAL: run stage-3 scenario simulation by replaying the pregenerated reframings} \
+  --sim-k       {OPTIONAL: use up to this many stored scenarios per item under --simulate, default=1}
 ```
-If a grader model is not specified with `--grader`, a group of models is used for LLM-as-a-judge grading as specified in `GRADERS.md`.
+`--perturb` and `--simulate` compose in one run: each benchmark gets a single eval log in which the control is generated and judged once, stage 2 reports under the `lvr`/`consistency` metrics and stage 3 under `lvr_scenario`/`consistency_scenario` (the certification score is the worst condition across every enabled family). `certify.py` checks that the artifacts for the requested `--perturb`/`--simulate` families exist before spending anything, and fails fast with the exact `generate.py` command if they don't. If a grader model is not specified with `--grader`, a group of models is used for LLM-as-a-judge grading as specified in `GRADERS.md`.
+
+Agentic conditions are a separate, non-composable execution mode. Explicit `--condition c0` disables stages 2/3 and runs the untouched tasks; `--condition c1` through `c4` replaces only each task solver while retaining its native scorers. C1-C4 reject perturbation/simulation requests. Canonical-ID maps support paired comparisons, protocol-invalid agentic samples are excluded from reported aggregates, and mode-specific result keys prevent clean, replay, simulation, and agentic results from overwriting one another. See [`pipeline/agentic/README.md`](pipeline/agentic/README.md).
 
 All results are stored in `models/models.json` which will automatically be updated with new models or replace previously run models. By default, the script will skip benchmarks that have already been processed; however, you can override this with by adding `--rerun` argument to `certify.py`. All logs will be in `logs/{benchmark_name}`; these can be accessed to use unreported metrics or other metadata about the samples.
 
-Default invocation is clean C0: it runs the untouched stage-1 tasks with no perturbation or simulation. C1–C4 replace only each task solver, retain the original scorer objects/order, enforce finite code-level limits, and accept exactly one `submit(answer)` payload. See [`pipeline/agentic/README.md`](pipeline/agentic/README.md).
-
-Runs without exact canonical-ID coverage (including ordinary `--limit` smoke runs) are **not** written to `models/models.json`, though they remain available in `logs/{model_name}`. Reuse `--sample-ids-out`/`--sample-ids-in` for paired C0–C4 comparisons. Modes use non-overwriting result keys: clean C0 keeps `harm`, perturbation and simulation use `harm_perturbation` and `harm_simulation`, and C1–C4 use `harm_agentic_c1` through `harm_agentic_c4`. C1–C4 scorer outputs remain in logs, while reported aggregates exclude protocol-invalid samples and persist invalid counts.
+Runs using `--limit` are treated as smoke tests: since they only cover a deterministic subset of each benchmark, results are **not** written to `models/models.json`, though they remain available in `logs/{model_name}`.
 
 **You can also use any package manager of your choice** (i.e. anaconda); install the requirements by omitting `uv` and execute the pipeline using `python certify.py` with the appropriate arguments.
 
-To evaluate an individual C0 benchmark, use `uv run inspect eval pipeline/stage1_evaluation/evals/{file}.py@{task}`. The generic C1–C4 entry is `uv run inspect eval pipeline/agentic/eval.py@agentic` with `-T base_task=... -T condition=...`; see the agentic README for role-model arguments. Inspect CLI parameters are documented [here](https://inspect.aisi.org.uk/reference/inspect_eval.html).
+To evaluate on individual benchmarks, you can use AISI Inspect's CLI `uv run inspect eval pipeline/stage1_evaluation/evals/{file}.py@{task}`. Note that you wil have to set certain parameters, like the model to be evaluated, which can be found [here](https://inspect.aisi.org.uk/reference/inspect_eval.html).
 
 ### Repository structure
 
-The source lives in [`pipeline/`](pipeline/README.md): `stage1_evaluation/` contains the 12 plain tasks, `stage2_perturbation/` provides explicit surface perturbations, `stage3_simulation/` provides single-turn scenario simulation, and `agentic/` provides the separate C0–C4 condition layer. Agentic, perturbation, and simulation transforms cannot compose or repeat. Evaluation data lives in [`datasets/`](datasets/README.md) (`raw/` sources → `prepare/` scripts → `public/` CSVs); see [CONTRIBUTE.md](CONTRIBUTE.md) for adding a benchmark. The adversarial attack suite lives on the **`adversarial-attacks`** branch.
+The source lives in [`pipeline/`](pipeline/README.md), organized into three stages: `stage1_evaluation/` (plain benchmark evals), `stage2_perturbation/` (surface-perturbation reliability auditing, enabled via `--perturb`), and `stage3_simulation/` (single-turn scenario simulation, enabled via `--simulate`). Stages 2 and 3 replay artifacts pregenerated once by [`generate.py`](generate.py) into [`datasets/generated/`](datasets/generated/README.md), so every model is evaluated on identical variants. Evaluation data lives in [`datasets/`](datasets/README.md) (`raw/` sources → `prepare/` scripts → `public/` CSVs → `generated/` artifacts); see [CONTRIBUTE.md](CONTRIBUTE.md) for adding a new benchmark. The adversarial attack suite (jailbreaks, attack-retry solver, multi-classifier harm scoring) lives on the **`adversarial-attacks`** branch.
 
 
 ### Benchmarks

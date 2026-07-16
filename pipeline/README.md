@@ -5,23 +5,60 @@ organized by pipeline stage. To add a new benchmark, see
 **[CONTRIBUTE.md](../CONTRIBUTE.md)** at the repo root; datasets live in
 **[`datasets/`](../datasets/README.md)**.
 
+## Generate once, evaluate many
+
+The perturbed variants and reframed scenarios are **generated once**, offline, by
+[`generate.py`](../generate.py) (running an attacker/reframing model) and persisted to
+[`datasets/generated/`](../datasets/generated/README.md). `certify.py` then **replays**
+those fixed artifacts against each target model — so every evaluated model sees the
+*exact same* variants (fair, apples-to-apples) and the attacker runs once total instead
+of once per model (cheaper). The only models `certify.py` calls are the target and the
+judges.
+
+The one exception is the `reconsideration` family, which challenges the target's *own*
+control completion — it has no artifact and still runs live during the eval.
+
+```
+# once per artifact refresh:
+uv run python generate.py [--attacker MODEL] [--perturb …] [--simulate] [--only …]
+# then per candidate model (cheap, no attacker calls):
+uv run python certify.py -m <target> [--perturb …] [--simulate] [--only …]
+```
+
+`--perturb` and `--simulate` compose in `certify.py` exactly as they do in
+`generate.py`: one task run and **one eval log per benchmark**, in which the
+control (bald query) is generated and judged once and both stages' conditions
+are scored. The two stages stay legible inside that log via separate metric
+pools — `lvr`/`consistency` for the stage-2 families, `lvr_scenario`/
+`consistency_scenario` for stage 3 — and land in separate `models.json`
+sections (`perturbations` / `simulations`). The certification score is the
+worst condition across every enabled family. Use `--no-perturb` for a
+simulation-only run (stage 2 is on by default).
+
+`certify.py` validates the artifacts before any eval starts and fails fast with the
+exact `generate.py` command if any are missing (`pipeline/artifacts.py::validate_artifacts`).
+
 ## Stages
 
 | Directory | Stage | Contents |
 |---|---|---|
 | `stage1_evaluation/` | 1 — plain evals | `evals/` has one file per benchmark: a `csv_dataset` + `@task` definition(s), with shared CSV→`Sample`/scorer-assembly helpers in `evals/common.py`. `scorers/harm.py` holds the reusable harm classifiers (LLM judge, LlamaGuard). |
-| `stage2_perturbation/` | 2 — perturbation auditing | Surface-perturbation reliability auditing: solvers that generate perturbed variants (paraphrase, register, identity_strip, framing, reconsideration), per-benchmark adapters, and the scoring wrappers that report consistency/LVR (legal violation rate). Layered onto stage-1 tasks by `registry.py::apply_perturbations` (`--perturb`). |
-| `stage3_simulation/` | 3 — scenario simulation | Single-turn scenario reframing: a `simulate` solver reframes each benchmark item into a realistic deployment scenario and re-runs the target. Layered onto direct stage-1 tasks by `registry.py::apply_simulation` (`--simulate`); reuses stage 2's scoring spine. |
-| `agentic/` | Separate C0–C4 condition layer | Typed finite protocol config, isolated analyst/critic roles, exact-submit solvers, sanitized process audits, field-preserving task construction, and the direct `eval.py@agentic` entry. C0 is untouched; C1–C4 replace only the solver and preserve original scorer objects/order. |
+| `stage2_perturbation/` | 2 — perturbation auditing | Surface-perturbation reliability auditing: one solver per family — replaying pregenerated perturbed variants (paraphrase, register, identity_strip, framing) plus the live `reconsideration` family — with the per-benchmark adapters, framing templates, and rewrite prompts. Layered onto stage-1 tasks by `registry.py::apply_stages` (`--perturb`); reports consistency/LVR (legal violation rate) via the shared scoring spine in `utils/scoring.py`. |
+| `stage3_simulation/` | 3 — scenario simulation | Single-turn scenario reframing: the `scenario` solver replays pregenerated deployment-scenario reframings (system prompt + context + the request as a natural user message), plus the reframing prompt/parsing (`prompts.py`). Layered onto stage-1 tasks by `registry.py::apply_stages` (`--simulate`, composable with `--perturb`); reports the scenario harm rate (`lvr_scenario`) and stability (`consistency_scenario`) vs. the bald-query baseline (`lvr_control`) via the same shared scoring spine. |
+| `agentic/` | Separate C0-C4 conditions | Finite protocol configuration, isolated analyst/critic roles, exact-submit solvers, process audits, and the direct `eval.py@agentic` entry. C1-C4 replace only the stage-1 solver and retain native scorers. |
 
 ## Shared
 
 | File | Contents |
 |---|---|
-| `registry.py` | The 12-task master registry; C0–C4 construction with non-overwriting `_agentic_cN` keys; deterministic canonical-ID pairing and exact coverage checks; stage-2/stage-3 condition construction. |
-| `utils/graders.py` | Grader/model loading (`GRADERS.md`, `models/models.json`) and score/condition aggregation. |
-| `utils/errors.py` | Safe exception rendering for persisted/logged summaries. |
-| `utils/task_transforms.py` | Canonical task identity plus agentic/perturbation/simulation markers and composition guards. |
+| `generation.py` | Offline generators (the attacker-model half of stages 2/3): `generate_rewrites`, `generate_framing`, `generate_scenarios`, and `SampleView` (renders per-benchmark prompts offline via the stage-2 adapters). Driven by `generate.py`. |
+| `artifacts.py` | The `datasets/generated/` store: `write_family`/`load_family`, prompt-version tracking, and `validate_artifacts` (certify.py's fail-fast pre-run check). |
+| `registry.py` | `init_benchmarks()` — the master list mapping benchmark keys to their `@task`s; `apply_stages()` layers the stage-2 perturbation families and/or stage-3 scenario simulation on top in a single pass (its `_build_task` assembles each Task's solver chain from the stages' family solvers). `PREGENERATED_FAMILIES` names the families with artifacts. |
+| `agentic/` | C0-C4 task adaptation, protocol solvers, sanitized audits, and condition-specific Inspect entry points. |
+| `utils/task_transforms.py` | Canonical task identity and shared transform markers used to reject agentic/stage composition. |
+| `utils/scoring.py` | The condition-family scoring spine both stages share: `scoring_step`/`wrap_scorers`, the `lvr*`/`consistency*` metric pools, and scorer polarity (`SCORER_POLARITY`, `badness`/`is_failing`). |
+| `utils/replay.py` | The shared replay machinery behind both stages' solvers: `replay` (run the target on stored artifact rows, cache-off, on scratch state copies), `generate_variant` retries, `truncated`. |
+| `utils/graders.py` | Grader/model loading (`GRADERS.md`, `models/models.json`) and score aggregation (`aggregate_score`, `consistency_rate`). |
 | `utils/text.py` | Shared text heuristics (refusal detection). |
 
 The adversarial attack suite (jailbreak attacks, attack-retry solver,
@@ -31,18 +68,25 @@ multi-classifier harm scoring) lives on the **`adversarial-attacks`** branch.
 
 `datasets/raw/<source>/` → `datasets/prepare/prepare_*.py` →
 `datasets/public/*.csv` → `pipeline/stage1_evaluation/evals/*.py` (`@task`) →
-`pipeline/registry.py` (`init_benchmarks`, optionally one of C1–C4,
-perturbation, or simulation) → `certify.py` → `models/models.json`.
+`pipeline/registry.py` (`init_benchmarks`) → `certify.py` → `models/models.json`.
 
-## Condition boundaries
+For stages 2/3 the perturbed prompts branch off once, offline:
+`datasets/public/*.csv` → `generate.py` (attacker/reframing model) →
+`datasets/generated/<task>/<family>.jsonl` → replayed by `certify.py` against
+every target model.
 
-With no condition flags, `certify.py` runs clean C0. `--perturb` and
-`--simulate` are separate C0 layers. C1–C4 are selected with `--condition` and
-use the 12 standard tasks only. Agentic, perturbation, and simulation builders
-mark transformed tasks and reject every cross-layer order and repeated
-application through both registry and direct APIs.
+> **Semantic note.** Because variants are now fixed across runs, the consistency/LVR
+> metrics isolate *target* variance: every model (and every epoch) is judged on the
+> identical set of perturbed prompts, so differences reflect the models, not the luck
+> of the attacker's draw.
 
-C1–C4 expose no external tools. Their internal analyst, critic, consultation,
-and submit actions are protocol controls. Raw Inspect logs contain sensitive
-full interactions; persisted agentic audits contain sanitized structure and
-usage/cost summaries only. See [`agentic/README.md`](agentic/README.md).
+
+## Agentic conditions
+
+Omitting `--condition` preserves the stage-2 default described above. Explicit
+`--condition c0` is the clean control; `--condition c1` through `c4` selects
+the agentic protocol and rejects stage-2/stage-3 requests. Agentic tasks and
+replay-composed tasks are rejected at the shared registry boundaries in either
+composition order. Paired canonical sample IDs and valid-process-only agentic
+aggregation are recorded by `certify.py`; details are in
+[`agentic/README.md`](agentic/README.md).

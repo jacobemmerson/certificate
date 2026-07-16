@@ -1,4 +1,4 @@
-"""Certificate benchmark registry and deterministic condition construction."""
+"""Certificate benchmark registry and condition construction."""
 
 from __future__ import annotations
 
@@ -6,10 +6,15 @@ from copy import copy
 from hashlib import sha256
 import random
 
-from inspect_ai import task_with
+from inspect_ai import Task, task_with
 
 from pipeline.agentic.build import make_agentic_task, with_role_models
 from pipeline.agentic.config import AgenticConfig, Condition
+from pipeline.artifacts import (
+    framing_applies,
+    load_family,
+    task_name as artifact_task_name,
+)
 from pipeline.stage1_evaluation.evals.democratic_authoritarian_bias import (
     fscale,
     leader_favorability,
@@ -28,10 +33,18 @@ from pipeline.stage1_evaluation.evals.preserving_historical_truth import (
     history_no_push,
 )
 from pipeline.stage1_evaluation.evals.socialharmbench import social_harm_bench
-from pipeline.stage2_perturbation.build import build_perturbed_task
-from pipeline.stage3_simulation.build import build_simulation_task
+from pipeline.stage2_perturbation.solvers import (
+    REPLAY_SOLVERS,
+    framing,
+    reconsideration,
+)
+from pipeline.stage3_simulation.solvers import scenario
+from pipeline.utils.replay import truncated
+from pipeline.utils.scoring import SCENARIO, scoring_step, wrap_scorers
 from pipeline.utils.task_transforms import (
     AGENTIC_METADATA_KEY,
+    PERTURBATION_METADATA_KEY,
+    SIMULATION_METADATA_KEY,
     TaskTransform,
     task_name,
     validate_transform_base,
@@ -44,6 +57,11 @@ ALL_PERTURB_FAMILIES = {
     "framing",
     "reconsideration",
 }
+
+# The families generate.py pregenerates to datasets/generated/ and certify.py
+# replays. reconsideration is the one live-only family: it challenges the
+# target's own control completion, so it cannot exist before the eval runs.
+PREGENERATED_FAMILIES = ALL_PERTURB_FAMILIES - {"reconsideration"}
 AGENTIC_BENCHMARK_SUFFIX = "_agentic_"
 
 
@@ -51,7 +69,7 @@ def init_benchmarks(
     grader,
     llamaguard_model: str = "openrouter/meta-llama/llama-guard-4-12b",
 ):
-    """Create fresh Task instances for the 12 standard Certificate tasks."""
+    """Create fresh Task instances for the standard Certificate benchmarks."""
     return {
         "auth": {
             "tasks": [
@@ -89,7 +107,7 @@ def init_benchmarks(
 
 
 def condition_benchmark_key(base_key: str, condition: Condition | str) -> str:
-    """Return the non-overwriting result key for a benchmark condition."""
+    """Return the non-overwriting result key for an agentic condition."""
     condition = Condition(condition)
     if condition is Condition.C0:
         return base_key
@@ -103,10 +121,10 @@ def apply_condition(
     analyst_model: str | None = None,
     critic_model: str | None = None,
 ) -> dict:
-    """Wrap fresh benchmark tasks for one controlled condition.
+    """Wrap fresh stage-1 tasks for one controlled C0-C4 condition.
 
-    C0 returns the supplied registry object untouched. C1-C4 first validate
-    every task, then add configured model roles and replace only each solver.
+    C0 is an identity operation. C1-C4 reject tasks already transformed by
+    stage 2/3 or by another agentic condition before constructing any output.
     """
     if config.condition is Condition.C0:
         return benchmarks
@@ -144,9 +162,7 @@ def apply_condition(
         conditioned[key] = {
             **entry,
             "tasks": wrapped_tasks,
-            "name": (
-                f"{entry['name']}{AGENTIC_BENCHMARK_SUFFIX}{config.condition.value}"
-            ),
+            "name": f"{entry['name']}{AGENTIC_BENCHMARK_SUFFIX}{config.condition.value}",
             "base_benchmark": base_key,
             "base_tasks": base_tasks,
             "condition": config.condition.value,
@@ -171,10 +187,10 @@ def init_condition_benchmarks(
     )
 
 
-def _canonical_task(task) -> str:
-    return (task.metadata or {}).get(AGENTIC_METADATA_KEY, {}).get(
-        "base_task"
-    ) or task_name(task)
+def _canonical_task(task: Task) -> str:
+    protocol = (task.metadata or {}).get(AGENTIC_METADATA_KEY) or {}
+    canonical = protocol.get("base_task") if isinstance(protocol, dict) else None
+    return canonical or task_name(task)
 
 
 def _stable_task_seed(seed: int, canonical_task: str) -> int:
@@ -191,12 +207,7 @@ def select_paired_samples(
     seed: int,
     selected_ids: dict[str, list[str | int]] | None = None,
 ) -> tuple[dict, dict[str, list[str | int]]]:
-    """Return independent filtered views and their canonical-ID map.
-
-    Selection uses one local RNG per canonical task and never mutates a source
-    dataset. A supplied map is validated and reused exactly; its seed remains
-    provenance only.
-    """
+    """Return independent filtered task views and their canonical-ID map."""
     if limit is not None and (
         isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0
     ):
@@ -317,54 +328,82 @@ def selected_ids_cover_benchmarks(
     return set(selected_ids) == expected_tasks
 
 
-def apply_perturbations(
+def _build_task(
+    base_task: Task,
+    families: list[str],
+    k: int,
+    sim_k: int | None = None,
+) -> Task:
+    """Compose upstream stage-2/stage-3 replay solvers on one base task."""
+    name = artifact_task_name(base_task)
+
+    solver_chain = [base_task.solver]
+    applied: list[str] = []
+    for family, replay_solver in REPLAY_SOLVERS.items():
+        if family in families:
+            solver_chain.append(replay_solver(truncated(load_family(name, family), k)))
+            applied.append(family)
+    if "framing" in families and framing_applies(name):
+        solver_chain.append(framing(load_family(name, "framing")))
+        applied.append("framing")
+    if "reconsideration" in families:
+        solver_chain.append(reconsideration())
+        applied.append("reconsideration")
+    if sim_k is not None:
+        solver_chain.append(scenario(truncated(load_family(name, SCENARIO), sim_k)))
+        applied.append(SCENARIO)
+
+    if not applied:
+        return base_task
+
+    solver_chain.append(scoring_step("generate", base_task.scorer))
+    solver_chain += [scoring_step(family, base_task.scorer) for family in applied]
+
+    metadata = dict(base_task.metadata or {})
+    if any(family != SCENARIO for family in applied):
+        metadata[PERTURBATION_METADATA_KEY] = {"families": list(families), "k": k}
+    if SCENARIO in applied:
+        metadata[SIMULATION_METADATA_KEY] = {"k": sim_k}
+
+    return Task(
+        dataset=base_task.dataset,
+        solver=solver_chain,
+        scorer=wrap_scorers(base_task.scorer, applied),
+        name=name,
+        metadata=metadata,
+    )
+
+
+def apply_stages(
     benchmarks: dict,
     families: list[str] | None = None,
-    rewrite_model: str = "openrouter/meta-llama/llama-3.1-8b-instruct",
-    k: int = 3,
+    k: int = 1,
+    sim_k: int | None = None,
 ):
-    """Attach explicitly requested surface perturbations to direct tasks."""
-    families = families if families is not None else sorted(ALL_PERTURB_FAMILIES)
+    """Attach upstream stage-2 replay and/or stage-3 simulation in one pass.
+
+    Agentic tasks are rejected at this shared registry boundary. Stage 2 and
+    stage 3 remain composable with each other and retain upstream solver order,
+    shared-control generation, replay, scorer wrapping, and benchmark keys.
+    """
+    families = list(families) if families is not None else []
     unknown = set(families) - ALL_PERTURB_FAMILIES
     if unknown:
         raise ValueError(f"Unknown perturbation families: {sorted(unknown)}")
-    if k <= 0:
-        raise ValueError("perturbation variants must be positive")
 
     for entry in benchmarks.values():
-        for task in entry["tasks"]:
-            validate_transform_base(task, TaskTransform.PERTURBATION)
+        for base_task in entry["tasks"]:
+            if (base_task.metadata or {}).get(AGENTIC_METADATA_KEY) is not None:
+                raise ValueError(
+                    "stages cannot wrap a task already transformed by agentic"
+                )
 
     return {
         key: {
-            **entry,
             "tasks": [
-                build_perturbed_task(task, families, rewrite_model, k)
-                for task in entry["tasks"]
+                _build_task(task, families, k, sim_k=sim_k) for task in entry["tasks"]
             ],
-        }
-        for key, entry in benchmarks.items()
-    }
-
-
-def apply_simulation(
-    benchmarks: dict,
-    sim_model: str = "openrouter/deepseek/deepseek-v4-flash",
-    k: int = 1,
-):
-    """Attach stage-3 scenario simulation to direct stage-1 tasks."""
-    if k <= 0:
-        raise ValueError("simulation variants must be positive")
-    for entry in benchmarks.values():
-        for task in entry["tasks"]:
-            validate_transform_base(task, TaskTransform.SIMULATION)
-
-    return {
-        key: {
-            **entry,
-            "tasks": [
-                build_simulation_task(task, sim_model, k) for task in entry["tasks"]
-            ],
+            "name": entry["name"],
         }
         for key, entry in benchmarks.items()
     }

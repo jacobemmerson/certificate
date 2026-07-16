@@ -7,8 +7,11 @@ from collections import Counter
 from dataclasses import asdict
 import json
 from pathlib import Path
+import sys
 
 from inspect_ai import eval
+
+from pipeline.artifacts import validate_artifacts
 
 from pipeline.agentic import (
     AUDIT_METADATA_KEY,
@@ -20,8 +23,7 @@ from pipeline.utils.task_transforms import task_name
 from pipeline.registry import (
     ALL_PERTURB_FAMILIES,
     apply_condition,
-    apply_perturbations,
-    apply_simulation,
+    apply_stages,
     condition_benchmark_key,
     init_benchmarks,
     select_paired_samples,
@@ -34,6 +36,7 @@ from pipeline.utils.graders import (
     load_graders,
     load_models_with_check,
 )
+from pipeline.utils.scoring import SCENARIO
 
 _KNOWN_BENCHMARK_KEYS = {"auth", "harm", "hist", "hr"}
 
@@ -83,7 +86,7 @@ def build_parser() -> ArgumentParser:
         "--attacker",
         "-a",
         default="openrouter/deepseek/deepseek-v4-flash",
-        help="Rewrite model for stage 2 and scenario model for stage 3.",
+        help="Default analyst role model for C3/C4 (kept as a compatibility flag).",
     )
     parser.add_argument(
         "--llamaguard",
@@ -128,22 +131,27 @@ def build_parser() -> ArgumentParser:
     parser.add_argument(
         "--condition",
         choices=[condition.value for condition in Condition],
-        default="c0",
+        default=None,
         help=(
-            "Solving condition c0..c4 (default: c0 clean direct baseline). "
-            "C1-C4 support only the 12 standard tasks."
+            "Explicit clean/agentic condition c0..c4. Omitting this flag "
+            "preserves the default stage-2 run; explicit c0 runs clean."
         ),
     )
     parser.add_argument(
         "--perturb",
         nargs="+",
-        default=None,
+        default=sorted(ALL_PERTURB_FAMILIES),
         choices=sorted(ALL_PERTURB_FAMILIES),
         metavar="FAMILY",
         help=(
-            "Explicit opt-in to surface perturbations; clean C0 applies none. "
-            "Incompatible with --simulate and C1-C4."
+            "Stage-2 families to replay (all by default when --condition is "
+            "omitted). C1-C4 reject an explicit --perturb request."
         ),
+    )
+    parser.add_argument(
+        "--no-perturb",
+        action="store_true",
+        help="Skip default stage-2 replay (for example, for simulation only).",
     )
     parser.add_argument(
         "--perturb-k",
@@ -155,9 +163,8 @@ def build_parser() -> ArgumentParser:
         "--simulate",
         action="store_true",
         help=(
-            "Run stage-3 scenario simulation on direct C0 tasks. Reuses "
-            "--attacker as the scenario-reframing model. Incompatible with "
-            "--perturb and C1-C4."
+            "Replay stage-3 scenarios. Composes with stage 2 when --condition "
+            "is omitted; C1-C4 reject this request."
         ),
     )
     parser.add_argument(
@@ -192,8 +199,8 @@ def build_parser() -> ArgumentParser:
 
 
 def build_protocol_config(args: Namespace) -> AgenticConfig:
-    """Resolve CLI budget overrides against condition defaults."""
-    config = AgenticConfig.default(args.condition)
+    """Resolve CLI budget overrides against the effective C0-C4 condition."""
+    config = AgenticConfig.default(args.condition or Condition.C0.value)
     requested = {
         budget_field: getattr(args, argument)
         for argument, budget_field in _BUDGET_ARGUMENTS.items()
@@ -203,19 +210,29 @@ def build_protocol_config(args: Namespace) -> AgenticConfig:
 
 
 def parse(argv: list[str] | None = None) -> Namespace:
-    """Parse and validate all unsupported combinations before model loading."""
+    """Parse and validate unsupported combinations before model loading."""
     parser = build_parser()
-    args = parser.parse_args(argv)
+    raw_argv = list(argv) if argv is not None else sys.argv[1:]
+    args = parser.parse_args(raw_argv)
+
+    def supplied(option: str) -> bool:
+        return any(
+            token == option or token.startswith(f"{option}=") for token in raw_argv
+        )
+
+    args.condition_explicit = supplied("--condition")
+    args.perturb_explicit = supplied("--perturb")
+    args.simulate_explicit = supplied("--simulate")
 
     unknown_only = set(args.only or []) - _KNOWN_BENCHMARK_KEYS
     if unknown_only:
         parser.error(
             "unknown --only benchmark keys: " + ", ".join(sorted(unknown_only))
         )
-    if args.condition != "c0" and (args.perturb or args.simulate):
+    if args.condition in {"c1", "c2", "c3", "c4"} and (
+        args.perturb_explicit or args.simulate_explicit
+    ):
         parser.error("C1-C4 cannot be combined with --perturb or --simulate")
-    if args.perturb and args.simulate:
-        parser.error("--perturb and --simulate cannot be combined")
     if args.limit is not None and args.limit <= 0:
         parser.error("--limit must be positive")
     if args.epochs <= 0:
@@ -229,6 +246,14 @@ def parse(argv: list[str] | None = None) -> Namespace:
     except ValueError as error:
         parser.error(str(error))
     return args
+
+
+def execution_modes(args: Namespace) -> tuple[bool, bool]:
+    """Return whether stage 2 and stage 3 execute for these parsed arguments."""
+    if args.condition is not None:
+        # Explicit c0 is the clean control; C1-C4 are agentic-only.
+        return False, False
+    return bool(args.perturb) and not args.no_perturb, bool(args.simulate)
 
 
 def _read_ids(path: Path | None) -> dict[str, list[str | int]] | None:
@@ -365,11 +390,14 @@ def _canonical_tasks(entry: dict) -> list[str]:
 def result_benchmark_key(benchmark: str, entry: dict, args: Namespace) -> str:
     """Return a mode-specific score key without changing models.json's schema."""
     base = entry.get("base_benchmark", benchmark)
-    if args.condition != Condition.C0.value:
+    if args.condition in {"c1", "c2", "c3", "c4"}:
         return condition_benchmark_key(base, args.condition)
-    if args.perturb:
+    run_perturb, run_simulate = execution_modes(args)
+    if run_perturb and run_simulate:
+        return f"{base}_perturbation_simulation"
+    if run_perturb:
         return f"{base}_perturbation"
-    if args.simulate:
+    if run_simulate:
         return f"{base}_simulation"
     return base
 
@@ -384,16 +412,18 @@ def _existing_result_keys(model_or_scores: dict) -> set[str]:
     simulations = set(model_or_scores.get("simulations", {}))
     identities: set[str] = set()
     for key in scores:
-        marked = False
-        if key in perturbations:
-            identities.add(
-                key if key.endswith("_perturbation") else f"{key}_perturbation"
-            )
-            marked = True
-        if key in simulations:
-            identities.add(key if key.endswith("_simulation") else f"{key}_simulation")
-            marked = True
-        if not marked:
+        if (
+            key.endswith(("_perturbation", "_simulation", "_perturbation_simulation"))
+            or "_agentic_" in key
+        ):
+            identities.add(key)
+        elif key in perturbations and key in simulations:
+            identities.add(f"{key}_perturbation_simulation")
+        elif key in perturbations:
+            identities.add(f"{key}_perturbation")
+        elif key in simulations:
+            identities.add(f"{key}_simulation")
+        else:
             identities.add(key)
     return identities
 
@@ -441,6 +471,7 @@ def persisted_config(
         if getattr(args, argument) is not None
     }
     effective_budget = asdict(config.budget) if config.budget is not None else None
+    run_perturb, run_simulate = execution_modes(args)
     # Defaults are also requested limits; retain the raw overrides separately
     # so a run remains reproducible without reconstructing versioned defaults.
     requested_budget = (
@@ -473,10 +504,8 @@ def persisted_config(
         "selected_sample_ids": {
             task: list(selected_ids[task]) for task in canonical_tasks
         },
-        "perturbations": list(args.perturb or []),
-        "simulation": (
-            {"model": args.attacker, "variants": args.sim_k} if args.simulate else None
-        ),
+        "perturbations": list(args.perturb or []) if run_perturb else [],
+        "simulation": {"variants": args.sim_k} if run_simulate else None,
         "process_validity": {
             "aggregate_policy": (
                 "protocol_valid_samples_only"
@@ -589,6 +618,7 @@ def main(argv: list[str] | None = None) -> None:
         grader[0] if isinstance(grader, list) else grader
     )
     config = build_protocol_config(args)
+    run_perturb, run_simulate = execution_modes(args)
     model_id = args.model.split("/")[-1]
     log_dir = f"logs/{model_id}"
 
@@ -599,10 +629,26 @@ def main(argv: list[str] | None = None) -> None:
     if config.condition is not Condition.C0:
         print(f"Roles: analyst={analyst_model}, critic={critic_model}")
 
-    benchmarks = init_benchmarks(grader, llamaguard_model=args.llamaguard)
+    source_benchmarks = init_benchmarks(grader, llamaguard_model=args.llamaguard)
+
+    models, idx = load_models_with_check(model_id)
+    if idx != -1:
+        print(f"Results Found: Model index at {idx}")
+    existing_model = models[idx] if idx != -1 else {}
+    tasks_to_skip = skip_benchmark_keys(source_benchmarks, args, existing_model)
+    if tasks_to_skip:
+        skipped_results = {
+            result_benchmark_key(benchmark, source_benchmarks[benchmark], args)
+            for benchmark in tasks_to_skip
+        }
+        print(f"Skipping: {', '.join(sorted(skipped_results))}")
+        source_benchmarks = {
+            key: entry
+            for key, entry in source_benchmarks.items()
+            if key not in tasks_to_skip
+        }
 
     supplied_ids = _read_ids(args.sample_ids_in)
-    source_benchmarks = benchmarks
     benchmarks, selected_ids = select_paired_samples(
         source_benchmarks,
         limit=args.limit,
@@ -613,6 +659,17 @@ def main(argv: list[str] | None = None) -> None:
         source_benchmarks, selected_ids
     )
 
+    # Preserve upstream fail-fast validation and replay composition. Explicit
+    # --condition c0 bypasses both stages; omitting --condition retains the
+    # upstream default of all perturbation families.
+    validate_artifacts(
+        benchmarks,
+        families=args.perturb if run_perturb else None,
+        simulate=run_simulate,
+        perturb_k=args.perturb_k,
+        sim_k=args.sim_k,
+        limit=args.limit,
+    )
     if config.condition is not Condition.C0:
         benchmarks = apply_condition(
             benchmarks,
@@ -620,27 +677,19 @@ def main(argv: list[str] | None = None) -> None:
             analyst_model=analyst_model,
             critic_model=critic_model,
         )
-    elif args.perturb:
-        benchmarks = apply_perturbations(
+    elif run_perturb or run_simulate:
+        benchmarks = apply_stages(
             benchmarks,
-            families=args.perturb,
-            rewrite_model=args.attacker,
+            families=args.perturb if run_perturb else [],
             k=args.perturb_k,
-        )
-    elif args.simulate:
-        benchmarks = apply_simulation(
-            benchmarks,
-            sim_model=args.attacker,
-            k=args.sim_k,
+            sim_k=args.sim_k if run_simulate else None,
         )
 
     ids_output = args.sample_ids_out
     if ids_output is None and (
         args.limit is not None or args.sample_ids_in is not None
     ):
-        ids_output = Path(log_dir) / (
-            f"selected_sample_ids.seed-{args.sample_seed}.json"
-        )
+        ids_output = Path(log_dir) / f"selected_sample_ids.seed-{args.sample_seed}.json"
     if ids_output is not None:
         _write_ids(ids_output, seed=args.sample_seed, selected_ids=selected_ids)
         print(f"Selected sample IDs: {ids_output}")
@@ -663,7 +712,7 @@ def main(argv: list[str] | None = None) -> None:
             retry_on_error=2,
             fail_on_error=0.1,
             epochs=args.epochs,
-            # Selection already happened through immutable filtered views.
+            # Canonical-ID selection already happened through filtered views.
             sample_shuffle=False,
             limit=None,
             max_connections=100,
@@ -697,22 +746,11 @@ def main(argv: list[str] | None = None) -> None:
                     "selected_sample_ids": {
                         task: selected_ids[task] for task in canonical_tasks
                     },
+                    "stage2_families": list(args.perturb) if run_perturb else [],
+                    "stage3_simulation": run_simulate,
                 }
             },
         )
-
-    models, idx = load_models_with_check(model_id)
-    if idx != -1:
-        print(f"Results Found: Model index at {idx}")
-
-    existing_model = models[idx] if idx != -1 else {}
-    tasks_to_skip = skip_benchmark_keys(benchmarks, args, existing_model)
-    if tasks_to_skip:
-        skipped_results = {
-            result_benchmark_key(benchmark, benchmarks[benchmark], args)
-            for benchmark in tasks_to_skip
-        }
-        print(f"Skipping: {', '.join(sorted(skipped_results))}")
 
     scores: dict = {}
     scores_meta: dict = {}
@@ -722,8 +760,6 @@ def main(argv: list[str] | None = None) -> None:
     statuses: dict = {}
 
     for benchmark, entry in benchmarks.items():
-        if benchmark in tasks_to_skip:
-            continue
         result_key = result_benchmark_key(benchmark, entry, args)
         evaluations = []
         try:
@@ -751,10 +787,14 @@ def main(argv: list[str] | None = None) -> None:
                     scores_meta[result_key] = meta
                     if average is not None:
                         scores[result_key] = average
-                    if args.perturb:
-                        perturbations[result_key] = consistency_rate(successful)
-                    if args.simulate:
-                        simulations[result_key] = consistency_rate(successful)
+                    if run_perturb:
+                        perturbations[result_key] = consistency_rate(
+                            successful, families=set(args.perturb)
+                        )
+                    if run_simulate:
+                        simulations[result_key] = consistency_rate(
+                            successful, families={SCENARIO}
+                        )
         except Exception as error:
             safe_error = _safe_exception(error)
             print(f"[ERROR] on {result_key}: {safe_error}")
@@ -782,11 +822,9 @@ def main(argv: list[str] | None = None) -> None:
                 process=process,
             )
 
-    # Persistence depends on actual canonical-ID coverage. A complete explicit
-    # map is a full run; a partial map remains log-only even when no --limit was
-    # supplied.
-    sample_limited = not complete_sample_coverage
-    if not sample_limited:
+    # Like upstream --limit runs, any run without exact canonical-ID coverage
+    # remains log-only. A reused full ID map is eligible for persistence.
+    if complete_sample_coverage:
         results = {
             "id": model_id,
             "name": args.name,
