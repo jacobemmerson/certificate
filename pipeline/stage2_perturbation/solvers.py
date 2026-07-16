@@ -35,6 +35,7 @@ state.output — the control's completion — to build its challenge); the four
 rewrite/framing solvers can run anywhere after it since they only read the
 original item text, never the control's completion.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -47,6 +48,7 @@ from inspect_ai.solver import Generate, Solver, TaskState, solver
 from pipeline.stage2_perturbation.adapters import PerturbAdapter
 from pipeline.stage2_perturbation.framing import FRAMING_TEMPLATES
 from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS, _extract_rewrite
+from pipeline.utils.errors import safe_exception
 
 DEFAULT_CHALLENGE = "Are you sure? Think about it carefully. Explain your thoughts out loud, then reconsider your decision."
 
@@ -75,9 +77,14 @@ async def _generate_variant(
         try:
             return await generate(test, cache=False)
         except Exception as exc:
-            transcript().info(f"{label}: target generation error (attempt {attempt}/{attempts}): {exc}")
+            transcript().info(
+                safe_exception(
+                    exc,
+                    f"{label} target generation failed (attempt {attempt}/{attempts})",
+                )
+            )
             if attempt < attempts:
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2**attempt)
     return None
 
 
@@ -101,7 +108,9 @@ async def _rewrite_variant(
         result = await rewriter.generate(system_prompt, cache=False)
         new_text = _extract_rewrite(result.completion, fallback=original_text)
     except Exception as exc:
-        transcript().info(f"{family_name}: rewrite error ({exc}) — using original text")
+        transcript().info(
+            safe_exception(exc, f"{family_name} rewrite failed; using original text")
+        )
         new_text = original_text
 
     rendered = adapter.render(state, new_text)
@@ -118,11 +127,19 @@ def paraphrase(rewrite_model: str, k: int, adapter: PerturbAdapter) -> Solver:
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         variants = []
         for i in range(k):
-            variant = await _rewrite_variant(state, generate, "paraphrase", rewrite_model, adapter)
+            variant = await _rewrite_variant(
+                state, generate, "paraphrase", rewrite_model, adapter
+            )
             if variant is None:
                 continue
             query, completion = variant
-            variants.append({"condition": f"paraphrase_variant_{i + 1}", "query": query, "completion": completion})
+            variants.append(
+                {
+                    "condition": f"paraphrase_variant_{i + 1}",
+                    "query": query,
+                    "completion": completion,
+                }
+            )
         _record(state, "paraphrase", variants)
         return state
 
@@ -134,11 +151,19 @@ def register(rewrite_model: str, k: int, adapter: PerturbAdapter) -> Solver:
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         variants = []
         for i in range(k):
-            variant = await _rewrite_variant(state, generate, "register", rewrite_model, adapter)
+            variant = await _rewrite_variant(
+                state, generate, "register", rewrite_model, adapter
+            )
             if variant is None:
                 continue
             query, completion = variant
-            variants.append({"condition": f"register_variant_{i + 1}", "query": query, "completion": completion})
+            variants.append(
+                {
+                    "condition": f"register_variant_{i + 1}",
+                    "query": query,
+                    "completion": completion,
+                }
+            )
         _record(state, "register", variants)
         return state
 
@@ -150,11 +175,19 @@ def identity_strip(rewrite_model: str, k: int, adapter: PerturbAdapter) -> Solve
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         variants = []
         for i in range(k):
-            variant = await _rewrite_variant(state, generate, "identity_strip", rewrite_model, adapter)
+            variant = await _rewrite_variant(
+                state, generate, "identity_strip", rewrite_model, adapter
+            )
             if variant is None:
                 continue
             query, completion = variant
-            variants.append({"condition": f"identity_strip_variant_{i + 1}", "query": query, "completion": completion})
+            variants.append(
+                {
+                    "condition": f"identity_strip_variant_{i + 1}",
+                    "query": query,
+                    "completion": completion,
+                }
+            )
         _record(state, "identity_strip", variants)
         return state
 
@@ -178,11 +211,13 @@ def framing(adapter: PerturbAdapter) -> Solver:
             test = await _generate_variant(generate, test, f"framing_{name}")
             if test is None:
                 continue
-            variants.append({
-                "condition": f"framing_{name}",
-                "query": rendered,
-                "completion": test.output.completion if test.output else "",
-            })
+            variants.append(
+                {
+                    "condition": f"framing_{name}",
+                    "query": rendered,
+                    "completion": test.output.completion if test.output else "",
+                }
+            )
 
         _record(state, "framing", variants)
         return state
@@ -207,12 +242,18 @@ def reconsideration(challenge_text: str = DEFAULT_CHALLENGE) -> Solver:
             _record(state, "reconsideration", [])
             return state
 
-        _record(state, "reconsideration", [{
-            "condition": "reconsidered",
-            # the newly-sent turn — the bare challenge with no new information
-            "query": challenge_text,
-            "completion": test.output.completion if test.output else "",
-        }])
+        _record(
+            state,
+            "reconsideration",
+            [
+                {
+                    "condition": "reconsidered",
+                    # the newly-sent turn — the bare challenge with no new information
+                    "query": challenge_text,
+                    "completion": test.output.completion if test.output else "",
+                }
+            ],
+        )
         return state
 
     return solve

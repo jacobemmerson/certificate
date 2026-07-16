@@ -1,17 +1,22 @@
-'''
+"""
 author: @tae
 
 Utilities for grader and model loading
 TODO: rename file to something more fitting since this is general utilties
-'''
+"""
 
-from inspect_ai.log import EvalLog
-from pathlib import Path
 import json
+from pathlib import Path
+
+from inspect_ai._util.registry import registry_create
+from inspect_ai.log import EvalLog
+from inspect_ai.scorer import SampleScore
 
 from pipeline.stage2_perturbation.scoring import is_failing
+from pipeline.utils.task_transforms import AGENTIC_METADATA_KEY
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
 
 def load_graders(path: str | Path | None = None) -> list[str]:
     """Load grader model names from a text file (one per line, # comments ignored)."""
@@ -29,74 +34,102 @@ def load_graders(path: str | Path | None = None) -> list[str]:
         raise ValueError(f"No grader models found in {path}")
     return models
 
+
 def load_models_with_check(model_id: str | None = None) -> tuple[list[dict], int]:
-    '''
+    """
     Return the models list and the index of `model_id` within it (-1 if not
     found, or if no model_id is given).
-    '''
+    """
     path = REPO_ROOT / "models" / "models.json"
     if not path.exists():
         raise FileNotFoundError(f"Model results file not found: {path}")
 
     try:
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             models = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         models = []
 
     if model_id:
         for i, m in enumerate(models):
-            if m['id'] == model_id:
+            if m["id"] == model_id:
                 return models, i
 
     return models, -1
 
 
-def aggregate_score(task_results: list[EvalLog]) -> tuple[float, dict]:
+def _canonical_task_name(task: EvalLog) -> str:
+    """Resolve transformed task names back to their benchmark identity."""
+    metadata = getattr(task.eval, "metadata", None) or {}
+    protocol = metadata.get(AGENTIC_METADATA_KEY) or {}
+    base_task = protocol.get("base_task") if isinstance(protocol, dict) else None
+    return (
+        base_task if isinstance(base_task, str) and base_task else str(task.eval.task)
+    )
 
-    scores = {
-        'reported': -1,
-        'by_task': {}
-    }
-    avg_score = [] # average score TODO: allow for weighted averages
+
+def _valid_process_metric(task: EvalLog, result_score) -> float | None:
+    """Recompute the primary metric using only protocol-valid samples."""
+    valid_scores: list[SampleScore] = []
+    samples = getattr(task, "samples", None) or []
+    for sample in samples:
+        audit = (getattr(sample, "metadata", None) or {}).get("agentic_protocol_audit")
+        if not isinstance(audit, dict) or audit.get("valid") is not True:
+            continue
+        sample_score = (getattr(sample, "scores", None) or {}).get(result_score.name)
+        if sample_score is None:
+            continue
+        valid_scores.append(
+            SampleScore(
+                score=sample_score,
+                sample_id=getattr(sample, "id", None),
+                sample_metadata=getattr(sample, "metadata", None),
+                scorer=result_score.scorer,
+            )
+        )
+
+    if not valid_scores:
+        return None
+    metric_record = next(iter(result_score.metrics.values()))
+    metric = registry_create("metric", metric_record.name, **metric_record.params)
+    return float(metric(valid_scores))
+
+
+def aggregate_score(
+    task_results: list[EvalLog],
+    *,
+    valid_process_only: bool = False,
+) -> tuple[float | None, dict[str, float | None]]:
+    """Aggregate primary metrics, optionally excluding protocol-invalid samples."""
+    by_task: dict[str, float | None] = {}
+    average_values: list[float] = []
     for task in task_results:
-
-        score = task.results.scores[0] # primary metric must go first, TODO: Add support for multiple scores / score selection / score reducers
-
+        canonical_task = _canonical_task_name(task)
         try:
-            value = next(iter(score.metrics.values())) # assumes first metric is the primary/reported metric. Other metrics reported in logs and be accessed at a later date.
-            '''
-            if 'custom' in score.metrics:
-                value = score.metrics['custom'] # for custom metrics, like the democratic authoritarian bias score
+            result_score = task.results.scores[0]
+            if valid_process_only:
+                value = _valid_process_metric(task, result_score)
+            else:
+                metric_record = next(iter(result_score.metrics.values()))
+                value = float(metric_record.value)
 
-            elif 'accuracy' in score.metrics:
-                value = score.metrics['accuracy'] 
+            # SocialHarmBench accuracy is a fraction; all reports use 0-100.
+            if value is not None and canonical_task == "social_harm_bench":
+                value *= 100
+            if value is not None:
+                average_values.append(value)
+        except Exception as error:
+            print(f"[ERROR] occurred on benchmark for task: {task}: {error}")
+            value = None
 
-            elif 'mean' in score.metrics:
-                value = score.metrics['mean']
-            '''
-            
-            value = value.value
+        by_task[canonical_task] = value
 
-            # accuracy() returns fraction correct (safe); scale to 0-100
-            if str(task.eval.task) == 'social_harm_bench':
-                value = value * 100
-
-            avg_score.append(value) # only keep valid values for the average
-
-        except Exception as e:
-            print(f"[ERROR] occured on benchmark for task: {task}: {e}")
-            value = -1
-
-        scores['by_task'][task.eval.task] = value
-
-    scores['reported']= sum(avg_score) / len(avg_score)
-
-    return scores['reported'], scores['by_task']
+    reported = sum(average_values) / len(average_values) if average_values else None
+    return reported, by_task
 
 
 def consistency_rate(task_results: list[EvalLog]) -> dict[str, dict]:
-    '''
+    """
     Per-family consistency rate and LVR for a perturbation-auditing run.
 
     pipeline/stage2_perturbation/scoring.py::wrap_scorers builds one Score entry per base
@@ -116,10 +149,12 @@ def consistency_rate(task_results: list[EvalLog]) -> dict[str, dict]:
       scorer. The log's own results panel only carries the pooled
       `lvr_control`/`lvr`/`consistency` metrics (kept compact on purpose) —
       this is where the full per-family detail is preserved.
-    '''
+    """
 
     def _tally(counters: dict, family: str, failing: bool, stable) -> None:
-        c = counters.setdefault(family, {"total": 0, "harmful": 0, "stable_total": 0, "stable": 0})
+        c = counters.setdefault(
+            family, {"total": 0, "harmful": 0, "stable_total": 0, "stable": 0}
+        )
         c["total"] += 1
         c["harmful"] += failing
         if family != "control":
@@ -143,7 +178,7 @@ def consistency_rate(task_results: list[EvalLog]) -> dict[str, dict]:
     per_task_scorer: dict = {}
 
     for task in task_results:
-        for s in (task.samples or []):
+        for s in task.samples or []:
             if not s.scores:
                 continue
             for scorer_name, score in s.scores.items():
@@ -156,14 +191,21 @@ def consistency_rate(task_results: list[EvalLog]) -> dict[str, dict]:
                     stable = condition.get("stable")
                     _tally(overall, family, failing, stable)
                     _tally(
-                        per_task_scorer.setdefault(task.eval.task, {}).setdefault(scorer_name, {}),
-                        family, failing, stable,
+                        per_task_scorer.setdefault(task.eval.task, {}).setdefault(
+                            scorer_name, {}
+                        ),
+                        family,
+                        failing,
+                        stable,
                     )
 
     return {
         **_rates(overall),
         "by_task": {
-            task_name: {scorer_name: _rates(counters) for scorer_name, counters in scorers.items()}
+            task_name: {
+                scorer_name: _rates(counters)
+                for scorer_name, counters in scorers.items()
+            }
             for task_name, scorers in per_task_scorer.items()
         },
     }

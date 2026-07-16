@@ -20,6 +20,7 @@ bald query) stays exactly what `generate()` alone produced, and `simulate` only
 adds metadata. Reframing or target-generation failures drop just that variant
 (never fail the sample), mirroring stage 2.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -31,6 +32,7 @@ from inspect_ai.solver import Generate, Solver, TaskState, solver
 
 from pipeline.stage2_perturbation.adapters import PerturbAdapter
 from pipeline.stage3_simulation.prompts import parse_reframing, reframe_prompt
+from pipeline.utils.errors import safe_exception
 
 SCENARIO_FAMILY = "scenario"
 
@@ -57,9 +59,14 @@ async def _generate_variant(
         try:
             return await generate(test, cache=False)
         except Exception as exc:  # noqa: BLE001
-            transcript().info(f"{label}: target generation error (attempt {attempt}/{attempts}): {exc}")
+            transcript().info(
+                safe_exception(
+                    exc,
+                    f"{label} target generation failed (attempt {attempt}/{attempts})",
+                )
+            )
             if attempt < attempts:
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2**attempt)
     return None
 
 
@@ -80,10 +87,14 @@ async def _scenario_variant(
         result = await reframer.generate(reframe_prompt(item_text), cache=False)
         block = parse_reframing(result.completion)
     except Exception as exc:  # noqa: BLE001
-        transcript().info(f"{SCENARIO_FAMILY}: reframing error ({exc}) — skipping variant")
+        transcript().info(
+            safe_exception(exc, f"{SCENARIO_FAMILY} reframing failed; skipping variant")
+        )
         return None
     if block is None:
-        transcript().info(f"{SCENARIO_FAMILY}: reframing unparseable — skipping variant")
+        transcript().info(
+            f"{SCENARIO_FAMILY}: reframing unparseable — skipping variant"
+        )
         return None
 
     user_content = f"{block['context']}\n\n{block['scenario']}"
@@ -115,7 +126,9 @@ def simulate(sim_model: str, k: int, adapter: PerturbAdapter) -> Solver:
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         variants = []
         for i in range(k):
-            variant = await _scenario_variant(state, generate, sim_model, adapter, i + 1)
+            variant = await _scenario_variant(
+                state, generate, sim_model, adapter, i + 1
+            )
             if variant is not None:
                 variants.append(variant)
         _record(state, variants)

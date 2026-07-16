@@ -1,4 +1,4 @@
-'''
+"""
 author: @tae
 
 LLM Human Rights (LHR) benchmark — AISI Inspect implementation.
@@ -36,7 +36,7 @@ Run all six tasks:
 
 Run a single task with sampling for a quick smoke-test:
   inspect eval pipeline/stage1_evaluation/evals/llm_human_rights.py@udhr --model openai/gpt-4o --limit 5
-'''
+"""
 
 import json
 import re
@@ -104,6 +104,7 @@ CLASSIFICATION_TO_SCORE_MAP = {
 
 _VALID_CLASSIFICATIONS = set(CLASSIFICATION_TO_SCORE_MAP) - {"unknown"}
 
+
 def _parse_judge_json(text: str) -> dict | None:
     """Extract the first JSON object from the judge's response."""
     match = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL | re.IGNORECASE)
@@ -135,10 +136,12 @@ def _to_sample(row: dict, rights: str, persona: str) -> Sample:
         },
     )
 
+
 @scorer(metrics=[mean(), stderr()])
 def human_rights_scorer(judge_model: str | list[str] = "openai/gpt-4o"):
 
-    rescale = lambda x: (x - 5) * -25 # inverts and rescales from 1-5 -> 0-100
+    def rescale(x):
+        return (x - 5) * -25  # inverts and rescales from 1-5 -> 0-100
 
     def get_scorer(m: str):
         async def score(state, target):
@@ -175,11 +178,13 @@ def human_rights_scorer(judge_model: str | list[str] = "openai/gpt-4o"):
                 answer=classification,
                 explanation=parsed.get("reasoning", ""),
             )
+
         return score
 
     if isinstance(judge_model, list):
         return multi_scorer([get_scorer(m) for m in judge_model], mean_score())
     return get_scorer(judge_model)
+
 
 def _make_task(
     rights: str,
@@ -192,18 +197,23 @@ def _make_task(
     def to_sample(row: dict) -> Sample:
         return _to_sample(row, rights=rights, persona=persona)
 
-    solver = []
-    if system_prompt:
-        solver.append(system_message(system_prompt))
-    solver.append(generate())
+    # Persona insertion is non-generating setup. This is behavior-equivalent
+    # for direct C0 runs, while ensuring replacement C1-C4 solvers receive the
+    # same public system context before constructing their projections.
+    setup = system_message(system_prompt) if system_prompt else None
 
     return Task(
         dataset=csv_samples(f"lhr_{rights}.csv", to_sample=to_sample),
-        solver=solver,
-        scorer=with_llamaguard(human_rights_scorer(judge_model=grader), llamaguard_model),
+        setup=setup,
+        solver=generate(),
+        scorer=with_llamaguard(
+            human_rights_scorer(judge_model=grader), llamaguard_model
+        ),
     )
 
+
 # ----- Tasks -----
+
 
 @task
 def udhr(
@@ -227,7 +237,9 @@ def udhr_individual(
     UDHR scenarios with individual-rights system prompt.
     Tests whether rights-defender framing reduces endorsement of limitations.
     """
-    return _make_task("udhr", "individual-rights", grader=grader, llamaguard_model=llamaguard_model)
+    return _make_task(
+        "udhr", "individual-rights", grader=grader, llamaguard_model=llamaguard_model
+    )
 
 
 @task
@@ -239,7 +251,9 @@ def udhr_government(
     UDHR scenarios with government-power system prompt.
     Tests whether authority-defender framing increases endorsement of limitations.
     """
-    return _make_task("udhr", "government-power", grader=grader, llamaguard_model=llamaguard_model)
+    return _make_task(
+        "udhr", "government-power", grader=grader, llamaguard_model=llamaguard_model
+    )
 
 
 @task
@@ -262,7 +276,9 @@ def echr_individual(
     """
     ECHR scenarios with individual-rights system prompt.
     """
-    return _make_task("echr", "individual-rights", grader=grader, llamaguard_model=llamaguard_model)
+    return _make_task(
+        "echr", "individual-rights", grader=grader, llamaguard_model=llamaguard_model
+    )
 
 
 @task
@@ -273,4 +289,6 @@ def echr_government(
     """
     ECHR scenarios with government-power system prompt.
     """
-    return _make_task("echr", "government-power", grader=grader, llamaguard_model=llamaguard_model)
+    return _make_task(
+        "echr", "government-power", grader=grader, llamaguard_model=llamaguard_model
+    )

@@ -18,19 +18,20 @@ solvers' naming.
 
 The Task's registered scorer list stays one entry per base judge
 (pipeline/stage2_perturbation/scoring.py::wrap_scorers): a thin wrapper, named the same as
-the base scorer, that reports the control condition's own judgment (so the
-benchmark's certification score keeps meaning exactly what it means without
---perturb) plus the per-condition breakdown in its metadata.
+the base scorer, that reports the polarity-aware worst condition judgment plus the
+per-condition breakdown in its metadata.
 
 This produces one Task per benchmark, not a separate one — the caller
 (pipeline/registry.py::apply_perturbations) keeps the exact same benchmark
 name/log path as the unperturbed run, so no separate "_perturb" Task or log
 is created.
 """
+
 from __future__ import annotations
 
-from inspect_ai import Task
-from inspect_ai._util.registry import registry_info
+from copy import copy
+
+from inspect_ai import Task, task_with
 
 from pipeline.stage2_perturbation.adapters import PerturbAdapter, get_adapter
 from pipeline.stage2_perturbation.framing import FRAMING_TEMPLATES
@@ -42,11 +43,12 @@ from pipeline.stage2_perturbation.solvers import (
     reconsideration,
     register,
 )
-
-
-def task_name(base_task: Task) -> str:
-    """Recover the original @task function's registry name (e.g. "fscale")."""
-    return registry_info(base_task).name
+from pipeline.utils.task_transforms import (
+    PERTURBATION_METADATA_KEY,
+    TaskTransform,
+    task_name,
+    validate_transform_base,
+)
 
 
 def adapter_for(base_task: Task) -> PerturbAdapter:
@@ -66,8 +68,11 @@ def build_perturbed_task(
     "framing" was requested against a benchmark whose elicitation_family has
     no registered framing templates).
     """
+    validate_transform_base(base_task, TaskTransform.PERTURBATION)
     adapter = adapter_for(base_task)
-    has_framing = "framing" in families and bool(FRAMING_TEMPLATES.get(adapter.elicitation_family))
+    has_framing = "framing" in families and bool(
+        FRAMING_TEMPLATES.get(adapter.elicitation_family)
+    )
 
     solver_chain = [base_task.solver]
     applied: list[str] = []
@@ -93,9 +98,15 @@ def build_perturbed_task(
     solver_chain.append(scoring_step("generate", base_task.scorer))
     solver_chain += [scoring_step(family, base_task.scorer) for family in applied]
 
-    return Task(
-        dataset=base_task.dataset,
+    metadata = dict(base_task.metadata or {})
+    metadata[PERTURBATION_METADATA_KEY] = {
+        "families": list(applied),
+        "variants_per_family": k,
+    }
+    return task_with(
+        copy(base_task),
         solver=solver_chain,
         scorer=wrap_scorers(base_task.scorer),
+        metadata=metadata,
         name=task_name(base_task),
     )
