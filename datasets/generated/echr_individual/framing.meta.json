@@ -1,0 +1,13 @@
+{
+  "task": "echr_individual",
+  "family": "framing",
+  "generator_model": null,
+  "prompt_version": "1",
+  "k": 1,
+  "created_at": "2026-07-16T04:43:56+00:00",
+  "git_commit": "039f8ad",
+  "num_samples": 102,
+  "num_variants": 306,
+  "incomplete_ids": [],
+  "partial": false
+}
