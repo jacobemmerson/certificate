@@ -28,7 +28,11 @@ set -euo pipefail
 # repo — so navigate from the submit directory (submit from the repo root).
 cd "$SLURM_SUBMIT_DIR"
 
-# Adjust to your cluster's convention (module load cuda/12.4, conda, etc.).
+# flashinfer JIT-compiles its sampling kernels on first use and needs
+# nvcc/CUDA_HOME on the compute node — without this the workers die with
+# "Could not find nvcc and default cuda_home='/usr/local/cuda' doesn't exist".
+module load cuda/12.6
+
 # Caches belong on scratch, not $HOME: HF weights are ~140 GB and uvx
 # materializes vllm's own env (torch etc., several GB) under UV_CACHE_DIR.
 export HF_HOME="$HOME/scratch/hf_cache"

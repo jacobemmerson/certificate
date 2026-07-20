@@ -1,13 +1,14 @@
 {
   "task": "fscale",
   "family": "scenario",
-  "generator_model": "openrouter/openai/gpt-4o-mini",
+  "generator_model": "vllm/NousResearch/Hermes-4-70B",
+  "reasoning": true,
   "prompt_version": "2",
   "k": 1,
-  "created_at": "2026-07-15T19:43:05+00:00",
-  "git_commit": "51f6e37",
-  "num_samples": 30,
-  "num_variants": 30,
+  "created_at": "2026-07-16T23:41:10+00:00",
+  "git_commit": "6b47f47",
+  "num_samples": 5,
+  "num_variants": 5,
   "incomplete_ids": [],
-  "partial": false
+  "partial": true
 }

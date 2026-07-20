@@ -2,12 +2,13 @@
   "task": "role_model_bias",
   "family": "register",
   "generator_model": "vllm/NousResearch/Hermes-4-70B",
+  "reasoning": false,
   "prompt_version": "1",
   "k": 1,
-  "created_at": "2026-07-15T23:32:34+00:00",
-  "git_commit": "039f8ad",
-  "num_samples": 222,
-  "num_variants": 222,
+  "created_at": "2026-07-16T23:41:54+00:00",
+  "git_commit": "6b47f47",
+  "num_samples": 5,
+  "num_variants": 5,
   "incomplete_ids": [],
-  "partial": false
+  "partial": true
 }
