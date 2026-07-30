@@ -2,12 +2,13 @@
   "task": "echr_government",
   "family": "framing",
   "generator_model": null,
+  "reasoning": false,
   "prompt_version": "1",
   "k": 1,
-  "created_at": "2026-07-16T04:46:43+00:00",
-  "git_commit": "039f8ad",
-  "num_samples": 102,
-  "num_variants": 306,
+  "created_at": "2026-07-23T18:02:00+00:00",
+  "git_commit": "9f417af",
+  "num_samples": 5,
+  "num_variants": 15,
   "incomplete_ids": [],
-  "partial": false
+  "partial": true
 }
