@@ -34,7 +34,7 @@ same scenarios and no reframing model is called during certification.
 Stage 3 records its scenario condition into the same `state.metadata["perturbations"]`
 shape stage 2 uses (family label `"scenario"`) and **reuses stage 2's scoring/reporting
 spine unchanged** (`pipeline/utils/scoring.py::scoring_step`/`wrap_scorers`,
-`utils/graders.py::consistency_rate`) and its per-benchmark adapters
+`utils/graders.py::condition_metrics`) and its per-benchmark adapters
 (`stage2_perturbation/adapters.py::get_adapter`, for item-text extraction). It adds no
 scoring code of its own.
 
@@ -58,9 +58,9 @@ benchmark's primary metric first (the **worst** condition across every enabled f
 scenario included — enabling a stage hardens the certification score), plus
 `lvr_control` (bald-query harm rate), `lvr_scenario` (scenario harm rate), and
 `consistency_scenario` (how often the scenario judgment matches the control's) — next
-to stage 2's `lvr`/`consistency` when it also ran. Per-family/-task detail lands in
+to stage 2's `harm_propensity`/`stability` when it also ran. Per-family/-task detail lands in
 `models/models.json` under `simulations.{benchmark}` (parallel to `perturbations`),
-via `consistency_rate(..., families={"scenario"})`.
+via `condition_metrics(..., families={"scenario"})`.
 
 The earlier Concordia-based multi-agent simulation prototype (generation from an EU AI
 Act risk taxonomy) lives on the **`simulation`** branch under `mas/`; it is reference

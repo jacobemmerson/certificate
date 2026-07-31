@@ -64,7 +64,6 @@ from inspect_ai.model import get_model
 
 from pipeline.generation import generate_framing, generate_rewrites, generate_scenarios
 from pipeline.registry import PREGENERATED_FAMILIES, init_benchmarks
-from pipeline.stage2_perturbation.adapters import adapter_for
 from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY
 from pipeline.utils.graders import load_graders
 
@@ -209,14 +208,13 @@ if __name__ == "__main__":
         print(f"Perturbing {key}...")
         for task in entry["tasks"]:
             name = task_name(task)
-            adapter = adapter_for(task)
             samples = list(task.dataset)
             if args.limit:
                 samples = samples[: args.limit]
 
             # (family, k) pairs to produce for this task
             wanted = [(f, args.perturb_k) for f in perturb_families if f in REWRITE_FAMILIES]
-            if "framing" in perturb_families and framing_applies(name):
+            if "framing" in perturb_families and framing_applies(task):
                 wanted.append(("framing", 1))
             if args.simulate:
                 wanted.append((SCENARIO_FAMILY, args.sim_k))
@@ -233,17 +231,17 @@ if __name__ == "__main__":
 
                 if family == "framing":
                     # deterministic — cheap to rebuild wholesale every time
-                    rows = generate_framing(samples, adapter)
+                    rows = generate_framing(samples)
                     kept = []
                 elif family == SCENARIO_FAMILY:
                     rows, incomplete = asyncio.run(generate_scenarios(
-                        samples, adapter, attacker, k, existing=existing,
+                        samples, attacker, k, existing=existing,
                         max_connections=args.max_connections,
                         reasoning=args.reasoning,
                     ))
                 else:
                     rows = asyncio.run(generate_rewrites(
-                        samples, adapter, family, attacker, k, existing=existing,
+                        samples, family, attacker, k, existing=existing,
                         max_connections=args.max_connections,
                     ))
 

@@ -1,0 +1,24 @@
+[submodule "datasets/raw/persuasion/PersuSafety"]
+	path = datasets/raw/persuasion/PersuSafety
+	url = git@github.com:PLUM-Lab/PersuSafety.git
+[submodule "datasets/raw/persuasion/llm-manipulation"]
+	path = datasets/raw/persuasion/llm-manipulation
+	url = git@github.com:mitmedialab/llm-manipulation.git
+[submodule "datasets/raw/persuasion/chatbotmanip_analysis"]
+	path = datasets/raw/persuasion/chatbotmanip_analysis
+	url = git@github.com:JContro/chatbotmanip_analysis.git
+[submodule "datasets/raw/democracy/Democratic-Authoritarian-Bias-LLMs"]
+	path = datasets/raw/democracy/Democratic-Authoritarian-Bias-LLMs
+	url = git@github.com:irenestrauss/Democratic-Authoritarian-Bias-LLMs.git
+[submodule "datasets/raw/democracy/PreservingHistoricalTruth"]
+	path = datasets/raw/democracy/PreservingHistoricalTruth
+	url = git@github.com:francescortu/PreservingHistoricalTruth.git
+[submodule "datasets/raw/democracy/llm-human-rights"]
+	path = datasets/raw/democracy/llm-human-rights
+	url = git@github.com:keenansamway/llm-human-rights.git
+[submodule "datasets/raw/persuasion/sycophancy-eval"]
+	path = datasets/raw/persuasion/sycophancy-eval
+	url = git@github.com:meg-tong/sycophancy-eval.git
+[submodule "datasets/raw/cyber/dataset"]
+	path = datasets/raw/cyber/dataset
+	url = git@github.com:cysecbench/dataset.git

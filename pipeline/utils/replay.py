@@ -17,7 +17,9 @@ calls are cached) would collapse those into one generation.
 `replay` runs its target call(s) on a *deep copy* of state
 (`test = copy.deepcopy(state); ...`), so the shared state is never mutated,
 and records, per variant, the `query` sent to the target and the resulting
-`completion` on the *original* state, which it returns unchanged. The
+`completion` on the *original* state, which it returns unchanged. A sample's
+variants run concurrently — they are independent target calls — which lets one
+sample hold up to k connections per family at once. The
 recorded `query` is what lets scoring surface the exact prompt behind a
 sample's worst condition (pipeline/utils/scoring.py::_wrap_scorer's
 `worst_query`). The control's completion (the shared state.output) is exactly
@@ -28,8 +30,10 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import functools
 from typing import Callable
 
+from inspect_ai._util._async import tg_collect
 from inspect_ai.log import transcript
 from inspect_ai.model import ChatMessageUser
 from inspect_ai.solver import Generate, TaskState
@@ -98,11 +102,19 @@ async def replay(
         # time) so the sample still runs its other conditions.
         transcript().info(f"{family}: no stored variants for sample {state.sample_id}")
 
-    variants = []
-    for row in rows:
+    async def run(row: dict) -> TaskState | None:
         test = copy.deepcopy(state)
         test.messages = messages(row)
-        test = await generate_variant(generate, test, row["condition"])
+        return await generate_variant(generate, test, row["condition"])
+
+    # A sample's variants are independent target calls, so run them together
+    # rather than serially. Note this lets one sample hold up to k-per-family
+    # connections at once, trading some sample-level concurrency for lower
+    # per-sample latency.
+    results = await tg_collect([functools.partial(run, row) for row in rows])
+
+    variants = []
+    for row, test in zip(rows, results):
         if test is None:
             continue
         variants.append({

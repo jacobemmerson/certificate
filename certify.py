@@ -22,7 +22,7 @@ from inspect_ai import eval
 from pipeline.artifacts import validate_artifacts
 from pipeline.registry import init_benchmarks, apply_stages, ALL_PERTURB_FAMILIES
 from pipeline.utils.scoring import SCENARIO
-from pipeline.utils.graders import load_graders, load_models_with_check, aggregate_score, consistency_rate
+from pipeline.utils.graders import load_graders, load_models_with_check, aggregate_score, condition_metrics
 
 def parse():
     
@@ -88,7 +88,7 @@ def parse():
              "benchmark in --only (or all benchmarks if --only is omitted): the target is re-run "
              "on the pregenerated deployment-scenario reframings from datasets/generated/ "
              "(run generate.py --simulate first). Composes with --perturb in one run/one log: "
-             "the panel reports lvr_scenario/consistency_scenario next to stage 2's lvr/consistency."
+             "the panel reports harm_propensity_scenario/stability_scenario next to stage 2's harm_propensity/stability."
     )
     args.add_argument(
         "--sim-k", required=False, type=int, default=1,
@@ -163,8 +163,8 @@ if __name__ == "__main__":
 
     # Stage 2 and stage 3 compose in one run: both layer condition families
     # onto the same Task (one control generation, one log), and the wrapped
-    # scorers report them under separate metric pools — lvr/consistency for
-    # the perturbation families, lvr_scenario/consistency_scenario for the
+    # scorers report them under separate metric pools — harm_propensity/stability for
+    # the perturbation families, harm_propensity_scenario/stability_scenario for the
     # scenario family. The certification score is the worst condition across
     # every enabled family (see pipeline/utils/scoring.py).
     run_perturb = bool(args.perturb) and not args.no_perturb
@@ -230,11 +230,11 @@ if __name__ == "__main__":
         status = "success" if ok == len(evaluations) else ("partial" if ok else "failed")
         return {"status": status, "completed_samples": completed, "total_samples": total}
 
-    def start_eval(tasks: list, task_name: str):
+    def start_eval(tasks: list):
         return eval(
             tasks,
             model=args.model,
-            log_dir=log_dir + f"/{task_name}",
+            log_dir=log_dir,
             continue_on_fail=True,
             retry_on_error=2,
             # tolerate scattered sample-level errors (e.g. an unparseable
@@ -254,47 +254,60 @@ if __name__ == "__main__":
             cache=True,
         )
 
-    # ----- main loop -----
+    # ----- run -----
+    # One eval() over every cluster, not one per cluster in a Python loop.
+    # Each cluster is now a single task, so a serial loop would leave the
+    # connection pool idle while one cluster drained — Inspect schedules
+    # across tasks itself. Per-cluster reporting comes from partitioning the
+    # returned logs by task name afterwards; `continue_on_fail` and
+    # `fail_on_error` keep one bad cluster from sinking the rest.
     scores = {}
     scores_meta = {}
     perturbations = {}
     simulations = {}
     statuses = {}
-    for benchmark, tasks in BENCHMARKS.items():
 
-        try:
-            res = start_eval(
-                tasks=tasks['tasks'],
-                task_name=tasks['name']
-            )
+    all_tasks = [task for entry in BENCHMARKS.values() for task in entry["tasks"]]
+    try:
+        logs = start_eval(all_tasks) or []
+    except Exception as e:
+        print(f"[ERROR] evaluation failed: {e}")
+        logs = []
+        statuses = {key: {"status": "failed", "error": str(e)} for key in BENCHMARKS}
 
-            if res:
-                statuses[benchmark] = check_status(res)
-                if statuses[benchmark]['status'] != 'success':
-                    print(f"[WARNING] {benchmark}: run was {statuses[benchmark]['status']} "
-                          f"({statuses[benchmark]['completed_samples']}/{statuses[benchmark]['total_samples']} samples)")
+    by_cluster: dict[str, list] = {}
+    for log in logs:
+        by_cluster.setdefault(str(log.eval.task), []).append(log)
 
-                # score only the task logs that succeeded; a partial run's
-                # scores are stored but flagged by its status record
-                ok = [log for log in res if log.status == "success"]
-                if ok:
-                    average, meta = aggregate_score(ok)
-                    scores[benchmark] = average
-                    scores_meta[benchmark] = meta
+    for benchmark, entry in BENCHMARKS.items():
+        res = by_cluster.get(entry["name"], [])
+        if not res:
+            statuses.setdefault(benchmark, {"status": "failed", "error": "no log produced"})
+            print(f"[ERROR] {benchmark}: no log produced")
+            continue
 
-                    # Both stages come out of the same log the certification
-                    # scores just came from (see pipeline/registry.py::apply_stages);
-                    # consistency_rate's family filter splits them into their
-                    # separate models.json sections, control included in each
-                    # as the shared baseline.
-                    if run_perturb:
-                        perturbations[benchmark] = consistency_rate(ok, families=set(args.perturb))
-                    if args.simulate:
-                        simulations[benchmark] = consistency_rate(ok, families={SCENARIO})
+        statuses[benchmark] = check_status(res)
+        if statuses[benchmark]['status'] != 'success':
+            print(f"[WARNING] {benchmark}: run was {statuses[benchmark]['status']} "
+                  f"({statuses[benchmark]['completed_samples']}/{statuses[benchmark]['total_samples']} samples)")
 
-        except Exception as e:
-            print(f"[ERROR] on {benchmark}: {e}")
-            statuses[benchmark] = {"status": "failed", "error": str(e)}
+        # score only the task logs that succeeded; a partial run's
+        # scores are stored but flagged by its status record
+        ok = [log for log in res if log.status == "success"]
+        if ok:
+            average, meta = aggregate_score(ok)
+            scores[benchmark] = average
+            scores_meta[benchmark] = meta
+
+            # Both stages come out of the same log the certification
+            # scores just came from (see pipeline/registry.py::apply_stages);
+            # condition_metrics's family filter splits them into their
+            # separate models.json sections, control included in each
+            # as the shared baseline.
+            if run_perturb:
+                perturbations[benchmark] = condition_metrics(ok, families=set(args.perturb))
+            if args.simulate:
+                simulations[benchmark] = condition_metrics(ok, families={SCENARIO})
 
     if (not args.limit):
         # ----- format and store results -----

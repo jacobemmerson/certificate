@@ -329,11 +329,11 @@ def conditional_robustness_features(models):
     features = {}
     for bench in BENCHMARK_KEYS:
         features[f"perturb_consistency_{bench}"] = [
-            min(model["perturbations"][bench]["consistency_rate"].values())
+            min(model["perturbations"][bench]["stability"].values())
             for model in models
         ]
         features[f"scenario_stability_{bench}"] = [
-            100 - model["simulations"][bench]["lvr"]["scenario"]
+            100 - model["simulations"][bench]["harm_propensity"]["scenario"]
             for model in models
         ]
     return features

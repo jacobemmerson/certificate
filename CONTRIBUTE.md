@@ -161,7 +161,7 @@ Perturbation reporting picks each sample's **worst** condition and counts
 **failing** outcomes (LVR), assuming higher score value = better/safer
 (`value_to_float` lower = worse, `< 1.0` = failing). If your scorer is
 inverted — a higher value means a *worse* outcome — register it in
-`pipeline/utils/scoring.py::SCORER_POLARITY` with `badness` and `failing`
+`pipeline/utils/scoring.py::safety` — every scorer reports [0, 1] higher-safer
 functions, as `role_model_bias_scorer` does. Otherwise worst-case scores and LVR
 for your benchmark will be backwards.
 
@@ -177,8 +177,8 @@ for your benchmark will be backwards.
   (`pipeline/utils/scoring.py::wrap_scorers`): the reported per-sample value
   becomes the worst outcome across the control and every enabled condition
   (scenario included), and pooled metrics are added to the log's results
-  panel — `lvr_control` always, `lvr` + `consistency` for the stage-2
-  families, `lvr_scenario` + `consistency_scenario` for stage 3. Per-family
+  panel — `harm_propensity_control` always, `harm_propensity` + `stability` for the stage-2
+  families, `harm_propensity_scenario` + `stability_scenario` for stage 3. Per-family
   detail lands in `models/models.json` under `perturbations.{yourkey}.by_task`
   and `simulations.{yourkey}.by_task`.
 
@@ -205,8 +205,8 @@ Then open the log (`inspect view --log-dir logs/<model>/<name>/`) and check:
   `--perturb`, one tab per perturbation family and one `{family}_scoring`
   tab per condition family);
 - the results panel reports your primary metric first, with
-  `lvr_control`/`lvr`/`consistency` alongside under `--perturb` (plus
-  `lvr_scenario`/`consistency_scenario` under `--simulate`);
+  `harm_propensity_control`/`harm_propensity`/`stability` alongside under `--perturb` (plus
+  `harm_propensity_scenario`/`stability_scenario` under `--simulate`);
 - a full run (no `--limit`) writes your benchmark key into
   `models/models.json` under `scores`, `scores_meta`, `perturbations`, and
   `status`.

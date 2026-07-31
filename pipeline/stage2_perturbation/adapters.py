@@ -1,118 +1,50 @@
-"""Per-benchmark adapters for the surface-perturbation module.
+"""How a perturbation sees an item: what may be reworded, and how to put it back.
 
-A `PerturbAdapter` separates a benchmark item's substantive content (the part
-safe to reword/reframe) from the elicitation wrapper around it (fixed
-instructions a perturbation must not corrupt, e.g. a strict JSON+scale-option
-contract). Perturbation solvers operate on `item_text(state)` and re-render
-the full prompt via `render(state, new_text)` — never touching `state.metadata`
-or the benchmark's own scorer, so the judgment function stays fixed across
-conditions.
+A benchmark item is two parts — the substantive content (safe to reword) and
+the elicitation wrapper around it (fixed instructions a perturbation must not
+corrupt, e.g. a strict JSON+scale contract that the scorer parses directly).
+Perturbation solvers reword `item_text(state)` and rebuild the full prompt via
+`render(state, new_text)`, never touching `state.metadata` or the scorer, so the
+judgment function stays fixed across conditions.
 
-`DEFAULT_ADAPTER` treats the whole rendered prompt as reword-able content,
-which is correct for any benchmark whose target-facing prompt is free text
-graded by an LLM judge/LlamaGuard (the common case — covers socialharmbench,
-preserving_historical_truth, llm_human_rights, and democratic_authoritarian_bias's
-role_model_bias task today). `ADAPTERS` registers the exceptions: benchmarks where
-the target must reply in a rigid, directly machine-parsed format (fscale,
-leader_favorability), so only the raw statement/question gets reworded and the
-format instructions are re-injected verbatim via the benchmark's own prompt builder.
+**This used to be a registry.** `ADAPTERS` mapped each task name to a
+hand-written adapter, which worked while every task was one benchmark. A risk
+cluster mixes compliance, judgment, opinion and generic elicitation in a single
+dataset, so the split has to be per *sample* — and once it is per-sample data,
+the registry has nothing left to hold. The cluster schema carries it directly:
 
-Adding a new benchmark later needs an ADAPTERS entry only if it has this kind
-of rigid, directly-parsed target output contract — otherwise nothing at all.
+    item_text           the rewordable content   (defaults to the whole prompt)
+    prompt_template     that content's place in the prompt, marked by ITEM
+    elicitation_family  which framing templates apply, if any
+
+See datasets/CLUSTERING.md and datasets/prepare/cluster/schema.py. Samples
+without these fields fall back to treating the whole prompt as rewordable,
+which is correct for any free-text item graded by a judge.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable
+from typing import Any
 
-from inspect_ai import Task
-from inspect_ai._util.registry import registry_info
-from inspect_ai.solver import TaskState
+# Mirrors datasets/prepare/cluster/schema.py::ITEM. A sentinel plus str.replace,
+# not str.format — the likert templates contain literal JSON braces.
+ITEM = "{{ITEM}}"
 
-from pipeline.stage1_evaluation.evals.democratic_authoritarian_bias import (
-    _build_fscale_prompt,
-    _build_favscore_prompt,  # leader_favorability's rigid prompt builder
-)
-
-ElicitationFamily = str  # "compliance" | "judgment" | "opinion" | "generic"
+GENERIC = "generic"
 
 
-@dataclass
-class PerturbAdapter:
-    item_text: Callable[[TaskState], str]
-    render: Callable[[TaskState, str], str]
-    elicitation_family: ElicitationFamily = "generic"
+def item_text(state: Any) -> str:
+    """The part of this item's prompt a perturbation may rewrite."""
+    return (state.metadata or {}).get("item_text") or state.input_text
 
 
-def _default_item_text(state: TaskState) -> str:
-    return state.input_text
+def render(state: Any, new_text: str) -> str:
+    """Rebuild the full prompt with `new_text` in place of the item."""
+    template = (state.metadata or {}).get("prompt_template")
+    if not template or ITEM not in template:
+        return new_text
+    return template.replace(ITEM, new_text)
 
 
-def _default_render(state: TaskState, new_text: str) -> str:
-    return new_text
-
-
-DEFAULT_ADAPTER = PerturbAdapter(
-    item_text=_default_item_text,
-    render=_default_render,
-    elicitation_family="generic",
-)
-
-
-def _fscale_item_text(state: TaskState) -> str:
-    return state.metadata.get("statement", state.input_text)
-
-
-def _fscale_render(state: TaskState, new_text: str) -> str:
-    return _build_fscale_prompt(new_text)
-
-
-def _leader_favorability_item_text(state: TaskState) -> str:
-    return state.metadata.get("question", state.input_text)
-
-
-def _leader_favorability_render(state: TaskState, new_text: str) -> str:
-    return _build_favscore_prompt(
-        state.metadata.get("leader_name", ""),
-        new_text,
-        state.metadata.get("output_format", "json_approve_disapprove"),
-    )
-
-
-# Keyed by the original @task function's registry name — see
-# pipeline/registry.py::_build_task for how this is looked up via
-# inspect_ai._util.registry.registry_info(task_instance).name.
-ADAPTERS: dict[str, PerturbAdapter] = {
-    "fscale": PerturbAdapter(
-        item_text=_fscale_item_text,
-        render=_fscale_render,
-        elicitation_family="opinion",
-    ),
-    "leader_favorability": PerturbAdapter(
-        item_text=_leader_favorability_item_text,
-        render=_leader_favorability_render,
-        elicitation_family="opinion",
-    ),
-    "udhr": PerturbAdapter(item_text=_default_item_text, render=_default_render, elicitation_family="judgment"),
-    "udhr_individual": PerturbAdapter(item_text=_default_item_text, render=_default_render, elicitation_family="judgment"),
-    "udhr_government": PerturbAdapter(item_text=_default_item_text, render=_default_render, elicitation_family="judgment"),
-    "echr": PerturbAdapter(item_text=_default_item_text, render=_default_render, elicitation_family="judgment"),
-    "echr_individual": PerturbAdapter(item_text=_default_item_text, render=_default_render, elicitation_family="judgment"),
-    "echr_government": PerturbAdapter(item_text=_default_item_text, render=_default_render, elicitation_family="judgment"),
-    "social_harm_bench": PerturbAdapter(item_text=_default_item_text, render=_default_render, elicitation_family="compliance"),
-    "history_no_push": PerturbAdapter(item_text=_default_item_text, render=_default_render, elicitation_family="compliance"),
-    "history_explicit_push": PerturbAdapter(item_text=_default_item_text, render=_default_render, elicitation_family="compliance"),
-    # role_model_bias intentionally unregistered: open-ended elicitation doesn't
-    # fit any of the fixed framing families, so it falls back to DEFAULT_ADAPTER
-    # (elicitation_family="generic") and simply gets skipped by the framing
-    # family (see pipeline/stage2_perturbation/framing.py).
-}
-
-
-def get_adapter(task_name: str) -> PerturbAdapter:
-    return ADAPTERS.get(task_name, DEFAULT_ADAPTER)
-
-
-def adapter_for(base_task: Task) -> PerturbAdapter:
-    """The adapter for a built Task, looked up by its registered @task name."""
-    return get_adapter(registry_info(base_task).name)
+def elicitation_family(state: Any) -> str:
+    """Which framing templates apply to this item (see framing.py)."""
+    return (state.metadata or {}).get("elicitation_family") or GENERIC

@@ -68,11 +68,11 @@ def stage23_blocks(consistency: float, scenario_lvr: float) -> dict:
     '''Synthetic perturbations/simulations entries for all four benchmarks.'''
     return {
         "perturbations": {
-            bench: {"consistency_rate": {"paraphrase": consistency, "framing": consistency + 2}}
+            bench: {"stability": {"paraphrase": consistency, "framing": consistency + 2}}
             for bench in workflow.BENCHMARK_KEYS
         },
         "simulations": {
-            bench: {"lvr": {"control": 5.0, "scenario": scenario_lvr}}
+            bench: {"harm_propensity": {"control": 5.0, "scenario": scenario_lvr}}
             for bench in workflow.BENCHMARK_KEYS
         },
     }

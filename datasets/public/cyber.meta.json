@@ -1,0 +1,78 @@
+{
+  "risk": "cyber",
+  "rows": 280,
+  "seed": 0,
+  "jaccard_tau_default": 0.9,
+  "token_gate": 25,
+  "sources": {
+    "cysecbench": {
+      "loaded": 12662,
+      "exact_dropped": 2,
+      "near_dropped": 2,
+      "quota": 90,
+      "kept": 90,
+      "strata": 10,
+      "stratify_on": [
+        "Category"
+      ],
+      "balanced": false,
+      "question_type": "graded",
+      "path": "raw/cyber/CySecBench/Dataset/Full dataset/cysecbench.csv"
+    },
+    "sosbench": {
+      "loaded": 3000,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "quota": 90,
+      "kept": 90,
+      "strata": 6,
+      "stratify_on": [
+        "subject"
+      ],
+      "balanced": false,
+      "question_type": "graded",
+      "path": "raw/cyber/SOSBench/data/*.parquet"
+    },
+    "wmdp": {
+      "loaded": 3668,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "quota": 60,
+      "kept": 60,
+      "strata": 3,
+      "stratify_on": [
+        "subset"
+      ],
+      "balanced": false,
+      "question_type": "mcq",
+      "path": "raw/cyber/wmdp/wmdp-*/*.parquet"
+    },
+    "cyber_false_refusal": {
+      "loaded": 750,
+      "exact_dropped": 1,
+      "near_dropped": 1,
+      "quota": 40,
+      "kept": 40,
+      "strata": 1,
+      "stratify_on": [],
+      "balanced": false,
+      "question_type": "graded",
+      "path": "raw/cyber/mitre_frr/mitre_frr.json"
+    }
+  },
+  "revisions": {
+    "repo": "e3682456a37b629891b7284710deb70aefe1ebc4",
+    "datasets/raw/Democratic-Authoritarian-Bias-LLMs": "583a1e4a8d440c421ab2ef06a6ac8afd5473c9e0",
+    "datasets/raw/PreservingHistoricalTruth": "5d327d24c8e6f0c82b598fecf9ca9f1b46bf3c64",
+    "datasets/raw/cyber/dataset": "ea3868f63961833e33d3e81933dd1024505dabe0",
+    "datasets/raw/democracy/Democratic-Authoritarian-Bias-LLMs": "583a1e4a8d440c421ab2ef06a6ac8afd5473c9e0",
+    "datasets/raw/democracy/PreservingHistoricalTruth": "5d327d24c8e6f0c82b598fecf9ca9f1b46bf3c64",
+    "datasets/raw/democracy/llm-human-rights": "65171d7c5ec20255256e5d0500dc118c8f7904ef",
+    "datasets/raw/llm-human-rights": "65171d7c5ec20255256e5d0500dc118c8f7904ef",
+    "datasets/raw/persuasion/PersuSafety": "892bf057f2974c1d1624f37d1110dcb4924e4fd6",
+    "datasets/raw/persuasion/chatbotmanip_analysis": "395976ae961aa8088f8964b97695cad8725ff86f",
+    "datasets/raw/persuasion/llm-manipulation": "999963ac73180178033d78a28f5eb247c20011bf",
+    "datasets/raw/persuasion/sycophancy-eval": "9a1694221e3639887138f61deae344335eca6752",
+    "datasets/raw/socialharmbench": "ee4090aacd0921d30c74a14a6e2e6a79f739f60c"
+  }
+}

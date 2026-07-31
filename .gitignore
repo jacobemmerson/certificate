@@ -7,3 +7,6 @@ logs/
 testing/
 .claude/
 Live-Human-Rights-Bench/
+
+# huggingface_hub download bookkeeping inside vendored datasets
+.cache/huggingface/

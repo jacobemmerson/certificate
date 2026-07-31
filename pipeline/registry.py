@@ -1,7 +1,4 @@
-from pipeline.stage1_evaluation.evals.democratic_authoritarian_bias import fscale, leader_favorability, role_model_bias
-from pipeline.stage1_evaluation.evals.llm_human_rights import udhr, echr, udhr_government, udhr_individual, echr_government, echr_individual
-from pipeline.stage1_evaluation.evals.preserving_historical_truth import history_no_push, history_explicit_push
-from pipeline.stage1_evaluation.evals.socialharmbench import social_harm_bench
+from pipeline.stage1_evaluation.evals.clusters import CLUSTER_TASKS, RISKS, available
 
 from inspect_ai import Task
 
@@ -18,45 +15,25 @@ ALL_PERTURB_FAMILIES = {"paraphrase", "register", "identity_strip", "framing", "
 # target's own control completion, so it cannot exist before the eval runs.
 PREGENERATED_FAMILIES = ALL_PERTURB_FAMILIES - {"reconsideration"}
 
-def init_benchmarks(grader, llamaguard_model: str = "openrouter/meta-llama/llama-guard-4-12b"):
+def init_benchmarks(grader, llamaguard_model: str | None = None):
+    '''
+    One entry per systemic-risk cluster, keyed by risk name.
 
-    # ----- task master list -----
-    BENCHMARKS = {
-        'auth': {
-            'tasks': [
-                fscale(llamaguard_model=llamaguard_model),
-                leader_favorability(llamaguard_model=llamaguard_model),
-                role_model_bias(grader=grader, llamaguard_model=llamaguard_model)
-            ],
-            'name': 'democratic_authoritarian_bias'
-        },
-        'harm': {
-            'tasks': [
-                social_harm_bench(grader=grader, llamaguard_model=llamaguard_model)
-            ],
-            'name': 'socialharmbench'
-        },
-        'hist': {
-            'tasks': [
-                history_no_push(grader=grader, llamaguard_model=llamaguard_model),
-                history_explicit_push(grader=grader, llamaguard_model=llamaguard_model)
-            ],
-            'name': 'historical_revisionism'
-        },
-        'hr': {
-            'tasks': [
-                udhr(grader=grader, llamaguard_model=llamaguard_model),
-                udhr_individual(grader=grader, llamaguard_model=llamaguard_model),
-                udhr_government(grader=grader, llamaguard_model=llamaguard_model),
-                echr(grader=grader, llamaguard_model=llamaguard_model),
-                echr_individual(grader=grader, llamaguard_model=llamaguard_model),
-                echr_government(grader=grader, llamaguard_model=llamaguard_model)
-            ],
-            'name': 'human_rights'
-        }
+    A cluster's dataset is a filtered union of several benchmarks under one
+    schema (datasets/public/<risk>.csv), so each entry holds a single task
+    rather than a list of per-benchmark ones. Risks whose dataset has not been
+    built are skipped — loss_of_control has no sources yet.
+
+    `llamaguard_model` is accepted but unused: cluster tasks do not attach
+    LlamaGuard. In a mixed cluster it would score likert and mcq rows where it
+    means nothing, and each row's own `criterion` is strictly more specific
+    than its generic taxonomy. See datasets/CLUSTERING.md.
+    '''
+    return {
+        risk: {"tasks": [CLUSTER_TASKS[risk](grader=grader)], "name": risk}
+        for risk in RISKS
+        if available(risk)
     }
-
-    return BENCHMARKS
 
 
 def _build_task(
@@ -84,7 +61,7 @@ def _build_task(
         if family in families:
             solver_chain.append(replay_solver(truncated(load_family(name, family), k)))
             applied.append(family)
-    if "framing" in families and framing_applies(name):
+    if "framing" in families and framing_applies(base_task):
         solver_chain.append(framing(load_family(name, "framing")))
         applied.append("framing")
     if "reconsideration" in families:
@@ -127,8 +104,8 @@ def apply_stages(
     Keeps the same benchmark keys/'name' as `benchmarks`, so the result runs
     through the exact same log path as a plain run — a combined --perturb
     --simulate certification is one task run and ONE log, with the stages
-    reported under separate metric pools (lvr/consistency for stage 2,
-    lvr_scenario/consistency_scenario for stage 3).
+    reported under separate metric pools (harm_propensity/stability for stage 2,
+    harm_propensity_scenario/stability_scenario for stage 3).
 
     All pregenerated families replay fixed variants from datasets/generated/
     (produced once by generate.py — no rewrite/reframing model runs at eval

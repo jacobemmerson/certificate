@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 import pipeline.artifacts as artifacts
+from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
 from pipeline.artifacts import (
     load_family,
@@ -23,8 +24,7 @@ from pipeline.artifacts import (
     write_family,
 )
 from pipeline.generation import SampleView, generate_framing
-from pipeline.stage1_evaluation.evals.democratic_authoritarian_bias import fscale
-from pipeline.stage2_perturbation.adapters import DEFAULT_ADAPTER, get_adapter
+from pipeline.stage2_perturbation.adapters import ITEM, elicitation_family, item_text, render
 
 
 def rewrite_rows(ids, family: str = "paraphrase", k: int = 1) -> list[dict]:
@@ -42,13 +42,32 @@ def rewrite_rows(ids, family: str = "paraphrase", k: int = 1) -> list[dict]:
     ]
 
 
+@task
+def fixture_task():
+    """A small task whose samples carry the cluster schema's perturbation
+    split. Registered via @task because artifacts key off the registry name."""
+    return Task(
+        dataset=[
+            Sample(
+                input=f"Statement: item {i}\nAnswer on the scale:",
+                id=f"s{i}",
+                metadata={
+                    "item_text": f"item {i}",
+                    "prompt_template": f"Statement: {ITEM}\nAnswer on the scale:",
+                    "elicitation_family": "opinion",
+                },
+            )
+            for i in range(3)
+        ],
+    )
+
+
 class ArtifactStoreTestCase(unittest.TestCase):
-    """Base: a real registry task (fscale — no model calls at construction)
-    plus a temp GENERATED_DIR."""
+    """Base: the fixture task plus a temp GENERATED_DIR."""
 
     @classmethod
     def setUpClass(cls):
-        cls.task = fscale(llamaguard_model=None)
+        cls.task = fixture_task()
         cls.name = task_name(cls.task)
         cls.ids = sample_ids(cls.task)
 
@@ -124,45 +143,67 @@ class TestValidateArtifacts(ArtifactStoreTestCase):
         write_family(self.name, "scenario", rows, meta={"prompt_version": "1"})
         validate_artifacts(self.benchmarks, families=None, simulate=True)
 
-    def test_framing_not_required_for_generic_elicitation(self):
-        # fscale is "opinion", so framing IS required — absence must fail...
+    def test_framing_not_required_when_no_sample_qualifies(self):
+        # the fixture task's samples are "opinion", so framing IS required...
         with self.assertRaises(FileNotFoundError):
             validate_artifacts(self.benchmarks, families=["framing"], simulate=False)
-        # ...but a generic-family task (role_model_bias) is skipped entirely
-        self.assertEqual(get_adapter("role_model_bias").elicitation_family, "generic")
-        self.assertFalse(artifacts.framing_applies("role_model_bias"))
+        # ...but a task whose every sample is generic is skipped entirely
+        generic = Task(
+            dataset=[Sample(input="x", id="a", metadata={"elicitation_family": "generic"})],
+            name="all_generic",
+        )
+        self.assertFalse(artifacts.framing_applies(generic))
 
 
-class TestSampleViewRendering(unittest.TestCase):
-    def test_fscale_adapter_reads_statement_and_rerenders_contract(self):
-        adapter = get_adapter("fscale")
+class TestPerturbationSplit(unittest.TestCase):
+    """The split is per-sample data now, not a per-task adapter registry."""
+
+    def test_wrapper_is_reinjected_around_a_rewrite(self):
+        # An item whose elicitation contract is parsed directly (a scale +
+        # JSON block) must only expose its statement to a rewrite.
         view = SampleView.of(Sample(
-            input="full rendered prompt", id="s1",
-            metadata={"statement": "Obedience is a virtue."},
+            input=f"Statement: Obedience is a virtue.\nAnswer on the scale:", id="s1",
+            metadata={
+                "item_text": "Obedience is a virtue.",
+                "prompt_template": f"Statement: {ITEM}\nAnswer on the scale:",
+                "elicitation_family": "opinion",
+            },
         ))
-        self.assertEqual(adapter.item_text(view), "Obedience is a virtue.")
-        rendered = adapter.render(view, "REWRITTEN")
+        self.assertEqual(item_text(view), "Obedience is a virtue.")
+        rendered = render(view, "REWRITTEN")
         self.assertIn("REWRITTEN", rendered)
-        self.assertNotEqual(rendered, "REWRITTEN")  # format contract re-injected
+        self.assertIn("Answer on the scale:", rendered)  # contract survives
+        self.assertNotIn("Obedience", rendered)
 
-    def test_default_adapter_uses_whole_input(self):
+    def test_bare_sample_falls_back_to_the_whole_prompt(self):
         view = SampleView.of(Sample(input="the whole prompt", id="s1"))
-        self.assertEqual(DEFAULT_ADAPTER.item_text(view), "the whole prompt")
-        self.assertEqual(DEFAULT_ADAPTER.render(view, "new"), "new")
+        self.assertEqual(item_text(view), "the whole prompt")
+        self.assertEqual(render(view, "new"), "new")
+        self.assertEqual(elicitation_family(view), "generic")
 
 
 class TestGenerateFraming(unittest.TestCase):
     def test_compliance_templates_render_one_row_each(self):
-        adapter = get_adapter("social_harm_bench")  # compliance: 3 templates
-        rows = generate_framing([Sample(input="do the thing", id="a")], adapter)
+        rows = generate_framing([Sample(
+            input="do the thing", id="a",
+            metadata={"elicitation_family": "compliance"},  # 3 templates
+        )])
         self.assertEqual(len(rows), 3)
         self.assertEqual({r["id"] for r in rows}, {"a"})
         self.assertTrue(all(r["condition"].startswith("framing_") for r in rows))
         self.assertTrue(any("do the thing" in r["query"] for r in rows))
 
     def test_generic_elicitation_yields_no_rows(self):
-        rows = generate_framing([Sample(input="x", id="a")], DEFAULT_ADAPTER)
-        self.assertEqual(rows, [])
+        self.assertEqual(generate_framing([Sample(input="x", id="a")]), [])
+
+    def test_mixed_families_skip_only_the_generic_samples(self):
+        # The reason the adapter registry had to go: one cluster dataset holds
+        # several elicitation families, so the skip is per sample.
+        rows = generate_framing([
+            Sample(input="do the thing", id="a", metadata={"elicitation_family": "compliance"}),
+            Sample(input="list some people", id="b", metadata={"elicitation_family": "generic"}),
+        ])
+        self.assertEqual({r["id"] for r in rows}, {"a"})
 
 
 if __name__ == "__main__":

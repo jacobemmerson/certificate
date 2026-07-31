@@ -10,10 +10,10 @@ rewrite.py's FAMILY_SYSTEM_PROMPTS/_extract_rewrite, framing.py's
 FRAMING_TEMPLATES, and stage 3's reframe_prompt/parse_reframing — nothing is
 duplicated, only relocated from eval time to generation time.
 
-Adapters only ever read `state.input_text` and `state.metadata`
-(pipeline/stage2_perturbation/adapters.py), so `SampleView` duck-types a
-TaskState over a bare dataset Sample — no synthetic eval is needed to render
-per-benchmark prompts offline.
+The perturbation split only ever reads `state.input_text` and
+`state.metadata` (pipeline/stage2_perturbation/adapters.py), so `SampleView`
+duck-types a TaskState over a bare dataset Sample — no synthetic eval is needed
+to render prompts offline.
 
 Attacker calls pass cache=False for the same reason the live solvers did: the
 k variants of one item use the *same* rewrite prompt, and any cache would
@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from inspect_ai.dataset import Sample
 from inspect_ai.model import GenerateConfig, Model, get_model
 
-from pipeline.stage2_perturbation.adapters import PerturbAdapter
+from pipeline.stage2_perturbation.adapters import elicitation_family, item_text, render
 from pipeline.stage2_perturbation.framing import FRAMING_TEMPLATES
 from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS, _extract_rewrite
 from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY, parse_reframing, reframe_prompt
@@ -36,7 +36,7 @@ from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY, parse_reframing,
 
 @dataclass
 class SampleView:
-    """The minimal TaskState surface adapters touch, built from a Sample."""
+    """The minimal TaskState surface the perturbation split touches."""
 
     input_text: str
     metadata: dict = field(default_factory=dict)
@@ -98,7 +98,6 @@ async def _attacker_call(
 
 async def generate_rewrites(
     samples: list[Sample],
-    adapter: PerturbAdapter,
     family: str,
     attacker_model: str | Model,
     k: int,
@@ -120,7 +119,7 @@ async def generate_rewrites(
 
     async def one(sample: Sample, variant: int) -> dict:
         view = SampleView.of(sample)
-        original_text = adapter.item_text(view)
+        original_text = item_text(view)
         async with semaphore:
             completion = await _attacker_call(
                 model,
@@ -133,7 +132,7 @@ async def generate_rewrites(
             "variant": variant,
             "condition": f"{family}_variant_{variant}",
             "text": new_text,
-            "query": adapter.render(view, new_text),
+            "query": render(view, new_text),
             "fallback": new_text == original_text,
         }
 
@@ -146,30 +145,34 @@ async def generate_rewrites(
     return list(await asyncio.gather(*jobs))
 
 
-def generate_framing(samples: list[Sample], adapter: PerturbAdapter) -> list[dict]:
+def generate_framing(samples: list[Sample]) -> list[dict]:
     """Rows for the deterministic framing family: one per applicable template
-    per sample, no model calls. Empty for elicitation_family="generic"
-    benchmarks (e.g. role_model_bias) — no framing.jsonl gets written.
+    per sample, no model calls.
+
+    Elicitation family is a property of the *sample*, not the task — a risk
+    cluster mixes all four in one dataset — so samples whose family has no
+    templates (elicitation_family="generic", e.g. role_model_bias's open-ended
+    "list role models") are skipped individually rather than disqualifying the
+    whole task.
     """
-    templates = FRAMING_TEMPLATES.get(adapter.elicitation_family)
-    if not templates:
-        return []
     rows = []
     for sample in samples:
         view = SampleView.of(sample)
-        original_text = adapter.item_text(view)
+        templates = FRAMING_TEMPLATES.get(elicitation_family(view))
+        if not templates:
+            continue
+        original_text = item_text(view)
         for name, template_fn in templates:
             rows.append({
                 "id": str(sample.id),
                 "condition": f"framing_{name}",
-                "query": adapter.render(view, template_fn(original_text)),
+                "query": render(view, template_fn(original_text)),
             })
     return rows
 
 
 async def generate_scenarios(
     samples: list[Sample],
-    adapter: PerturbAdapter,
     attacker_model: str | Model,
     k: int,
     *,
@@ -191,7 +194,7 @@ async def generate_scenarios(
 
     async def one(sample: Sample, variant: int) -> dict | None:
         view = SampleView.of(sample)
-        prompt = reframe_prompt(adapter.item_text(view))
+        prompt = reframe_prompt(item_text(view))
         label = f"{SCENARIO_FAMILY} {sample.id} v{variant}"
         for _ in range(parse_attempts):
             async with semaphore:
