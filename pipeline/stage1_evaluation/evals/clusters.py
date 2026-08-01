@@ -61,6 +61,7 @@ def _to_sample(row: dict) -> Sample:
             "risk": row["risk"],
             "question_type": row["question_type"],
             "criterion": row["criterion"],
+            "rubric": row.get("rubric", ""),
             "categories": decoded["categories"] or [],
             "scale_map": decoded["scale_map"] or {},
             "choices": decoded["choices"] or [],

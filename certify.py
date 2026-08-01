@@ -22,7 +22,10 @@ from inspect_ai import eval
 from pipeline.artifacts import validate_artifacts
 from pipeline.registry import init_benchmarks, apply_stages, ALL_PERTURB_FAMILIES
 from pipeline.utils.scoring import SCENARIO
-from pipeline.utils.graders import load_graders, load_models_with_check, aggregate_score, condition_metrics
+from pipeline.utils.graders import (
+    aggregate_score, condition_metrics, load_graders, load_models_with_check,
+    validate_graders,
+)
 
 def parse():
     
@@ -191,9 +194,11 @@ if __name__ == "__main__":
         print(f"Skipping: {', '.join(sorted(tasks_to_skip))}")
         BENCHMARKS = {key: entry for key, entry in BENCHMARKS.items() if key not in tasks_to_skip}
 
-    # Fail fast — before any eval spends money — unless every benchmark that
-    # will run has complete pregenerated artifacts in datasets/generated/
-    # (see pipeline/artifacts.py; the error names the generate.py command).
+    # Fail fast — before any eval spends money — on the two things that make a
+    # whole run worthless: an unusable judge (every sample errors on scoring, or
+    # worse, silently abstains into a perfect score), and missing artifacts.
+    validate_graders(grader)
+
     validate_artifacts(
         BENCHMARKS,
         families=args.perturb if run_perturb else None,
@@ -225,8 +230,24 @@ if __name__ == "__main__":
         models.json so an incomplete run is distinguishable from a clean one.
         '''
         ok = sum(1 for log in evaluations if log.status == "success")
-        completed = sum(getattr(log.results, "completed_samples", 0) or 0 for log in evaluations if log.results)
-        total = sum(getattr(log.results, "total_samples", 0) or 0 for log in evaluations if log.results)
+        # log.results is None on an errored task, so counting only from it
+        # reports a failed run as "0/0 samples" — which reads like an empty
+        # dataset rather than a run that broke. Fall back to the samples.
+        completed = sum(
+            (getattr(log.results, "completed_samples", None) if log.results else None)
+            or sum(1 for s in (log.samples or []) if not s.error)
+            for log in evaluations
+        )
+        total = sum(
+            (getattr(log.results, "total_samples", None) if log.results else None)
+            or len(log.samples or [])
+            for log in evaluations
+        )
+        errored = sum(1 for log in evaluations for s in (log.samples or []) if s.error)
+        if errored:
+            first = next(s for log in evaluations for s in (log.samples or []) if s.error)
+            reason = str(first.error).strip().splitlines()[-1][:200]
+            print(f"[ERROR] {errored} sample(s) errored; first: {reason}")
         status = "success" if ok == len(evaluations) else ("partial" if ok else "failed")
         return {"status": status, "completed_samples": completed, "total_samples": total}
 

@@ -25,7 +25,7 @@ cd "$(dirname "$0")/.."
 # Edit these, or override any of them from the environment:
 #   MODEL=openai/gpt-5-mini CLUSTERS=cyber bash scripts/cluster_test.sh
 MODEL="${MODEL:-openrouter/openai/gpt-4o-mini}"   # the model under certification
-GRADER="${GRADER:-}"                              # empty = the GRADERS.md ensemble
+GRADER="${GRADER:-openrouter/anthropic/claude-sonnet-4.5}"                              # empty = the GRADERS.md ensemble
 ATTACKER="${ATTACKER:-openrouter/deepseek/deepseek-v4-flash}"  # generation only
 
 CLUSTERS="${CLUSTERS:-}"          # e.g. "cyber" or "cyber democracy"; empty = all

@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 from inspect_ai.scorer import Score
 
-from pipeline.utils.graders import aggregate_score, condition_metrics
+from pipeline.utils.graders import aggregate_score, condition_metrics, validate_graders
 
 
 def fake_log(task_name: str, samples: list, results: SimpleNamespace | None = None) -> SimpleNamespace:
@@ -134,6 +134,30 @@ class TestConditionMetrics(unittest.TestCase):
                          {"control": 0.0, "paraphrase": 100.0})
         self.assertEqual(rates["by_task"]["echr"]["human_rights_scorer"]["harm_propensity"],
                          {"control": 0.0, "paraphrase": 0.0})
+
+
+class TestValidateGraders(unittest.TestCase):
+    '''
+    A misconfigured judge is the suite's worst failure: the model under test
+    answers fine, so the run pays for every sample and then dies on scoring —
+    or worse, a judge returning garbage scores every sample as an abstention,
+    which is the safe end, and reports a perfect certification.
+    '''
+
+    def test_passes_when_every_grader_answers(self):
+        validate_graders(["mockllm/model", "mockllm/model"])
+
+    def test_raises_naming_the_bad_grader(self):
+        with self.assertRaises(SystemExit) as ctx:
+            validate_graders(["mockllm/model", "openrouter/openai/claude-sonnet-4.5"])
+        message = str(ctx.exception)
+        self.assertIn("openrouter/openai/claude-sonnet-4.5", message)
+        self.assertIn("no evals were started", message)
+        # points at where graders come from, since this is nearly always config
+        self.assertIn("GRADERS.md", message)
+
+    def test_accepts_a_single_grader_string(self):
+        validate_graders("mockllm/model")
 
 
 class TestAggregateScore(unittest.TestCase):

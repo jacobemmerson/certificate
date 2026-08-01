@@ -105,6 +105,7 @@ def load_source(source: Source) -> list[Row]:
             question_type=source.question_type,
             query=str(query),
             criterion=str(source.resolve(record, source.criterion) or ""),
+            rubric=str(source.resolve(record, source.rubric) or ""),
             categories=list(categories or []),
             scale_map={str(k): float(v) for k, v in (scale_map or {}).items()},
             choices=[str(c) for c in (choices or [])],

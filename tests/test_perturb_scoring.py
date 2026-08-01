@@ -16,6 +16,7 @@ from inspect_ai.scorer import Score, SampleScore, Target, accuracy, scorer
 from inspect_ai.solver import TaskState
 
 from pipeline.utils.scoring import (
+    CONDITION_QUERY,
     CONTROL,
     _to_float,
     SCENARIO,
@@ -215,6 +216,32 @@ class TestScoringStep(unittest.TestCase):
         step = scoring_step("paraphrase", self.judge_recording_completions(seen))
         asyncio.run(step(state, None))
         self.assertEqual(state.output.completion, "control-safe")
+
+    def test_each_condition_carries_its_own_request(self):
+        '''
+        A judge that reads the request must see the one *this condition* sent.
+        state.input_text stays the control's prompt for every condition, so a
+        paraphrased or scenario-reframed answer would otherwise be graded
+        against wording the model was never shown.
+        '''
+        requests: list[str] = []
+
+        @scorer(metrics=[accuracy()], name="request_probe")
+        def _judge():
+            async def score(state, target):
+                requests.append(state.metadata.get(CONDITION_QUERY))
+                return Score(value="C")
+
+            return score
+
+        state = self.state_with_variants([
+            {"condition": "paraphrase_variant_1", "query": "REWORDED", "completion": "a"},
+            {"condition": "paraphrase_variant_2", "query": "REFRAMED", "completion": "b"},
+        ])
+        asyncio.run(scoring_step("paraphrase", _judge())(state, None))
+        self.assertEqual(sorted(requests), ["REFRAMED", "REWORDED"])
+        # the shared state must not have picked up a condition's query
+        self.assertNotIn(CONDITION_QUERY, state.metadata)
 
     def test_control_family_judges_the_shared_state(self):
         seen: list[str] = []

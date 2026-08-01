@@ -22,3 +22,6 @@
 [submodule "datasets/raw/cyber/dataset"]
 	path = datasets/raw/cyber/dataset
 	url = git@github.com:cysecbench/dataset.git
+[submodule "datasets/raw/cyber/CySecBench"]
+	path = datasets/raw/cyber/CySecBench
+	url = git@github.com:cysecbench/dataset.git

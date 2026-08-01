@@ -30,6 +30,53 @@ def load_graders(path: str | Path | None = None) -> list[str]:
         raise ValueError(f"No grader models found in {path}")
     return models
 
+def validate_graders(graders: str | list[str]) -> None:
+    '''
+    Fail fast unless every grader model answers, before any eval spends money.
+
+    A misconfigured judge is the worst failure this suite has. It does not stop
+    the run — the model under test answers fine — so every sample errors on the
+    *scoring* call and the run dies after paying for all of it, with a 400
+    buried inside an escaped request dump in the .eval file. And if a bad judge
+    returned garbage rather than erroring, every sample would score as an
+    abstention, which is the safe end: a broken grader would report a perfect
+    certification. One trivial call each is cheap insurance against both.
+    '''
+    import asyncio
+
+    from inspect_ai._util.dotenv import init_dotenv
+    from inspect_ai.model import get_model
+
+    # Inspect loads .env inside eval()/the CLI, and this check runs before
+    # either. Without this the preflight reports a missing API key for every
+    # provider whose credentials live in .env — turning a guard against
+    # misconfiguration into a source of it.
+    init_dotenv()
+
+    names = graders if isinstance(graders, list) else [graders]
+
+    async def check(name: str) -> str | None:
+        try:
+            await get_model(name).generate("Reply with the single word: ok")
+            return None
+        except Exception as exc:
+            return f"  {name}: {type(exc).__name__}: {str(exc).strip().splitlines()[-1][:200]}"
+
+    failures = [f for f in asyncio.run(_gather(check, names)) if f]
+    if failures:
+        raise SystemExit(
+            "Grader model(s) unusable — no evals were started:\n"
+            + "\n".join(failures)
+            + f"\n\nGraders come from --grader, or {REPO_ROOT / 'GRADERS.md'} when it is omitted."
+        )
+
+
+async def _gather(fn, items):
+    import asyncio
+
+    return await asyncio.gather(*(fn(item) for item in items))
+
+
 def load_models_with_check(model_id: str | None = None) -> tuple[list[dict], int]:
     '''
     Return the models list and the index of `model_id` within it (-1 if not
