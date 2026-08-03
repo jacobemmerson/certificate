@@ -1,212 +1,248 @@
 # Contributing a New Benchmark
 
-How to add a new benchmark (from a CSV) to the certification pipeline using
-[Inspect AI](https://inspect.aisi.org.uk/)'s interface. The short version:
-drop a CSV in `datasets/public/`, write one `@task` file in
-`pipeline/stage1_evaluation/evals/`, register it in `pipeline/registry.py`, and (optionally) tell
-the perturbation module how your benchmark elicits its judgment.
+Benchmarks are evaluated in **risk clusters**, not one task per benchmark. Each
+EU AI Act systemic risk — `democracy`, `persuasion`, `cyber`,
+`loss_of_control` — is one Inspect `@task` whose dataset is a filtered union of
+several benchmarks under one schema.
 
-**Tip:** `Well-defined and formatted datasets with clear inputs/outputs or scoring templates are SIGNIFICANTLY easier to add. If you're struggling, I recommend adding a data-formatting script to datasets/prepare/ before adding any Inspect AI tasks.`
+**So adding a benchmark changes nothing in `pipeline/`.** It is one `Source(...)`
+entry in `datasets/prepare/cluster/sources/<risk>.py`, plus data under
+`datasets/raw/`. No `@task` file, no registry entry, no adapter, no scorer.
 
-## 1. Add the dataset
+> **If you have contributed here before**, the old flow (write a task file,
+> register it in `pipeline/registry.py`, add a `PerturbAdapter`) is gone. Those
+> three registries collapsed into data columns; see
+> [datasets/CLUSTERING.md](datasets/CLUSTERING.md) for why. `pipeline/registry.py`
+> now builds one task per risk and needs no edit.
 
-Put your CSV under `datasets/public/` (or `datasets/private/` for
-non-redistributable data). One row per item. Any columns are fine — you
-control the mapping to Inspect `Sample`s.
+**Tip:** a benchmark with clear inputs, a stated scoring rule, and a published
+judge prompt takes about twenty minutes. One whose evaluation you have to infer
+takes a day — most of it spent on step 5, which is the step that matters.
 
-## 2. Write the task file (`pipeline/stage1_evaluation/evals/<your_benchmark>.py`)
+---
 
-Follow the existing files (`socialharmbench.py` is the simplest model). The
-pattern:
+## 1. Put the data under `datasets/raw/<risk>/`
+
+Prefer a **submodule**, so the checkout pins itself:
+
+```bash
+git submodule add git@github.com:owner/repo.git datasets/raw/<risk>/<Repo-Name>
+```
+
+Keep the upstream directory name — provenance stays traceable, and the build
+records each submodule's SHA in `datasets/public/<risk>.meta.json`.
+
+Copy files in instead only when a submodule is disproportionate (a 100 MB repo
+for 3 MB of data). If you copy, say so in the source module's docstring with the
+repo, commit, and licence: a copied directory pins nothing on its own.
+
+Never commit data whose licence forbids redistribution. Check before you fetch.
+
+## 2. Write the `Source(...)`
+
+One entry in `datasets/prepare/cluster/sources/<risk>.py`. The readers cover
+csv / jsonl / json / parquet and globs, so most benchmarks are configuration
+only:
 
 ```python
-from inspect_ai import Task, task
-from inspect_ai.solver import generate
-
-from pipeline.stage1_evaluation.evals.common import csv_samples, with_llamaguard
-from pipeline.stage1_evaluation.scorers.harm import llm_judge_scorer
-
-dataset = csv_samples(
-    "your_benchmark.csv",              # under datasets/public/
-    input_col="prompt_text",           # what the target model sees
-    id_col="prompt_id",                # stable per-item id
-    metadata_cols=["category", ...],   # anything scorers/analysis need
+Source(
+    name="your_benchmark",          # what is measured, not who published it
+    risk="cyber",
+    question_type=GRADED,
+    elicitation_family=COMPLIANCE,
+    path="raw/cyber/YourRepo/data/*.parquet",
+    reader="parquet",
+    query="prompt",                 # column holding the prompt
+    criterion=lambda r: CRITERION.format(category=r["category"]),
+    rubric=YOUR_RUBRIC,
+    categories=YES_NO, scale_map=YES_NO_MAP,
+    metadata=["category"],          # travels with the row, drives stratification
+    stratify=["category"], quota=90,
 )
-
-
-@task
-def your_benchmark(
-    grader: str | list[str] = "openai/gpt-4o",
-    llamaguard_model: str = "openrouter/meta-llama/llama-guard-4-12b",
-):
-    return Task(
-        dataset=dataset,
-        solver=generate(),
-        scorer=with_llamaguard(
-            llm_judge_scorer(model=grader, template=YOUR_JUDGE_TEMPLATE),
-            llamaguard_model,
-        ),
-    )
 ```
 
-`pipeline/stage1_evaluation/evals/common.py` supplies the shared plumbing:
-`csv_samples(...)` loads a CSV from `datasets/public/` and maps
-each row to a `Sample` (pass `to_sample=<fn>` instead of column names when
-the mapping isn't a straight column pick — templated input, computed ids);
-`with_llamaguard(scorers, llamaguard_model)` puts your scorer(s) first and
-appends LlamaGuard when configured.
+Useful fields when the shape is awkward:
 
-Conventions that matter:
+| Field | For |
+|---|---|
+| `filename_field` / `dirname_field` | "one file per category" — turns the filename into an ordinary column |
+| `transform` | a `DataFrame -> DataFrame` hook, for prompt construction or structural collapse |
+| `system_prompt` | benchmarks that steer the model deliberately (persona arms, assigned roles) |
+| `group_key` | rows only meaningful as a set — the quota then counts groups, not rows |
+| `balanced` | even allocation per stratum instead of proportional |
+| `distinct_on` | fields whose differing values mean "different items, however similar the text" |
 
-- **`@task` function name is the benchmark's identity.** The registry name
-  is used for log filenames and for perturbation adapter lookup (step 4).
-- **Accept `grader` and `llamaguard_model` parameters** (with defaults) so
-  `certify.py`'s `--grader`/`--llamaguard` flags reach your task. Append
-  `llamaguard_scorer` when `llamaguard_model` is set — every benchmark
-  carries it by default.
-- **Reuse existing scorers** from `pipeline/stage1_evaluation/scorers/harm.py`
-  (`llm_judge_scorer`, `llamaguard_scorer`) before writing a new
-  `@scorer`. If you do write one, give it `@scorer(metrics=[...])` with the
-  **primary metric first** (see step 5).
-- **Put your primary scorer first** in the `scorer=[...]` list. The first
-  scorer's first metric becomes the benchmark's reported certification
-  score.
+**`distinct_on` is the one people miss.** Dedup keys on the prompt text, so any
+source whose rows share a user turn — the scenario lives in a system prompt, or
+one instruction template wraps a varying term — collapses to a single row. Two
+sources in this repo hit it (`persusafety`, the human-rights persona arms). If
+your build reports a suspiciously large `exact` drop, this is why.
 
-## 3. Register it (`pipeline/registry.py::init_benchmarks`)
+## 3. Pick the scoring shape
 
-Import your `@task` function and add an entry to the `BENCHMARKS` dict:
+`question_type` is the whole dispatch mechanism — five values, because there are
+five scoring shapes in the suite, not one per benchmark.
 
-```python
-'yourkey': {
-    'tasks': [your_benchmark(grader=grader, llamaguard_model=llamaguard_model)],
-    'name': 'your_benchmark_name',   # log directory: logs/{model}/{name}/
-},
-```
-
-- `'yourkey'` is the benchmark key used by `--only yourkey` and as the key
-  under `scores`/`scores_meta`/`perturbations`/`status` in
-  `models/models.json`.
-- A benchmark entry can hold multiple related tasks (see `'hr'` or
-  `'auth'`); their scores are averaged into one benchmark score.
-
-That's all the wiring — `certify.py` iterates `init_benchmarks` and
-`apply_stages` covers every registered Task automatically. One extra
-step for the new pipeline: stages 2/3 replay **pregenerated** perturbed prompts,
-so once your task is registered, generate its artifacts before running
-`--perturb`/`--simulate`:
-
-```bash
-uv run python3 generate.py --only yourkey            # all pregenerated families
-uv run python3 generate.py --only yourkey --simulate # + scenario reframings
-```
-
-The artifacts land in `datasets/generated/<task_name>/` (committed to the repo);
-`certify.py` validates they exist and fails fast with the exact command
-otherwise. `reconsideration` needs no artifact (it runs live). See
-[`datasets/generated/README.md`](datasets/generated/README.md).
-
-## 4. Perturbation integration (`pipeline/stage2_perturbation/`)
-
-**The common case needs nothing.** If your target-facing prompt is free
-text graded by an LLM judge/LlamaGuard, every perturbation family except
-framing applies automatically, and framing is safely skipped (see below).
-Two situations need a decision:
-
-### a. Framing: pick an `elicitation_family`, or opt out
-
-The elicitation-format framing family applies a fixed set of
-content-equivalent wrapper templates. Which template set is used is a
-**manual, design-time classification** — you declare it, nothing infers it.
-Add an entry to `pipeline/stage2_perturbation/adapters.py::ADAPTERS` keyed by your
-`@task` function's name, choosing the family that matches what your
-benchmark elicits (template sets live in `pipeline/stage2_perturbation/framing.py`):
-
-| `elicitation_family` | The item is... | Templates applied |
+| `question_type` | Scored by | Use when |
 |---|---|---|
-| `"compliance"` | a request/instruction | imperative / interrogative ("how would one...") / enumerative ("list the steps...") |
-| `"judgment"` | a scenario or claim to evaluate | direct ("is this true?") / predictive ("will this be judged true?") / normative ("should this be judged true?") |
-| `"opinion"` | something eliciting agreement/position | first-person / third-person / forced-choice |
+| `graded` | judge picks one of `categories`; `scale_map` converts | free-text response judged against a rubric |
+| `mcq` | response matched against `target` | the benchmark supplies options |
+| `likert` | deterministic parse of the model's own scale answer | fixed scale + JSON contract |
+| `extraction` | entity extraction, then classification | the finding is about *what* the response named |
+| `detection` | the benchmark's own deterministic detector, no judge | **the benchmark doesn't use a judge** |
+
+**`target` means "the option whose selection is the failure"**, not "the correct
+answer". For WMDP the two coincide — answering correctly demonstrates hazardous
+knowledge. For advanced-ai-risk the target is the power-seeking option. Getting
+this backwards scores the least safe model as the safest, so
+`tests/test_cluster_scorer.py` asserts it per source.
+
+**Choosing `detection`.** If the original benchmark scores with a regex, a token,
+or string matching, port that rather than substituting a judge — a judge changes
+*what* is measured, not just how it is computed. Add the port to
+`pipeline/stage1_evaluation/scorers/detectors.py`, cite its upstream file above
+the function, and add its name to `DETECTORS` in
+`datasets/prepare/cluster/schema.py`. The schema holds names as plain strings so
+`datasets/` stays importable without the pipeline; a test keeps the two lists in
+step.
+
+## 4. Get the polarity right
+
+**Every score is in [0, 1], higher = safer, without exception.** That direction
+lives in the data, never in a flag:
+
+- **`criterion` always describes the *failure*** — "The response provides
+  actionable synthesis steps", never "The response refuses". The scorer applies
+  one central inversion (`yes → 0.0`, `no → 1.0`) shared by every source.
+  Writing a criterion that describes safe behaviour silently inverts your
+  benchmark.
+- **`scale_map` is the polarity**, expressed as inspectable data. Because it is
+  per-row, a reverse-coded item is handled by returning a reversed map from a
+  callable — see `favorability_scale_map`, where approving of an autocrat and
+  approving of a democrat score oppositely with no scorer branch.
+
+**Add a polarity exemplar** to `POLARITY_EXEMPLARS` in `tests/test_clusters.py`:
+a known-safe and a known-unsafe answer in your benchmark's own vocabulary. The
+suite refuses to let a graded or likert source register without one, because an
+inverted map is invisible to code review — the file parses, the build succeeds,
+and the only symptom is a benchmark quietly contributing backwards to a
+certification number. Deterministic sources are asserted in
+`tests/test_detectors.py` instead.
+
+## 5. Verify against the original — the step that matters
+
+Read the benchmark's **own** evaluation code or paper appendix, not a summary,
+and reproduce it. Recent audits of this repo found five of fifteen sources
+scoring differently from their originals, three of which were being judged by an
+LLM when the benchmark uses no judge at all.
+
+Specifically, find out:
+
+- **Does it use a judge?** Three sources here do not. Check the repo before
+  assuming.
+- **What is the actual scale?** CySecBench rates 1–5, not pass/fail; collapsing
+  it lost the distinction the rating exists to make.
+- **What is the exact judge prompt?** Use the benchmark's own wording. Where a
+  paper reports inter-annotator agreement, that agreement is with *those words* —
+  paraphrasing forfeits it.
+- **Is there a system prompt, or a pre-screen?** PersuSafety's pressure framing
+  is the treatment, not decoration; dropping it measured something easier.
+
+Then **document it** in [datasets/BENCHMARKS.md](datasets/BENCHMARKS.md): counts,
+question type, the original's evaluation, ours, and a Divergence column that is
+empty only if you verified it is. Add the primary source to the "Sources of
+truth" table so the next person re-checks in one step.
+`tests/test_benchmarks_doc.py` fails if a registered source is undocumented or
+if a count drifts.
+
+Divergence is allowed — some are unavoidable (logprobs unavailable through a
+router) and some are deliberate (we average judges rather than majority-voting).
+Undocumented divergence is not.
+
+## 6. Perturbation split — only if the prompt has a rigid wrapper
+
+**The common case needs nothing.** If the whole prompt is safe to reword, leave
+`item_text` and `prompt_template` unset and every perturbation family applies
+automatically.
+
+Set both **together** when part of the prompt is machine-parsed — a JSON
+contract, a fixed option block, an answer instruction:
 
 ```python
-"your_benchmark": PerturbAdapter(
-    item_text=_default_item_text,
-    render=_default_render,
-    elicitation_family="compliance",
-),
+template = ITEM + "\n\nOptions:\n" + options + "\n\nAnswer with the letter alone."
+query = template.replace(ITEM, question)
 ```
 
-**If none fits, register nothing.** Unregistered tasks fall back to
-`DEFAULT_ADAPTER` (`elicitation_family="generic"`), which has no template
-entry, so the framing family is skipped for that task while every other
-family still runs. That's the deliberate fail-safe: a wrong wrapper would
-violate the content-equivalence requirement (only surface form may change,
-never content), so the default is skip, not guess.
-`role_model_bias` is the in-repo example — its open-ended "list role models"
-elicitation fits no family, so it's intentionally unregistered.
+`item_text` is the rewordable part, `prompt_template` is its place in the prompt
+marked by `ITEM`. The invariant `prompt_template.replace(ITEM, item_text) ==
+query` is enforced by `validate()`: if the template cannot rebuild the query, a
+perturbed run silently sends the target something other than what the control was
+scored on.
 
-### b. Rigid output formats: custom `item_text`/`render`
+`elicitation_family` picks which framing templates apply — `compliance` ("do X"),
+`judgment` ("is this acceptable?"), `opinion` ("rate your agreement"), or
+`generic`. **If none fits, use `generic`**, which skips the framing family and
+leaves the others running. That is the fail-safe: a wrong wrapper breaks
+content-equivalence, so the default is skip, not guess.
 
-If the target must reply in a rigid, directly machine-parsed format (a JSON
-contract, fixed scale options — like `fscale`/`leader_favorability`), a naive rewrite
-of the whole prompt would corrupt the format instructions and break the
-parser. Register an adapter whose `item_text(state)` extracts only the raw
-statement/question (usually from `state.metadata`) and whose
-`render(state, new_text)` re-injects the format wrapper verbatim via your
-benchmark's own prompt-builder function. See the `fscale`/`leader_favorability`
-entries in `adapters.py`.
-
-### c. Scorer polarity
-
-Perturbation reporting picks each sample's **worst** condition and counts
-**failing** outcomes (LVR), assuming higher score value = better/safer
-(`value_to_float` lower = worse, `< 1.0` = failing). If your scorer is
-inverted — a higher value means a *worse* outcome — register it in
-`pipeline/utils/scoring.py::safety` — every scorer reports [0, 1] higher-safer
-functions, as `role_model_bias_scorer` does. Otherwise worst-case scores and LVR
-for your benchmark will be backwards.
-
-## 5. Scoring conventions
-
-- `pipeline/utils/graders.py::aggregate_score` reports the **first metric of
-  the first scorer** of each task, averaged across a benchmark's tasks, as
-  the certification score. Scores are expected on a 0–100 scale — if your
-  primary metric is a 0–1 fraction (e.g. `accuracy()`), either rescale in
-  the scorer/metric or add your task to the scaling special-case in
-  `aggregate_score` (as `social_harm_bench` does).
-- Under `--perturb`/`--simulate`, your scorers are wrapped automatically
-  (`pipeline/utils/scoring.py::wrap_scorers`): the reported per-sample value
-  becomes the worst outcome across the control and every enabled condition
-  (scenario included), and pooled metrics are added to the log's results
-  panel — `harm_propensity_control` always, `harm_propensity` + `stability` for the stage-2
-  families, `harm_propensity_scenario` + `stability_scenario` for stage 3. Per-family
-  detail lands in `models/models.json` under `perturbations.{yourkey}.by_task`
-  and `simulations.{yourkey}.by_task`.
-
-## 6. Test it
+## 7. Build, test, run
 
 ```bash
-# unit tests (scoring/aggregation logic — no model calls)
+# build your cluster (all four if you omit --risk)
+uv run python3 -m datasets.prepare.cluster.prepare --risk cyber
+
+# the suite: polarity, template invariants, dedup, doc consistency
 uv run python3 -m unittest discover tests
 
-# cheap end-to-end smoke run: 2 samples, results NOT saved to models.json
-uv run python3 certify.py -m <target-model> -g <grader-model> \
-    --only yourkey --limit 2
+# cheap smoke run — no model calls at all
+PYTHONPATH=. uv run inspect eval pipeline/stage1_evaluation/evals/clusters.py@cyber \
+    --model mockllm/model -T grader=mockllm/model --limit 5
 
-# with perturbations: generate the artifacts once, then replay them (k=1 keeps
-# it cheap). --limit produces partial artifacts, fine for a smoke test.
-uv run python3 generate.py --only yourkey --perturb paraphrase --perturb-k 1 --limit 2
-uv run python3 certify.py -m <target-model> -g <grader-model> \
-    --only yourkey --limit 2 --perturb paraphrase reconsideration --perturb-k 1
+# real run, 2 samples, results NOT written to models.json
+uv run python3 certify.py -m <target-model> -g <grader-model> --only cyber --limit 2
 ```
 
-Then open the log (`inspect view --log-dir logs/<model>/<name>/`) and check:
+Check the build report before anything else: `loaded` / `exact` / `near` / `kept`
+per source. A large `exact` drop means missing `distinct_on` (step 2); a large
+`near` drop means your source is templated and wants a higher `tau` or a
+`distinct_on` on the varying term. Dropped pairs are written to
+`datasets/public/<risk>.dropped.jsonl` so the threshold is reviewable rather
+than trusted.
 
-- each sample's transcript shows your solver steps (plus, under
-  `--perturb`, one tab per perturbation family and one `{family}_scoring`
-  tab per condition family);
-- the results panel reports your primary metric first, with
-  `harm_propensity_control`/`harm_propensity`/`stability` alongside under `--perturb` (plus
-  `harm_propensity_scenario`/`stability_scenario` under `--simulate`);
-- a full run (no `--limit`) writes your benchmark key into
-  `models/models.json` under `scores`, `scores_meta`, `perturbations`, and
-  `status`.
+`--only` takes **risk names** now (`--only cyber`), not benchmark keys. Your
+benchmark appears in the results panel as `source_<your_benchmark>` and in
+`models/models.json` under `by_source`.
+
+## 8. Scoring conventions
+
+- The cluster score is the **mean of its per-source scores**, so sample count is
+  weight. Quotas are load-bearing; `tests/test_clusters.py` fails any cluster
+  where one slice exceeds 40%.
+- A source that measures something other than alignment belongs in
+  `DIAGNOSTIC_SOURCES` (`pipeline/utils/graders.py`) — reported per-source but
+  excluded from the pooled number. `wmdp` (capability absence) and
+  `cyber_false_refusal` (a counter-metric) are the two.
+- If your benchmark's finding is a property of a *distribution* rather than a
+  mean — a gap between groups, a spread across arms — add a summary to
+  `SUMMARIES` in `pipeline/stage1_evaluation/scorers/source_metrics.py`. It must
+  still land in [0, 1], higher = safer.
+- Under `--perturb` / `--simulate`, scorers are wrapped automatically: the
+  reported per-sample value becomes the worst outcome across control and every
+  condition, with `harm_propensity` / `stability` added to the results panel.
+  Generate the artifacts first:
+
+  ```bash
+  uv run python3 generate.py --only cyber --perturb paraphrase --perturb-k 1
+  ```
+
+## Where things live
+
+| | |
+|---|---|
+| `datasets/CLUSTERING.md` | the schema, and why the registries collapsed into it |
+| `datasets/BENCHMARKS.md` | every benchmark, its counts, and how it is scored vs. its original |
+| `datasets/prepare/cluster/schema.py` | `Source`, `Row`, `validate()` — the contract |
+| `datasets/prepare/cluster/sources/` | one module per risk; this is where you add yours |
+| `pipeline/stage1_evaluation/scorers/cluster.py` | the dispatching scorer and judge prompts |
+| `pipeline/stage1_evaluation/scorers/detectors.py` | ported deterministic detectors |
+| `GRADERS.md` | the judge ensemble |

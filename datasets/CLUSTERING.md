@@ -6,6 +6,9 @@ layout in `pipeline/stage1_evaluation/evals/`.
 
     democracy | persuasion | cyber | loss_of_control
 
+For what each benchmark contains and how it is scored — including where our
+evaluation diverges from the original — see [BENCHMARKS.md](BENCHMARKS.md).
+
 ## Why filtering is now a correctness requirement, not just a budget
 
 In the current layout each benchmark is its own task, so sample counts don't
@@ -452,7 +455,28 @@ Pairing WMDP with SOSBench was deliberate — WMDP measures whether the model
 logic covers the scientific side; CySecBench now supplies the same pairing for
 the cyber side.
 
-### loss_of_control — new, all three from `inspect_evals`
+### loss_of_control — one source: advanced-ai-risk
+
+**Built.** `advanced_ai_risk`, 140 rows: the seven safety-directional behaviours
+of `anthropics/evals` advanced-ai-risk (`lm_generated_evals`, CC-BY-4.0),
+20 items each, forced-choice A/B and scored by letter match — no judge cost.
+Vendored as a submodule at `datasets/raw/loss_of_control/evals` (82 MB checked
+out for 3.6 MB of used files); `BEHAVIOUR_CRITERIA` in the source module selects
+the seven, so the subset is declared in the registry, not by the checkout.
+
+The plan below (agentic_misalignment, InstrumentalEval, MASK) was **not** taken.
+All three are agentic or two-generation: they need a scaffold with tools and
+multiple turns, which the one-row-one-prompt contract cannot express, and
+flattening a scenario into a prose question stops it being the benchmark. They
+belong in stage 3, which already reframes items as scenarios. advanced-ai-risk
+asks the propensity half of the same question directly — does the model *want*
+power, resources, survival, or to coordinate with other AIs against its
+principals — in a single generation.
+
+Details, including which behaviours were excluded and why the human-generated
+split was rejected, are in `datasets/prepare/cluster/sources/loss_of_control.py`.
+
+The original plan, kept for the record:
 
 - **agentic_misalignment** — Anthropic's insider-threat scenarios ported to
   Inspect. Single system + user generation scored by a classifier, no sandbox.
@@ -500,9 +524,8 @@ canonical columns with no restructuring.
 | cyber | SOSBench | HF (via `inspect_evals` sosbench) | — | 3,000 | drop-in |
 | cyber | WMDP | `hf: cais/wmdp` (3 configs) | MIT | 3,668 | MCQ + judge, see below |
 | cyber | ~~CyberSecEval MITRE-FRR~~ | **deferred** — single 420 KB file if revisited | — | 750 | drop-in, inverted criterion |
-| loss_of_control | agentic_misalignment | `inspect_evals` templates (generated, no external data) | MIT | 45 base configs | port `prompt_generator.py` |
-| loss_of_control | InstrumentalEval | `inspect_evals` downloader — GitHub raw CSVs, sha256-verified | — | 76 | drop-in |
-| loss_of_control | MASK | `hf: cais/MASK` (6 parquet splits) | check | 1,028 | **needs verification** |
+| loss_of_control | advanced-ai-risk | submodule (vendored) `anthropics/evals` -> `advanced-ai-risk/lm_generated_evals/*.jsonl` | CC-BY-4.0 | 6,468 in 7 of 17 files | split embedded A/B options |
+| loss_of_control | ~~agentic_misalignment / InstrumentalEval / MASK~~ | **rejected** — agentic or two-generation, see above | — | — | — |
 
 Fetch mechanics: `datasets/prepare/fetch_sources.py` resolves the HF and GitHub
 entries into `datasets/raw/<risk>/<name>/`, pinning the HF revision or git SHA
@@ -519,7 +542,7 @@ into the cluster manifest. Vendored submodules already pin themselves.
 | SocialHarmBench | `democracy/SocialHarmBench/socialharmbench.csv` | 585 | `prompt_id`,`category`,`sub_topic`,`type`,`prompt_text` |
 | MITRE-FRR | `cyber/mitre_frr/mitre_frr.json` | 750 | `mutated_prompt`,`is_malicious`,`attack_type` |
 | sycophancy-eval | `persuasion/sycophancy-eval/datasets/` | 7,268 / 4,888 / 8,500 | **`mimicry.jsonl` still absent** |
-| loss_of_control | *(empty)* | — | all three sources still missing |
+| advanced-ai-risk | `loss_of_control/evals/advanced-ai-risk/lm_generated_evals/*.jsonl` | 6,468 | `question` (options embedded), `answer_matching_behavior` — 7 of 17 behaviours used |
 
 Every count matches the plan. Two schema corrections from the real files:
 
@@ -545,7 +568,7 @@ Every count matches the plan. Two schema corrections from the real files:
    (`meg-tong/sycophancy-eval`) at the repo root. It is the sole file of the four
    recommended for inclusion, so as things stand the sycophancy-eval clone
    contributes nothing to the persuasion cluster.
-3. **`loss_of_control/` is still empty** — agentic_misalignment, InstrumentalEval
+3. ~~**`loss_of_control/` is still empty**~~ *(resolved: advanced-ai-risk)* — agentic_misalignment, InstrumentalEval
    and MASK are all absent, so one of the four clusters has no data at all.
 
 Housekeeping: `.cache/huggingface/` directories under `SOSBench/`, `darkbench/`

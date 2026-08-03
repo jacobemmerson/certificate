@@ -24,13 +24,31 @@ GRADED = "graded"          # judge picks from `categories`; scale_map converts
 MCQ = "mcq"                # response matched against `target`
 LIKERT = "likert"          # model picks from a scale; scale_map converts
 EXTRACTION = "extraction"  # bespoke scorer (entity extraction + classification)
+DETECTION = "detection"    # the benchmark's own deterministic detector decides
 
-QUESTION_TYPES = frozenset({GRADED, MCQ, LIKERT, EXTRACTION})
+QUESTION_TYPES = frozenset({GRADED, MCQ, LIKERT, EXTRACTION, DETECTION})
+
+# `detection` exists because three benchmarks do not use a judge at all, and
+# replacing their detector with one changes what is being measured rather than
+# how it is computed: PersuSafety detects an [ACCEPT]/[REJECT] token,
+# CyberSecEval's false-refusal set applies a refusal regex, and sycophancy
+# mimicry string-matches the two attributions. Each name below is a verbatim
+# port, implemented in pipeline/stage1_evaluation/scorers/detectors.py.
+#
+# The names live here as plain strings rather than as imported functions
+# because datasets/ must stay readable without the pipeline installed (the
+# stage-2 batching path depends on that). A test asserts the two sides agree.
+ACCEPT_REJECT_TOKEN = "accept_reject_token"
+REFUSAL_REGEX = "refusal_regex"
+ATTRIBUTION_MIMICRY = "attribution_mimicry"
+
+DETECTORS = frozenset({ACCEPT_REJECT_TOKEN, REFUSAL_REGEX, ATTRIBUTION_MIMICRY})
 
 COLUMNS = [
     "sample_id", "source", "risk", "question_type", "query",
     "criterion", "rubric", "categories", "scale_map", "choices", "target",
-    "item_text", "prompt_template", "elicitation_family", "metadata",
+    "detector", "system_prompt", "item_text", "prompt_template",
+    "elicitation_family", "metadata",
 ]
 
 # ----- elicitation families -----
@@ -91,6 +109,13 @@ class Row:
     scale_map: dict[str, float] = field(default_factory=dict)
     choices: list[str] = field(default_factory=list)
     target: str = ""
+    # Names the deterministic detector for `detection` rows, empty otherwise.
+    detector: str = ""
+    # Sent as a system turn ahead of `query` when non-empty. Some benchmarks
+    # steer the model deliberately — llm-human-rights runs every scenario under
+    # a neutral, an individual-rights and a government-authority persona, and
+    # the contrast between those arms is what it measures.
+    system_prompt: str = ""
     # Stage-2 perturbation splits the prompt into the part safe to reword and
     # the elicitation wrapper that must survive verbatim (a strict JSON+scale
     # contract, say). Defaults treat the whole prompt as rewordable.
@@ -165,6 +190,13 @@ def validate(row: Row) -> None:
         if not row.scale_map:
             fail("likert rows need a scale_map")
 
+    elif row.question_type == DETECTION:
+        if row.detector not in DETECTORS:
+            fail(f"unknown detector {row.detector!r}")
+
+    if row.detector and row.question_type != DETECTION:
+        fail(f"detector {row.detector!r} on a {row.question_type} row")
+
 
 # ----- source specification -----
 
@@ -202,6 +234,8 @@ class Source:
     scale_map: dict[str, float] | Callable[[dict], dict[str, float]] | None = None
     choices: Derived | None = None
     target: Derived | None = None
+    detector: str = ""
+    system_prompt: Derived | None = None
     # Perturbation split. Leave both unset when the whole prompt is rewordable
     # (the common case); set them together when an elicitation wrapper must
     # survive rewording verbatim. `prompt_template` must contain schema.ITEM.
@@ -213,6 +247,12 @@ class Source:
     # selection
     stratify: Sequence[str] = ()
     quota: int | None = None
+    # Rows sharing a group_key value are selected or dropped together, and the
+    # quota counts *groups* rather than rows. Needed wherever rows are only
+    # meaningful as a set: the three persona arms of one scenario are compared
+    # against each other, so sampling them independently would leave arms
+    # unpaired and make the comparison meaningless.
+    group_key: str | None = None
     balanced: bool = False   # even allocation per stratum, not proportional
 
     # near-dedup controls. Defaults are deliberately conservative — a false

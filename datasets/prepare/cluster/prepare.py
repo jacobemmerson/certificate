@@ -110,6 +110,10 @@ def load_source(source: Source) -> list[Row]:
             scale_map={str(k): float(v) for k, v in (scale_map or {}).items()},
             choices=[str(c) for c in (choices or [])],
             target=str(target or ""),
+            detector=source.detector,
+            system_prompt=str(
+                source.resolve(record, source.system_prompt) or ""
+            ) if source.system_prompt else "",
             item_text=item_text,
             prompt_template=prompt_template,
             elicitation_family=source.elicitation_family,
@@ -142,10 +146,25 @@ def _dedupe_ids(rows: list[Row]) -> list[Row]:
     return rows
 
 
-def exact_dedup(rows: list[Row]) -> tuple[list[Row], int]:
+def _identity(row: Row, distinct_on: Sequence[str]) -> tuple:
+    """What makes this row a distinct item, beyond its text.
+
+    `distinct_on` names fields whose differing values mean two rows are
+    different items however similar they read. It is the same declaration
+    near_dedup consults, applied here so one concept covers both tiers: the
+    persona arms of a human-rights scenario share a user message and differ only
+    in the system prompt, so keying on text alone collapsed three arms into one
+    (observed as 288 of 432 rows dropped) and left nothing to compare.
+    """
+    return tuple(str(row.metadata.get(field, "")) for field in distinct_on)
+
+
+def exact_dedup(
+    rows: list[Row], distinct_on: Sequence[str] = ()
+) -> tuple[list[Row], int]:
     kept, seen = [], set()
     for row in rows:
-        key = normalised(row.query)
+        key = (normalised(row.query), _identity(row, distinct_on))
         if key in seen:
             continue
         seen.add(key)
@@ -234,6 +253,45 @@ def near_dedup(
 # ----- tier 3: stratified quota -----
 
 def stratified_sample(
+    rows: list[Row], source: Source, seed: int
+) -> tuple[list[Row], dict]:
+    if source.group_key:
+        return _grouped_sample(rows, source, seed)
+    return _row_sample(rows, source, seed)
+
+
+def _grouped_sample(
+    rows: list[Row], source: Source, seed: int
+) -> tuple[list[Row], dict]:
+    '''
+    Sample whole groups, so rows that are only meaningful together survive
+    together.
+
+    The persona arms of one human-rights scenario are compared against each
+    other; sampling rows independently would keep a scenario's neutral arm and
+    drop its government-authority arm, leaving nothing to compare and silently
+    computing the gap over mismatched scenarios. The quota therefore counts
+    groups, not rows — a quota of 20 over 3-arm groups yields 60 rows.
+    '''
+    groups: defaultdict[str, list[int]] = defaultdict(list)
+    for index, row in enumerate(rows):
+        groups[str(row.metadata.get(source.group_key, index))].append(index)
+
+    # Select over one representative row per group, so groups are picked by the
+    # same stratification the source declares, then expand back to every member.
+    leaders = {key: rows[indices[0]] for key, indices in groups.items()}
+    picked, report = _row_sample(list(leaders.values()), source, seed)
+
+    by_id = {id(row): key for key, row in leaders.items()}
+    wanted = {by_id[id(row)] for row in picked}
+    chosen = [i for key, indices in groups.items() if key in wanted for i in indices]
+
+    report["groups"] = len(groups)
+    report["allocated"] = len(chosen)
+    return [rows[i] for i in sorted(chosen)], report
+
+
+def _row_sample(
     rows: list[Row], source: Source, seed: int
 ) -> tuple[list[Row], dict]:
     quota = source.quota
@@ -332,7 +390,7 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
         rows = load_source(source)
         loaded = len(rows)
 
-        rows, exact_dropped = exact_dedup(rows)
+        rows, exact_dropped = exact_dedup(rows, source.distinct_on)
 
         if source.dedup:
             rows, near_dropped = near_dedup(

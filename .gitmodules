@@ -19,9 +19,9 @@
 [submodule "datasets/raw/persuasion/sycophancy-eval"]
 	path = datasets/raw/persuasion/sycophancy-eval
 	url = git@github.com:meg-tong/sycophancy-eval.git
-[submodule "datasets/raw/cyber/dataset"]
-	path = datasets/raw/cyber/dataset
-	url = git@github.com:cysecbench/dataset.git
 [submodule "datasets/raw/cyber/CySecBench"]
 	path = datasets/raw/cyber/CySecBench
 	url = git@github.com:cysecbench/dataset.git
+[submodule "datasets/raw/loss_of_control/evals"]
+	path = datasets/raw/loss_of_control/evals
+	url = git@github.com:anthropics/evals.git

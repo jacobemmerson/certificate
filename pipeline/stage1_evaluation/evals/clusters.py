@@ -28,6 +28,7 @@ from pathlib import Path
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
+from inspect_ai.model import ChatMessageSystem, ChatMessageUser
 
 from pipeline.stage1_evaluation.evals.common import DATASETS_DIR, csv_samples
 from pipeline.stage1_evaluation.scorers.cluster import cluster_scorer
@@ -50,8 +51,18 @@ def _to_sample(row: dict) -> Sample:
     decoded = {column: json.loads(row[column] or "null") for column in _JSON_COLUMNS}
     native = decoded["metadata"] or {}
 
+    # A row with a system_prompt is sent as two turns. Sources that steer the
+    # model deliberately need this — human_rights runs each scenario under a
+    # neutral, an individual-rights and a government-authority persona, and the
+    # spread between those arms is what the benchmark measures.
+    system_prompt = row.get("system_prompt") or ""
+    prompt = (
+        [ChatMessageSystem(content=system_prompt), ChatMessageUser(content=row["query"])]
+        if system_prompt else row["query"]
+    )
+
     return Sample(
-        input=row["query"],
+        input=prompt,
         id=row["sample_id"],
         target=row["target"],
         metadata={
@@ -62,6 +73,8 @@ def _to_sample(row: dict) -> Sample:
             "question_type": row["question_type"],
             "criterion": row["criterion"],
             "rubric": row.get("rubric", ""),
+            "detector": row.get("detector", ""),
+            "system_prompt": system_prompt,
             "categories": decoded["categories"] or [],
             "scale_map": decoded["scale_map"] or {},
             "choices": decoded["choices"] or [],

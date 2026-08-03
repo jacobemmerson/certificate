@@ -29,15 +29,23 @@ near-duplicate pairs removed, so the threshold stays reviewable).
 
 ### Adding a benchmark to a cluster
 
-1. **Drop the data** in `datasets/raw/<risk>/<benchmark>/`.
+Full guide: **[CONTRIBUTE.md](../CONTRIBUTE.md)**. In short:
+
+1. **Add the data** under `datasets/raw/<risk>/<benchmark>/`, as a submodule
+   where possible so the checkout pins itself.
 2. **Add one `Source(...)`** to `datasets/prepare/cluster/sources/<risk>.py`.
    Readers cover csv/jsonl/json/parquet and globs; `filename_field` /
    `dirname_field` turn "one file per category" into an ordinary column.
 3. **Add a polarity exemplar** to `POLARITY_EXEMPLARS` in
    `tests/test_clusters.py` — a known-safe and a known-unsafe answer. The test
    suite refuses to let a graded source register without one.
-4. **Only if the shape needs it**, write a `transform=` — a `DataFrame ->
+4. **Verify the scoring against the original** and record it in
+   [BENCHMARKS.md](BENCHMARKS.md), including any divergence. If the benchmark
+   scores deterministically, port its detector rather than substituting a judge.
+5. **Only if the shape needs it**, write a `transform=` — a `DataFrame ->
    DataFrame` hook for prompt construction or structural collapse.
+
+Nothing in `pipeline/` changes.
 
 Scores are always in `[0, 1]` and **higher is safer**. That direction lives in
 the row's `scale_map`, never in a flag, so no scorer branches per source. A
@@ -53,15 +61,14 @@ describe what is measured**, reusing the vocabulary already in
 `leader_favorability` and `role_model_bias` rather than `dab_*`. The originating
 file for every source is recorded in `<risk>.meta.json`.
 
-## Legacy per-benchmark CSVs
+## Orphaned per-benchmark CSVs
 
-`public/dab_*.csv`, `lhr_*.csv` and `pht_*.csv` are the flat one-benchmark-per-file
-datasets that the current `pipeline/stage1_evaluation/evals/` tasks load. They
-are committed artifacts: the `prepare_{dab,lhr,pht}_data.py` scripts that built
-them were removed once `prepare/cluster/` absorbed the same flattening, so they
-are no longer regenerable. They stay until those tasks are replaced by the
-cluster tasks; anything reproducing that data should go through
-`prepare/cluster/sources/democracy.py`.
+`public/dab_*.csv`, `lhr_*.csv` and `pht_*.csv` are flat one-benchmark-per-file
+datasets from before the cluster migration. **Nothing loads them any more** —
+the per-benchmark tasks that did were replaced by
+`stage1_evaluation/evals/clusters.py`, and the `prepare_{dab,lhr,pht}_data.py`
+scripts that built them are gone, so they are not regenerable either. The same
+items now come from `prepare/cluster/sources/democracy.py`.
 
-Adding a benchmark to the *existing* per-benchmark suite is documented in
-[CONTRIBUTE.md](../CONTRIBUTE.md); for the clusters, see the four steps above.
+They are kept only because deleting committed data needs a deliberate decision;
+recommend removing them.
