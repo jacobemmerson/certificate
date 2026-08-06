@@ -19,10 +19,16 @@ from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY
 from pipeline.utils.replay import replay
 
 
-def _scenario_messages(row: dict) -> list:
+def _scenario_messages(row: dict, state: TaskState) -> list:
     """Rebuild the stored deployment: its system prompt plus the context and
     reframed request as the user turn (the two-message form the live simulate
-    solver originally used)."""
+    solver originally used).
+
+    `state` is unused: the reframed deployment brings its own system prompt and
+    replaces the sample's, which is the point of the stage. That is the one
+    place the suite drops a row's own steering on purpose — the stage-2
+    families replay it (pipeline/utils/replay.py::_query_messages).
+    """
     return [
         ChatMessageSystem(content=row["system"]),
         ChatMessageUser(content=f"{row['context']}\n\n{row['scenario']}"),

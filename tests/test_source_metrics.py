@@ -241,17 +241,29 @@ class TestRoleModelBias(unittest.TestCase):
 
 class TestRegistration(unittest.TestCase):
 
-    def test_cluster_scorer_reports_per_source_metrics(self):
-        # Inspect flattens a dict-valued metric into one named entry per key,
-        # which is how the per-source breakdown reaches the log and
-        # aggregate_score. Losing the registration would silently reduce a
-        # cluster to its pooled mean.
+    def test_cluster_panel_stays_compact(self):
+        # The per-source breakdown is deliberately NOT registered on the cluster
+        # scorer: up to eight sources would be eight panel rows, crowding out
+        # the pooled/condition numbers a reader scans for. It reaches
+        # models.json through aggregate_score instead, which calls summarise()
+        # over the log's samples.
         from inspect_ai._util.registry import registry_info
 
         from pipeline.stage1_evaluation.scorers.cluster import cluster_scorer
 
         metrics = registry_info(cluster_scorer(model="mockllm/model")).metadata["metrics"]
-        self.assertIn("source_scores", [registry_info(m).name for m in metrics])
+        names = [registry_info(m).name.split("/")[-1] for m in metrics]
+        self.assertEqual(names, ["mean", "stderr"])
+
+    def test_source_scores_metric_still_prefixes_summarise(self):
+        # The metric remains available for any task that does want the
+        # breakdown in its own panel; the prefix is what marks an entry
+        # per-source rather than a condition pool.
+        scores = [sample_score("cysecbench", 1.0), sample_score("sosbench", 0.0)]
+        self.assertEqual(
+            source_scores()(scores),
+            {"source_cysecbench": 1.0, "source_sosbench": 0.0},
+        )
 
 
 class TestBounds(unittest.TestCase):

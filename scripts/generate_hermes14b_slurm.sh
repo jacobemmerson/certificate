@@ -69,7 +69,7 @@ curl -sf "http://localhost:$PORT/health" > /dev/null || { echo "vLLM never becam
 # finished families are skipped, interrupted ones are filled in and merged.
 # generate.py exits nonzero if the attacker produces no usable output.
 #
-# --only auth --limit 5 keeps this a smoke test, not a full artifact refresh
+# --only manipulation --limit 5 keeps this a smoke test, not a full artifact refresh
 # (limited artifacts are marked partial and will fail certify.py's full-run
 # validation — that's expected here, this run is for pipeline verification
 # only, not for producing artifacts certify.py will replay for real).
@@ -80,6 +80,6 @@ uv run python generate.py \
     --perturb-k 1 \
     --simulate --sim-k 1 \
     --reasoning \
-    --only auth \
+    --only manipulation \
     --limit 5 \
     --force

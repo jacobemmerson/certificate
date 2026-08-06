@@ -4,10 +4,17 @@ Goal: one Inspect `@task` per EU AI Act systemic risk, whose dataset is a
 filtered union of several benchmarks. Replaces the current one-task-per-benchmark
 layout in `pipeline/stage1_evaluation/evals/`.
 
-    democracy | persuasion | cyber | loss_of_control
+    cbrn | cyber | loss_of_control | manipulation
 
 For what each benchmark contains and how it is scored — including where our
 evaluation diverges from the original — see [BENCHMARKS.md](BENCHMARKS.md).
+
+**The clusters were renamed after this plan was written**, onto the CoP's own
+four systemic risks. `democracy` and `persuasion` merged into `manipulation`;
+`cbrn` was split out of `cyber`, taking WMDP and SOSBench with it. The roster
+sections below keep their original headings and reasoning — the *selection*
+arguments still hold, only the cluster a source lands in changed. The download
+manifest and on-disk status further down are current.
 
 ## Why filtering is now a correctness requirement, not just a budget
 
@@ -17,7 +24,7 @@ they're separate numbers.
 
 Merge them into one task and **sample count becomes weight**. A cyber cluster of
 WMDP (~3,668) + SOSBench (3,000) reports a number that is ~55% WMDP by pure
-arithmetic. A persuasion cluster of DarkBench (660) + PersuSafety (101) is 87%
+arithmetic. A dark-pattern cluster of DarkBench (660) + PersuSafety (101) is 87%
 DarkBench. Whatever the cluster score means, it is dominated by whichever source
 happened to ship the most rows.
 
@@ -308,7 +315,7 @@ Selection criterion: **one row = one prompt, `solver=generate()`, scorable by an
 LLM judge / choice / parse.** Anything needing a simulated interlocutor or a tool
 sandbox is out — it cannot share a task with the rest.
 
-### democracy — all four retained, one internal redundancy
+### democracy (now the political half of manipulation) — all four retained, one internal redundancy
 
 Profiled `psyonp/SocialHarmBench` (585 rows, apache-2.0, single CSV):
 
@@ -342,7 +349,7 @@ Two findings:
 
 Democracy is the best-covered of the four clusters and needs no new sources.
 
-### democracy — sources
+### democracy (now manipulation) — sources
 
 | Source | Unit | Native | Scoring shape |
 |---|---|---|---|
@@ -351,7 +358,7 @@ Democracy is the best-covered of the four clusters and needs no new sources.
 | llm-human-rights (UDHR + ECHR) | scenario | 145 + 499 | judge |
 | SocialHarmBench | prompt | HF fetch | judge |
 
-### persuasion — two dropped, one reframed, one added
+### persuasion (now manipulation) — two dropped, one reframed, one added
 
 - **DROP `chatbotmanip_analysis`** — README promises `conversations.json` and
   `all_data.json`; only `survey_responses.json` shipped. 719 ratings keyed to
@@ -507,44 +514,75 @@ sandboxes), Make Me Pay (multi-turn), SAD (worth revisiting).
 
 ## Download manifest
 
-Every source, how to fetch it, and what it costs to integrate. All verified
-reachable; sizes are pre-filtering. "Drop-in" means the native schema maps to the
-canonical columns with no restructuring.
+Every source, how to fetch it, and what it costs to integrate. Sizes are
+pre-filtering. "Drop-in" means the native schema maps to the canonical columns
+with no restructuring.
 
 | Cluster | Source | Fetch | Licence | Size | Integration |
 |---|---|---|---|---|---|
-| democracy | Democratic-Authoritarian-Bias | submodule (vendored) | repo | 30 + ~7.6k + 222 | adapters exist |
-| democracy | PreservingHistoricalTruth | submodule (vendored) | repo | 998 cases | adapter exists |
-| democracy | llm-human-rights | submodule (vendored) | repo | 246 EN scenarios | adapter exists |
-| democracy | SocialHarmBench | `hf: psyonp/SocialHarmBench` -> `socialharmbench.csv` | apache-2.0 | 585 | drop-in |
-| persuasion | DarkBench | `hf: apart/darkbench` -> `darkbench.jsonl` | MIT | 660 | **drop-in** (`id`/`input`/`target`/`metadata`) |
-| persuasion | PersuSafety | submodule (vendored) | repo | 101 + 67 | render task + scenario |
-| persuasion | sycophancy-eval (`mimicry`) | `hf: meg-tong/sycophancy-eval` -> `mimicry.jsonl` | MIT | ~500 | unwrap 1-element msg list |
-| cyber | CySecBench | `gh: cysecbench/dataset` -> `Dataset/**.csv` | MIT | 12,662 | **drop-in** (`Prompt`,`Category`) |
-| cyber | SOSBench | HF (via `inspect_evals` sosbench) | — | 3,000 | drop-in |
-| cyber | WMDP | `hf: cais/wmdp` (3 configs) | MIT | 3,668 | MCQ + judge, see below |
-| cyber | ~~CyberSecEval MITRE-FRR~~ | **deferred** — single 420 KB file if revisited | — | 750 | drop-in, inverted criterion |
-| loss_of_control | advanced-ai-risk | submodule (vendored) `anthropics/evals` -> `advanced-ai-risk/lm_generated_evals/*.jsonl` | CC-BY-4.0 | 6,468 in 7 of 17 files | split embedded A/B options |
-| loss_of_control | ~~agentic_misalignment / InstrumentalEval / MASK~~ | **rejected** — agentic or two-generation, see above | — | — | — |
+| cbrn | HarmBench | submodule `centerforaisafety/HarmBench` -> `data/behavior_datasets/harmbench_behaviors_text_all.csv` | MIT | 400 (56 chem/bio) | filter category, prepend context |
+| cbrn | SOSBench | submodule `hf: SOSBench/SOSBench` -> `data/*.parquet` | check | 3,000 | drop-in |
+| cbrn | WMDP | `hf: cais/wmdp` (3 configs) | MIT | 3,668 | MCQ + judge, see below |
+| cyber | CySecBench | submodule `cysecbench/dataset` -> `Dataset/**.csv` | MIT | 12,662 | **drop-in** (`Prompt`,`Category`) |
+| cyber | CyberSecEval MITRE | submodule `meta-llama/PurpleLlama` -> `CybersecurityBenchmarks/datasets/mitre/*.json` | MIT | 1,000 | flatten TTP mapping |
+| cyber | CyberSecEval MITRE-FRR | same submodule -> `datasets/mitre_frr/mitre_frr.json` | MIT | 750 | drop-in, inverted criterion |
+| cyber | AgentHarm | submodule `hf: ai-safety-institute/AgentHarm` -> `benchmark/harmful_behaviors_*.json` | MIT | 208 (52 cyber/fraud) | filter category, prefix id by split |
+| cyber | InjecAgent | submodule `uiuc-kang-lab/InjecAgent` -> `data/test_cases_*_base.json` | Apache-2.0 | 1,054 | assemble ReAct prompt from `tools.json` |
+| loss_of_control | advanced-ai-risk | submodule `anthropics/evals` -> `advanced-ai-risk/lm_generated_evals/*.jsonl` | CC-BY-4.0 | 6,468 in 7 of 17 files | split embedded A/B options |
+| loss_of_control | ~~SAD~~ | **vendored but unregistered** — see below | MIT | — | — |
+| manipulation | Democratic-Authoritarian-Bias | submodule `irenestrauss/...` | repo | 30 + ~7.6k + 222 | adapters exist |
+| manipulation | PreservingHistoricalTruth | submodule `francescortu/...` | repo | 998 cases | adapter exists |
+| manipulation | llm-human-rights | submodule `keenansamway/...` | repo | 246 EN scenarios | adapter exists |
+| manipulation | SocialHarmBench | `hf: psyonp/SocialHarmBench` -> `socialharmbench.csv` | apache-2.0 | 585 | drop-in |
+| manipulation | DarkBench | `hf: apart/darkbench` -> `darkbench.jsonl` | MIT | 660 | **drop-in** (`id`/`input`/`target`/`metadata`) |
+| manipulation | PersuSafety | submodule `PLUM-Lab/PersuSafety` | repo | 101 + 67 | render task + scenario |
+| manipulation | sycophancy-eval (`mimicry`) | submodule `hf: meg-tong/sycophancy-eval` -> `datasets/mimicry.jsonl` | MIT | 300 | unwrap 1-element msg list |
+| manipulation | ~~Anthropic/persuasion~~ | **vendored but unregistered** — see below | CC-BY-NC-4.0 | 6.9 MB | — |
 
-Fetch mechanics: `datasets/prepare/fetch_sources.py` resolves the HF and GitHub
-entries into `datasets/raw/<risk>/<name>/`, pinning the HF revision or git SHA
-into the cluster manifest. Vendored submodules already pin themselves.
+Fetch mechanics: everything except `wmdp`, `darkbench` and `SocialHarmBench` is
+a git submodule and pins itself; `git submodule update --init --recursive` is the
+whole bootstrap. The three exceptions were downloaded from HuggingFace before the
+submodule convention settled and carry a `download.txt` URL stub next to the
+data. The originating file and revision for every source is recorded in
+`datasets/public/<risk>.meta.json` at build time.
+
+### Vendored but not registered
+
+Two benchmarks are checked out under `raw/` and deliberately have no `Source`:
+
+- **SAD** (`raw/loss_of_control/sad`). Its questions and answers ship in
+  password-protected ZIPs, and its README states the reason: *"We hope this will
+  decrease the chance of SAD being included in the pretraining corpus for future
+  models... If you plan to push your raw results to GitHub or some other storage,
+  please do so in the zipped format."* Registering it would extract those
+  questions into `datasets/public/loss_of_control.csv`, which is committed — the
+  exact contamination the authors are asking people to avoid. The zips stay
+  zipped. Revisiting this means either putting the whole cluster behind the
+  `private/` sibling or asking the authors.
+- **Anthropic/persuasion** (`raw/manipulation/persuasion`). Claims plus arguments
+  with human persuasiveness ratings: it measures persuasive *capability*, not a
+  harmful behaviour, so there is no refusal or violation to grade. Wiring it up
+  needs a diagnostic-shaped source (like `wmdp`) rather than a graded one, and
+  that design is deferred.
 
 ### On-disk status (verified)
 
-| Source | Path | Rows | Native columns |
+| Source | Path (under `raw/`) | Rows | Native columns |
 |---|---|---|---|
-| DarkBench | `persuasion/darkbench/darkbench.jsonl` | 660 | `id`,`input`,`target`,`metadata.dark_pattern` — 110 x 6, balanced |
+| HarmBench | `cbrn/HarmBench/data/behavior_datasets/harmbench_behaviors_text_all.csv` | 400 | `Behavior`,`FunctionalCategory`,`SemanticCategory`,`ContextString`,`BehaviorID` — 56 `chemical_biological`, half of them contextual |
+| SOSBench | `cbrn/SOSBench/data/*.parquet` | 3,000 | `goal`,`original_term`,`subject` — 6 subjects x **exactly 500** |
+| WMDP | `cbrn/wmdp/wmdp-{bio,chem,cyber}/*.parquet` | 1,273 / 408 / 1,987 | `question`,`choices`,`answer` |
 | CySecBench | `cyber/CySecBench/Dataset/Full dataset/cysecbench.csv` | 12,662 | `Prompt`,`Category` — 741–2,130 per category |
-| SOSBench | `cyber/SOSBench/data/*.parquet` | 3,000 | `goal`,`original_term`,`subject` — 6 subjects x **exactly 500** |
-| WMDP | `cyber/wmdp/wmdp-{bio,chem,cyber}/*.parquet` | 1,273 / 408 / 1,987 | `question`,`choices`,`answer` |
-| SocialHarmBench | `democracy/SocialHarmBench/socialharmbench.csv` | 585 | `prompt_id`,`category`,`sub_topic`,`type`,`prompt_text` |
-| MITRE-FRR | `cyber/mitre_frr/mitre_frr.json` | 750 | `mutated_prompt`,`is_malicious`,`attack_type` |
-| sycophancy-eval | `persuasion/sycophancy-eval/datasets/` | 7,268 / 4,888 / 8,500 | **`mimicry.jsonl` still absent** |
+| CyberSecEval MITRE | `cyber/PurpleLlama/CybersecurityBenchmarks/datasets/mitre/mitre_benchmark_100_per_category_with_augmentation.json` | 1,000 | `mutated_prompt`,`mitre_category`,`ttp_id_name_mapping` — 10 ATT&CK phases x **exactly 100** |
+| MITRE-FRR | `cyber/PurpleLlama/CybersecurityBenchmarks/datasets/mitre_frr/mitre_frr.json` | 750 | `mutated_prompt`,`is_malicious`,`attack_type` |
+| AgentHarm | `cyber/AgentHarm/benchmark/harmful_behaviors_{validation,test_public}.json` | 32 / 176 | `id`,`name`,`category`,`prompt`,`detailed_prompt`,`hint_included` — 4 variants per behaviour |
+| InjecAgent | `cyber/InjecAgent/data/test_cases_{dh,ds}_base.json` | 510 / 544 | `User Instruction`,`Attacker Tools`,`Attack Type`,`Thought`,`Tool Response` |
 | advanced-ai-risk | `loss_of_control/evals/advanced-ai-risk/lm_generated_evals/*.jsonl` | 6,468 | `question` (options embedded), `answer_matching_behavior` — 7 of 17 behaviours used |
+| SocialHarmBench | `manipulation/SocialHarmBench/socialharmbench.csv` | 585 | `prompt_id`,`category`,`sub_topic`,`type`,`prompt_text` |
+| DarkBench | `manipulation/darkbench/darkbench.jsonl` | 660 | `id`,`input`,`target`,`metadata.dark_pattern` — 110 x 6, balanced |
+| sycophancy-eval | `manipulation/sycophancy-eval/datasets/mimicry.jsonl` | 300 | `prompt` (1-element message list), `base.attribution`, `metadata.incorrect_attribution` |
 
-Every count matches the plan. Two schema corrections from the real files:
+Two schema corrections from the real files, both already handled by the adapters:
 
 - **SOSBench's domain column is `subject`, not `domain`**, and the six subjects
   are biology / chemistry / medical / pharmacy / physics / psychology at exactly
@@ -555,33 +593,30 @@ Every count matches the plan. Two schema corrections from the real files:
   distinct) is the regulated hazard the item was grown from — a useful second
   stratification axis and a natural source of `criterion` text.
 - **WMDP has no `subset` column** — the three configs are separate parquet
-  files, so the adapter supplies `subset` from the filename rather than reading
-  it.
+  files, so the adapter supplies `subset` from the directory name rather than
+  reading it.
 
 ### Outstanding
 
-1. **`pyarrow` is not a project dependency**, so WMDP and SOSBench (and MASK
-   later) are unreadable from the pipeline. Verified above only via
-   `uv run --with pyarrow`, which does not persist. Needs `uv add pyarrow`.
-2. **`mimicry.jsonl` is still missing.** The GitHub repo ships only `answer`,
-   `are_you_sure`, `feedback`; `mimicry` exists only on the HF mirror
-   (`meg-tong/sycophancy-eval`) at the repo root. It is the sole file of the four
-   recommended for inclusion, so as things stand the sycophancy-eval clone
-   contributes nothing to the persuasion cluster.
-3. ~~**`loss_of_control/` is still empty**~~ *(resolved: advanced-ai-risk)* — agentic_misalignment, InstrumentalEval
-   and MASK are all absent, so one of the four clusters has no data at all.
+1. **`raw/cyber/mitre_frr/mitre_frr.json` is superseded.** `cyber_false_refusal`
+   now reads PurpleLlama's own copy, which is byte-identical. The hand-extracted
+   file is no longer referenced and can be removed.
+2. **Submodule section names in `.gitmodules` still read `datasets/raw/persuasion/…`
+   and `datasets/raw/democracy/…`.** `git mv` rewrites the `path` but not the
+   section name, because the name keys `.git/modules/<name>` locally. Cosmetic
+   only — a fresh clone works — but it will confuse the next reader.
+3. **Licences marked "check" or "—" were not confirmed** and must be before
+   redistribution. `datasets/public/` is committed, so anything without a
+   permissive licence belongs in the `private/` sibling instead. Anthropic's
+   persuasion dataset is CC-BY-NC-4.0, which is a live constraint if it is ever
+   registered.
 
-Housekeeping: `.cache/huggingface/` directories under `SOSBench/`, `darkbench/`
-and `wmdp/` are download artifacts and should be gitignored. Working-tree weight
-is dominated by vendored *results* rather than data —
-`Democratic-Authoritarian-Bias-LLMs/official_runs` 865 MB and
-`PersuSafety/results` 295 MB against 648 KB of actual PersuSafety scenarios —
-so sparse-checkout of the `data/` and `dataset/` subtrees would reclaim ~1.1 GB
-without losing anything the pipeline reads.
-
-Licences marked "check" or "—" were not confirmed and must be before
-redistribution — note `datasets/public/` is committed, so anything without a
-permissive licence belongs in the `private/` sibling instead.
+Housekeeping: working-tree weight is dominated by vendored *results* rather than
+data — `Democratic-Authoritarian-Bias-LLMs/official_runs` 865 MB,
+`PersuSafety/results` 295 MB, `HarmBench` 367 MB and `sad` 565 MB against a few
+MB of actual prompts — so sparse-checkout of the `data/`, `dataset/` and
+`benchmark/` subtrees would reclaim well over 2 GB without losing anything the
+pipeline reads.
 
 ## WMDP needs a second scorer
 

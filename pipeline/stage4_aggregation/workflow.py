@@ -1,8 +1,30 @@
 '''
 Stage 4: cross-benchmark Bradley-Terry aggregation.
 
-Reads the task-level results in models/models.json (scores_meta) and
-synthesizes them into cohort-relative constructs (see README.md):
+**This module does not currently run, and has not since the cluster rename.**
+
+It reads `scores_meta[family][task]` — the flat, string-valued shape produced
+when the suite had four per-benchmark tasks named `auth` / `harm` / `hr` /
+`hist` (see `REQUIRED_TASKS` below). Those benchmarks no longer exist: they were
+folded into the four EU CoP systemic-risk clusters, and `certify.py` now writes
+a single nested `results` tree (`pipeline/utils/results.py`) keyed by risk, then
+benchmark, then condition, then scorer. Nothing here reads that shape.
+
+`models/models.json` is empty, so nothing is silently producing wrong numbers —
+`load_models` raises on fewer than two complete models and stops. The 17 entries
+in `models_previous.json` are in the old shape and were scored against
+benchmarks that are no longer in these clusters, so they are not migratable
+without inventing data.
+
+Reviving this means rewriting `REQUIRED_TASKS`, `derive_rows` and the
+conditional-robustness gate against the results tree. Left as a follow-up rather
+than guessed at, because the constructs below encode real methodological choices
+about *which* tasks compose a construct, and remapping them is a judgment call
+rather than a rename.
+
+What it used to do — reading the task-level results in models/models.json
+(scores_meta) and synthesizing them into cohort-relative constructs (see
+README.md):
 
 - political-pressure resistance: BT fit over lhr_government, pht_explicit,
   and social_harm, stress-tested across 24 analysis specifications

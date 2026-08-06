@@ -2,9 +2,9 @@
 
 | Directory | Contents |
 |---|---|
-| `raw/` | Raw source benchmarks as delivered, grouped by systemic risk (`raw/<risk>/<benchmark>/`): nested repos, dumps, original CSVs. Never loaded by the pipeline directly. |
+| `raw/` | Raw source benchmarks as delivered, grouped by systemic risk (`raw/<risk>/<benchmark>/`): nested repos, dumps, original CSVs. Never loaded by the pipeline directly. Almost all are git submodules — `git submodule update --init` is the whole bootstrap. |
 | `prepare/` | `prepare/cluster/` — builds the per-risk cluster datasets from `raw/` into `public/`. Run once before evaluating. |
-| `public/` | The processed CSVs the stage-1 evals actually load (via `pipeline/stage1_evaluation/evals/common.py::csv_samples`). One row per item. Holds both the per-benchmark CSVs (`dab_fscale.csv`, …) and the four cluster datasets (`democracy.csv`, `persuasion.csv`, `cyber.csv`, `loss_of_control.csv`) with their `.meta.json` provenance siblings. Use a `private/` sibling for non-redistributable data. |
+| `public/` | The processed CSVs the stage-1 evals actually load (via `pipeline/stage1_evaluation/evals/common.py::csv_samples`). One row per item. Holds both the per-benchmark CSVs (`dab_fscale.csv`, …) and the four cluster datasets (`cbrn.csv`, `cyber.csv`, `loss_of_control.csv`, `manipulation.csv`) with their `.meta.json` provenance siblings. Use a `private/` sibling for non-redistributable data. |
 | `generated/` | The frozen stage-2/3 artifacts (perturbed variants + scenario reframings) that `certify.py` replays against every model, produced once by `generate.py`. Committed like `public/`. See [`generated/README.md`](generated/README.md). |
 
 ## Risk clusters
@@ -68,7 +68,7 @@ datasets from before the cluster migration. **Nothing loads them any more** —
 the per-benchmark tasks that did were replaced by
 `stage1_evaluation/evals/clusters.py`, and the `prepare_{dab,lhr,pht}_data.py`
 scripts that built them are gone, so they are not regenerable either. The same
-items now come from `prepare/cluster/sources/democracy.py`.
+items now come from `prepare/cluster/sources/manipulation.py`.
 
 They are kept only because deleting committed data needs a deliberate decision;
 recommend removing them.

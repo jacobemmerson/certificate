@@ -1,0 +1,160 @@
+{
+  "risk": "manipulation",
+  "rows": 562,
+  "seed": 0,
+  "jaccard_tau_default": 0.9,
+  "token_gate": 25,
+  "sources": {
+    "social_harm": {
+      "loaded": 419,
+      "exact_dropped": 1,
+      "near_dropped": 0,
+      "quota": 60,
+      "kept": 60,
+      "strata": 5,
+      "stratify_on": [
+        "category"
+      ],
+      "balanced": false,
+      "question_type": "graded",
+      "path": "raw/manipulation/SocialHarmBench/socialharmbench.csv"
+    },
+    "historical_revisionism": {
+      "loaded": 998,
+      "exact_dropped": 1,
+      "near_dropped": 22,
+      "quota": 60,
+      "kept": 60,
+      "strata": 98,
+      "stratify_on": [
+        "Push Level",
+        "Country/Region"
+      ],
+      "balanced": false,
+      "question_type": "graded",
+      "path": "raw/manipulation/PreservingHistoricalTruth/data/*_prompt*.csv"
+    },
+    "human_rights_udhr": {
+      "loaded": 432,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "quota": 20,
+      "kept": 60,
+      "strata": 2,
+      "stratify_on": [
+        "severity"
+      ],
+      "balanced": false,
+      "question_type": "graded",
+      "path": "raw/manipulation/llm-human-rights/data/experiments/synthetic/udhr/scenarios/en.csv"
+    },
+    "human_rights_echr": {
+      "loaded": 306,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "quota": 20,
+      "kept": 60,
+      "strata": 2,
+      "stratify_on": [
+        "severity"
+      ],
+      "balanced": false,
+      "question_type": "graded",
+      "path": "raw/manipulation/llm-human-rights/data/experiments/synthetic/echr/scenarios/en.csv"
+    },
+    "authoritarian_values": {
+      "loaded": 30,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "quota": 30,
+      "kept": 30,
+      "strata": 0,
+      "stratify_on": [],
+      "balanced": false,
+      "question_type": "likert",
+      "path": "raw/manipulation/Democratic-Authoritarian-Bias-LLMs/data/phase1_questions.json"
+    },
+    "leader_favorability": {
+      "loaded": 6786,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "quota": 60,
+      "kept": 60,
+      "strata": 4,
+      "stratify_on": [
+        "classification"
+      ],
+      "balanced": true,
+      "question_type": "likert",
+      "path": "raw/manipulation/Democratic-Authoritarian-Bias-LLMs/data/leaders.json"
+    },
+    "role_model_bias": {
+      "loaded": 222,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "quota": 40,
+      "kept": 40,
+      "strata": 1,
+      "stratify_on": [],
+      "balanced": false,
+      "question_type": "extraction",
+      "path": "raw/manipulation/Democratic-Authoritarian-Bias-LLMs/role_model_probe/main.py"
+    },
+    "darkbench": {
+      "loaded": 660,
+      "exact_dropped": 1,
+      "near_dropped": 0,
+      "quota": 72,
+      "kept": 72,
+      "strata": 6,
+      "stratify_on": [
+        "dark_pattern"
+      ],
+      "balanced": false,
+      "question_type": "graded",
+      "path": "raw/manipulation/darkbench/darkbench.jsonl"
+    },
+    "persusafety": {
+      "loaded": 101,
+      "exact_dropped": 1,
+      "near_dropped": 0,
+      "quota": 60,
+      "kept": 60,
+      "strata": 3,
+      "stratify_on": [
+        "harmfulness_level"
+      ],
+      "balanced": false,
+      "question_type": "graded",
+      "path": "raw/manipulation/PersuSafety/dataset/harmful_scenarios_full.json"
+    },
+    "sycophancy_mimicry": {
+      "loaded": 300,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "quota": 60,
+      "kept": 60,
+      "strata": 1,
+      "stratify_on": [],
+      "balanced": false,
+      "question_type": "detection",
+      "path": "raw/manipulation/sycophancy-eval/datasets/mimicry.jsonl"
+    }
+  },
+  "revisions": {
+    "repo": "0430250dad6ed6e61e73081cf60592d15e736d81",
+    "datasets/raw/cbrn/HarmBench": "8e1604d1171fe8a48d8febecd22f600e462bdcdd",
+    "datasets/raw/cyber/AgentHarm": "e23b3fe60a0da9037314b88e5ee3a0c054970dad",
+    "datasets/raw/cyber/CySecBench": "ea3868f63961833e33d3e81933dd1024505dabe0",
+    "datasets/raw/cyber/InjecAgent": "f19c9f2c79a41046eb13c03c51a24c567a8ffa07",
+    "datasets/raw/cyber/PurpleLlama": "acfdd58f7c605eec53af4eed3f7ecf302267f0f8",
+    "datasets/raw/loss_of_control/evals": "84fcc677e52e1902d696c32cd1a6b663e70d3993",
+    "datasets/raw/loss_of_control/sad": "dfc5c9831a9bcc5c9a9dbdcaa2955aae983cd1d3",
+    "datasets/raw/manipulation/Democratic-Authoritarian-Bias-LLMs": "583a1e4a8d440c421ab2ef06a6ac8afd5473c9e0",
+    "datasets/raw/manipulation/PersuSafety": "892bf057f2974c1d1624f37d1110dcb4924e4fd6",
+    "datasets/raw/manipulation/PreservingHistoricalTruth": "5d327d24c8e6f0c82b598fecf9ca9f1b46bf3c64",
+    "datasets/raw/manipulation/llm-human-rights": "65171d7c5ec20255256e5d0500dc118c8f7904ef",
+    "datasets/raw/manipulation/persuasion": "b520c793895e7bea0090816551e9f395f9256082",
+    "datasets/raw/manipulation/sycophancy-eval": "9a1694221e3639887138f61deae344335eca6752"
+  }
+}

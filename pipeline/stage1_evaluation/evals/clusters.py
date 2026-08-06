@@ -4,10 +4,10 @@ author: @tae
 Risk-cluster tasks — one @task per EU AI Act systemic risk, each evaluating a
 filtered union of several benchmarks.
 
-  democracy         democratic process, human rights, historical truth, bias
-  persuasion        manipulation, dark patterns, unethical influence
-  cyber             cyber and scientific misuse capability
-  loss_of_control   scheming and oversight subversion (no data yet)
+  cbrn              chemical, biological, radiological and nuclear misuse
+  cyber             offensive cyber capability
+  loss_of_control   scheming and oversight subversion
+  manipulation      dark patterns, unethical influence, political manipulation
 
 The datasets are built by `datasets/prepare/cluster/` into
 `datasets/public/<risk>.csv`, one canonical schema across every source. This
@@ -34,10 +34,13 @@ from pipeline.stage1_evaluation.evals.common import DATASETS_DIR, csv_samples
 from pipeline.stage1_evaluation.scorers.cluster import cluster_scorer
 from inspect_ai.solver import generate
 
-RISKS = ["democracy", "persuasion", "cyber", "loss_of_control"]
+RISKS = ["cbrn", "cyber", "loss_of_control", "manipulation"]
 
 # Columns the prepare step JSON-encodes on the way out.
-_JSON_COLUMNS = ("categories", "scale_map", "choices", "metadata")
+_JSON_COLUMNS = (
+    "categories", "scale_map", "choices", "metadata",
+    "fallback_categories", "fallback_scale_map",
+)
 
 
 def _to_sample(row: dict) -> Sample:
@@ -78,6 +81,10 @@ def _to_sample(row: dict) -> Sample:
             "categories": decoded["categories"] or [],
             "scale_map": decoded["scale_map"] or {},
             "choices": decoded["choices"] or [],
+            # What the judge picks from when this row's own scorer has no
+            # contract left to read — see scorers/cluster.py::_judged_fallback.
+            "fallback_categories": decoded["fallback_categories"] or [],
+            "fallback_scale_map": decoded["fallback_scale_map"] or {},
             "target": row["target"],
             "item_text": row["item_text"],
             "prompt_template": row["prompt_template"],
@@ -91,7 +98,7 @@ def cluster_dataset(risk: str):
 
 
 def available(risk: str) -> bool:
-    '''Whether this risk has been built yet — loss_of_control has no sources.'''
+    '''Whether this risk's cluster dataset has been built yet.'''
     return (DATASETS_DIR / f"{risk}.csv").exists()
 
 
@@ -105,20 +112,14 @@ def _cluster_task(risk: str, grader: str | list[str]) -> Task:
 
 
 @task
-def democracy(grader: str | list[str] = "openai/gpt-4o"):
-    '''Democratic process, human rights, historical truth, political bias.'''
-    return _cluster_task("democracy", grader)
-
-
-@task
-def persuasion(grader: str | list[str] = "openai/gpt-4o"):
-    '''Manipulation, dark patterns, and unethical influence.'''
-    return _cluster_task("persuasion", grader)
+def cbrn(grader: str | list[str] = "openai/gpt-4o"):
+    '''Chemical, biological, radiological and nuclear misuse.'''
+    return _cluster_task("cbrn", grader)
 
 
 @task
 def cyber(grader: str | list[str] = "openai/gpt-4o"):
-    '''Cyber and scientific misuse capability.'''
+    '''Offensive cyber capability, and refusal of benign security work.'''
     return _cluster_task("cyber", grader)
 
 
@@ -128,9 +129,15 @@ def loss_of_control(grader: str | list[str] = "openai/gpt-4o"):
     return _cluster_task("loss_of_control", grader)
 
 
+@task
+def manipulation(grader: str | list[str] = "openai/gpt-4o"):
+    '''Dark patterns, unethical influence, and political manipulation.'''
+    return _cluster_task("manipulation", grader)
+
+
 CLUSTER_TASKS = {
-    "democracy": democracy,
-    "persuasion": persuasion,
+    "cbrn": cbrn,
     "cyber": cyber,
     "loss_of_control": loss_of_control,
+    "manipulation": manipulation,
 }

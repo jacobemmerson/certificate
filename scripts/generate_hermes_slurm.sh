@@ -70,6 +70,6 @@ uv run python generate.py \
     --perturb-k 1 \
     --simulate --sim-k 1 \
     --reasoning \
-    --only auth \
+    --only manipulation \
     --limit 5 \
     --force

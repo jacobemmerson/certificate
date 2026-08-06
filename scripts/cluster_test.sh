@@ -28,7 +28,7 @@ MODEL="${MODEL:-openrouter/openai/gpt-4o-mini}"   # the model under certificatio
 GRADER="${GRADER:-openrouter/anthropic/claude-sonnet-4.5}"                              # empty = the GRADERS.md ensemble
 ATTACKER="${ATTACKER:-openrouter/deepseek/deepseek-v4-flash}"  # generation only
 
-CLUSTERS="${CLUSTERS:-}"          # e.g. "cyber" or "cyber democracy"; empty = all
+CLUSTERS="${CLUSTERS:-}"          # e.g. "cyber" or "cyber manipulation"; empty = all
 PERTURB="${PERTURB:-}"            # stage-2 families; empty = no perturbation
 SIMULATE="${SIMULATE:-0}"         # 1 = also run stage-3 scenarios
 LIMIT="${LIMIT-20}"               # samples per cluster; LIMIT="" = full run

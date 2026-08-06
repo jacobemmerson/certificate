@@ -43,8 +43,13 @@ class SampleView:
 
     @classmethod
     def of(cls, sample: Sample) -> "SampleView":
+        # User turns only, mirroring TaskState.input_text. A cluster row's
+        # system prompt is steering, not the request: folding it in here would
+        # hand it to the rewrite prompts as text to paraphrase. Every cluster
+        # row carries item_text, so this is only the fallback path — but the
+        # fallback is what a source without item_text would silently get.
         text = sample.input if isinstance(sample.input, str) else "\n".join(
-            m.text for m in sample.input
+            m.text for m in sample.input if m.role == "user"
         )
         return cls(input_text=text, metadata=dict(sample.metadata or {}))
 
@@ -180,17 +185,24 @@ async def generate_scenarios(
     parse_attempts: int = 3,
     max_connections: int = 20,
     reasoning: bool = False,
-) -> tuple[list[dict], list[str]]:
+) -> tuple[list[dict], list[str], dict[str, str]]:
     """Rows for stage 3's scenario family: k reframed {context, system,
     scenario} triples per sample. Unparseable reframings are re-requested up
     to `parse_attempts` times (an upgrade over the old live path, which
     silently dropped the variant); a variant that never parses is dropped and
     its sample id lands in the returned `incomplete_ids` — replay then runs
     the variants that exist, identically for every model.
+
+    Also returns `reasons`, the last parse failure per dropped sample id.
+    Without it a systematic attacker/format mismatch is invisible: the
+    completion is discarded, so the only way to learn why coverage collapsed
+    was to re-run the model by hand.
     """
     model = get_model(attacker_model)
     semaphore = asyncio.Semaphore(max_connections)
     existing = existing or set()
+
+    failures: dict[str, str] = {}
 
     async def one(sample: Sample, variant: int) -> dict | None:
         view = SampleView.of(sample)
@@ -200,8 +212,9 @@ async def generate_scenarios(
             async with semaphore:
                 completion = await _attacker_call(model, prompt, label, reasoning=reasoning)
             if completion is None:
+                failures[str(sample.id)] = "attacker returned nothing"
                 return None
-            block = parse_reframing(completion)
+            block, reason = parse_reframing(completion)
             if block is not None:
                 return {
                     "id": str(sample.id),
@@ -214,7 +227,9 @@ async def generate_scenarios(
                     # same shape the live solver recorded.
                     "query": f"[system] {block['system']}\n\n[user] {block['context']}\n\n{block['scenario']}",
                 }
-            print(f"[WARNING] {label}: reframing unparseable — retrying")
+            failures[str(sample.id)] = reason or "unparseable"
+            print(f"[WARNING] {label}: {reason} — retrying\n"
+                  f"          got: {completion[:200]!r}")
         return None
 
     jobs = {
@@ -226,4 +241,16 @@ async def generate_scenarios(
     results = await asyncio.gather(*jobs.values())
     rows = [row for row in results if row is not None]
     incomplete = sorted({key[0] for key, row in zip(jobs, results) if row is None})
-    return rows, incomplete
+    reasons = {sample_id: failures[sample_id] for sample_id in incomplete if sample_id in failures}
+
+    if reasons:
+        # One line per distinct cause: a systematic format mismatch shows up as
+        # a single reason covering nearly every dropped id.
+        tally: dict[str, int] = {}
+        for reason in reasons.values():
+            tally[reason] = tally.get(reason, 0) + 1
+        print(f"[WARNING] {len(incomplete)} sample(s) have no scenario. Causes:")
+        for reason, count in sorted(tally.items(), key=lambda kv: -kv[1]):
+            print(f"            {count:3} x {reason}")
+
+    return rows, incomplete, reasons

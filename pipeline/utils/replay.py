@@ -35,7 +35,7 @@ from typing import Callable
 
 from inspect_ai._util._async import tg_collect
 from inspect_ai.log import transcript
-from inspect_ai.model import ChatMessageUser
+from inspect_ai.model import ChatMessageSystem, ChatMessageUser
 from inspect_ai.solver import Generate, TaskState
 
 
@@ -77,10 +77,20 @@ async def generate_variant(
     return None
 
 
-def _query_messages(row: dict) -> list:
-    """Default row→messages mapping: a single user message with the stored
-    rendered query (every stage-2 replay family)."""
-    return [ChatMessageUser(content=row["query"])]
+def _query_messages(row: dict, state: TaskState) -> list:
+    """Default row→messages mapping: the stored rendered query as a user
+    message (every stage-2 replay family), behind the sample's own system
+    prompt when it has one.
+
+    Cluster rows may carry a system prompt of their own — the human_rights
+    persona arms and persusafety's setup (datasets/public/*.csv), which stage 1
+    sends as a two-message input. That prompt is part of what the row measures,
+    so a variant that dropped it would run unsteered and be compared against a
+    steered control, reading as drift the perturbation never caused.
+    """
+    system = (state.metadata or {}).get("system_prompt")
+    user = ChatMessageUser(content=row["query"])
+    return [ChatMessageSystem(content=system), user] if system else [user]
 
 
 async def replay(
@@ -88,12 +98,14 @@ async def replay(
     generate: Generate,
     family: str,
     variants_by_id: dict[str, list[dict]],
-    messages: Callable[[dict], list] = _query_messages,
+    messages: Callable[[dict, TaskState], list] = _query_messages,
 ) -> TaskState:
     """Run the target on every stored variant of this sample and record the
     results — the shared implementation behind every replay family. `messages`
-    maps a stored artifact row to the message list sent to the target
-    (stage 3 overrides it to rebuild the scenario's system+user pair).
+    maps a stored artifact row (and the sample's state) to the message list
+    sent to the target; stage 3 overrides it to rebuild the scenario's
+    system+user pair, deliberately replacing the sample's own system prompt
+    with the reframed deployment's.
     """
     rows = variants_by_id.get(str(state.sample_id), [])
     if not rows:
@@ -104,7 +116,7 @@ async def replay(
 
     async def run(row: dict) -> TaskState | None:
         test = copy.deepcopy(state)
-        test.messages = messages(row)
+        test.messages = messages(row, state)
         return await generate_variant(generate, test, row["condition"])
 
     # A sample's variants are independent target calls, so run them together

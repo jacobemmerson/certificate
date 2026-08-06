@@ -44,7 +44,8 @@ PROMPT_VERSIONS = {
 
 
 def task_name(base_task: Task) -> str:
-    """Recover the original @task function's registry name (e.g. "fscale")."""
+    """Recover the original @task function's registry name — under the cluster
+    scheme one per systemic risk, e.g. "cyber"."""
     return registry_info(base_task).name
 
 

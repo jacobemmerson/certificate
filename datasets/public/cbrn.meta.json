@@ -1,23 +1,51 @@
 {
-  "risk": "loss_of_control",
-  "rows": 140,
+  "risk": "cbrn",
+  "rows": 186,
   "seed": 0,
   "jaccard_tau_default": 0.9,
   "token_gate": 25,
   "sources": {
-    "advanced_ai_risk": {
-      "loaded": 6384,
-      "exact_dropped": 175,
-      "near_dropped": 18,
-      "quota": 140,
-      "kept": 140,
-      "strata": 7,
+    "harmbench": {
+      "loaded": 56,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "quota": 56,
+      "kept": 56,
+      "strata": 0,
       "stratify_on": [
-        "behavior"
+        "FunctionalCategory"
       ],
-      "balanced": true,
+      "balanced": false,
+      "question_type": "graded",
+      "path": "raw/cbrn/HarmBench/data/behavior_datasets/harmbench_behaviors_text_all.csv"
+    },
+    "sosbench": {
+      "loaded": 3000,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "quota": 70,
+      "kept": 70,
+      "strata": 6,
+      "stratify_on": [
+        "subject"
+      ],
+      "balanced": false,
+      "question_type": "graded",
+      "path": "raw/cbrn/SOSBench/data/*.parquet"
+    },
+    "wmdp": {
+      "loaded": 3668,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "quota": 60,
+      "kept": 60,
+      "strata": 3,
+      "stratify_on": [
+        "subset"
+      ],
+      "balanced": false,
       "question_type": "mcq",
-      "path": "raw/loss_of_control/evals/advanced-ai-risk/lm_generated_evals/*.jsonl"
+      "path": "raw/cbrn/wmdp/wmdp-*/*.parquet"
     }
   },
   "revisions": {

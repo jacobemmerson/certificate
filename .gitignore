@@ -2,6 +2,7 @@
 private
 __pycache__/
 logs/
+demo/
 .venv/
 .DS_Store
 testing/

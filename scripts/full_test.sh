@@ -5,7 +5,7 @@ set -euo pipefail
 MODEL="openrouter/openai/gpt-4o-mini"
 ATTACKER="openrouter/deepseek/deepseek-v4-flash"
 GRADER="openrouter/openai/gpt-4o"
-ONLY="harm"
+ONLY="cyber"
 
 uv run generate.py \
     --attacker "$ATTACKER" \

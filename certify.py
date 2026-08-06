@@ -21,10 +21,9 @@ from argparse import ArgumentParser
 from inspect_ai import eval
 from pipeline.artifacts import validate_artifacts
 from pipeline.registry import init_benchmarks, apply_stages, ALL_PERTURB_FAMILIES
-from pipeline.utils.scoring import SCENARIO
+from pipeline.utils import results as results_tree
 from pipeline.utils.graders import (
-    aggregate_score, condition_metrics, load_graders, load_models_with_check,
-    validate_graders,
+    DIAGNOSTIC_SOURCES, load_graders, load_models_with_check, validate_graders,
 )
 
 def parse():
@@ -63,8 +62,9 @@ def parse():
         help="Randomly sample this many examples per task (default: run the full dataset). WARNING: if limit is present, results will not be saved. They can still be accessed in logs/MODEL_NAME/"
     )
     args.add_argument(
-        "--only", "-o", required=False, nargs="+", metavar="BENCHMARK",
-        help="Run only these benchmark keys (e.g. --only harm hr). Other existing results are preserved."
+        "--only", "-o", required=False, nargs="+", metavar="RISK",
+        help="Run only these systemic-risk clusters (e.g. --only cyber manipulation). "
+             "Other existing results are preserved."
     )
     args.add_argument(
         "--perturb", required=False, nargs="+", default=ALL_PERTURB_FAMILIES, choices=sorted(ALL_PERTURB_FAMILIES),
@@ -127,17 +127,16 @@ def update(results, models, idx):
             if status.get('status') != 'success' and previously_complete:
                 print(f"[WARNING] {benchmark}: rerun was {status.get('status')}; keeping previous complete result")
                 results['scores'].pop(benchmark, None)
-                results['scores_meta'].pop(benchmark, None)
-                results['perturbations'].pop(benchmark, None)
-                results['simulations'].pop(benchmark, None)
+                results['results'].pop(benchmark, None)
                 results['status'].pop(benchmark, None)
 
         # take values from overlapping keys from the new results (right side of pipe operator)
         results['scores'] = prev.get('scores', {}) | results['scores']
-        results['scores_meta'] = prev.get('scores_meta', {}) | results['scores_meta']
-        results['perturbations'] = prev.get('perturbations', {}) | results.get('perturbations', {})
-        results['simulations'] = prev.get('simulations', {}) | results.get('simulations', {})
+        results['results'] = prev.get('results', {}) | results.get('results', {})
         results['status'] = prev_status | results.get('status', {})
+        # Recomputed after the merge, so a --only rerun reports across every
+        # risk the model has, not just the ones this run touched.
+        results['aggregate'] = results_tree.model_aggregate(results['results'])
         models[idx] = results
     else:
         # add new entry
@@ -283,9 +282,7 @@ if __name__ == "__main__":
     # returned logs by task name afterwards; `continue_on_fail` and
     # `fail_on_error` keep one bad cluster from sinking the rest.
     scores = {}
-    scores_meta = {}
-    perturbations = {}
-    simulations = {}
+    results_by_risk = {}
     statuses = {}
 
     all_tasks = [task for entry in BENCHMARKS.values() for task in entry["tasks"]]
@@ -316,19 +313,22 @@ if __name__ == "__main__":
         # scores are stored but flagged by its status record
         ok = [log for log in res if log.status == "success"]
         if ok:
-            average, meta = aggregate_score(ok)
-            scores[benchmark] = average
-            scores_meta[benchmark] = meta
+            # One tree per risk, replacing what used to be three parallel
+            # sections joined by hand. Every condition of every benchmark comes
+            # out of the same log (pipeline/registry.py::apply_stages), so the
+            # builder splits them by family itself rather than needing the run
+            # to be sliced up here.
+            tree = results_tree.build(ok, DIAGNOSTIC_SOURCES)
+            results_by_risk.update(tree)
 
-            # Both stages come out of the same log the certification
-            # scores just came from (see pipeline/registry.py::apply_stages);
-            # condition_metrics's family filter splits them into their
-            # separate models.json sections, control included in each
-            # as the shared baseline.
-            if run_perturb:
-                perturbations[benchmark] = condition_metrics(ok, families=set(args.perturb))
-            if args.simulate:
-                simulations[benchmark] = condition_metrics(ok, families={SCENARIO})
+            # The flat headline stays: certify.py's own skip logic reads
+            # `scores.keys()` to decide what a rerun can leave alone, and a
+            # reader wants one number per risk without walking the tree.
+            aggregate = (tree.get(entry["name"], {}).get("aggregate") or {})
+            scores[benchmark] = (
+                aggregate.get("worst")
+                if aggregate.get("worst") is not None else -1
+            )
 
     if (not args.limit):
         # ----- format and store results -----
@@ -339,9 +339,8 @@ if __name__ == "__main__":
             "region": args.region,
             "specialty": args.specialty,
             "scores": scores,
-            "scores_meta": scores_meta,
-            "perturbations": perturbations,
-            "simulations": simulations,
+            "aggregate": results_tree.model_aggregate(results_by_risk),
+            "results": results_by_risk,
             "status": statuses,
         }
 

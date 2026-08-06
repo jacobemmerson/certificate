@@ -168,33 +168,55 @@ DERIVED: dict[str, tuple[Sequence[str], Summary]] = {
 }
 
 
-@metric
-def source_scores(prefix: str = SOURCE_METRIC_PREFIX) -> MetricProtocol:
+def summarise(
+    scores: list[SampleScore], *, arms_intact: bool = True
+) -> dict[str, float]:
     '''
-    One figure per originating benchmark, as `{prefix}{source}`.
+    One figure per originating benchmark, keyed by bare source name, plus any
+    derived summaries. Sources whose summary cannot be computed are omitted
+    rather than reported as NaN.
 
-    Replaces `grouped(mean(), "source")`, which could only ever average. The
-    dict return flattens into individually named metrics, which is what the
-    grouped metric did too.
+    This is the whole per-source computation, usable without registering a
+    metric: the cluster panel deliberately does not carry these (one entry per
+    source crowds out the numbers a reader scans for), so
+    pipeline/utils/results.py calls this directly over a log's samples.
+
+    `arms_intact=False` says the structure the special summaries compare across
+    is gone, so every source falls back to a plain mean and the derived gaps are
+    skipped. Stage 3 is that case: it drops each row's own steering on purpose
+    (stage3_simulation/solvers.py), so the human-rights persona arms collapse
+    into one and a "gap" between them would be a difference of a distribution
+    with itself — a number that looks like a finding and is an artefact.
     '''
+    by_source: dict[str, list[SampleScore]] = defaultdict(list)
+    for sample in scores:
+        by_source[str((sample.sample_metadata or {}).get("source", ""))].append(sample)
 
-    def calculate(scores: list[SampleScore]) -> Value:
-        by_source: dict[str, list[SampleScore]] = defaultdict(list)
-        for sample in scores:
-            by_source[str((sample.sample_metadata or {}).get("source", ""))].append(sample)
-
-        summarised = {
-            name: SUMMARIES.get(name, _mean)(group) for name, group in by_source.items()
-        }
+    summaries = SUMMARIES if arms_intact else {}
+    summarised = {
+        name: summaries.get(name, _mean)(group) for name, group in by_source.items()
+    }
+    if arms_intact:
         for name, (sources, summary) in DERIVED.items():
             group = [s for source in sources for s in by_source.get(source, [])]
             if group:
                 summarised[name] = summary(group)
 
-        return {
-            prefix + name: value
-            for name, value in summarised.items()
-            if value is not None
-        }
+    return {name: value for name, value in summarised.items() if value is not None}
+
+
+@metric
+def source_scores(prefix: str = SOURCE_METRIC_PREFIX) -> MetricProtocol:
+    '''
+    `summarise` as a registered metric, as `{prefix}{source}`.
+
+    Not attached to the cluster scorer — see `summarise`. Kept because it is
+    the natural way for any other task to surface the same breakdown in its own
+    panel, and because the prefix contract is what tells downstream a metric is
+    per-source rather than a condition pool.
+    '''
+
+    def calculate(scores: list[SampleScore]) -> Value:
+        return {prefix + name: value for name, value in summarise(scores).items()}
 
     return calculate

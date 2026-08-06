@@ -1,8 +1,8 @@
 # Contributing a New Benchmark
 
 Benchmarks are evaluated in **risk clusters**, not one task per benchmark. Each
-EU AI Act systemic risk — `democracy`, `persuasion`, `cyber`,
-`loss_of_control` — is one Inspect `@task` whose dataset is a filtered union of
+EU AI Act systemic risk — `cbrn`, `cyber`, `loss_of_control`,
+`manipulation` — is one Inspect `@task` whose dataset is a filtered union of
 several benchmarks under one schema.
 
 **So adding a benchmark changes nothing in `pipeline/`.** It is one `Source(...)`

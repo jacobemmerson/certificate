@@ -4,8 +4,9 @@ These three families share the same mechanics and differ only in
 the instruction given to the rewrite model, so they're driven by one system
 prompt lookup rather than three separate implementations.
 
-The actual generation happens in pipeline/stage2_perturbation/solvers.py, which imports
-FAMILY_SYSTEM_PROMPTS and _extract_rewrite from here.
+The actual generation happens offline in pipeline/generation.py, which imports
+FAMILY_SYSTEM_PROMPTS and _extract_rewrite from here; solvers.py only replays
+the resulting artifacts at eval time.
 """
 from __future__ import annotations
 

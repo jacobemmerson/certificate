@@ -31,7 +31,8 @@ QUESTION_TYPES = frozenset({GRADED, MCQ, LIKERT, EXTRACTION, DETECTION})
 # `detection` exists because some benchmarks do not use a judge at all, and
 # replacing their detector with one changes what is being measured rather than
 # how it is computed: CyberSecEval's false-refusal set applies a refusal regex,
-# and sycophancy mimicry string-matches the two attributions. Each name below is
+# sycophancy mimicry string-matches the two attributions, and InjecAgent asks
+# only whether the agent's next action named an injected tool. Each name below is
 # a verbatim port, implemented in
 # pipeline/stage1_evaluation/scorers/detectors.py.
 #
@@ -48,12 +49,17 @@ QUESTION_TYPES = frozenset({GRADED, MCQ, LIKERT, EXTRACTION, DETECTION})
 ACCEPT_REJECT_TOKEN = "accept_reject_token"
 REFUSAL_REGEX = "refusal_regex"
 ATTRIBUTION_MIMICRY = "attribution_mimicry"
+REACT_ATTACKER_TOOL_CALL = "react_attacker_tool_call"
 
-DETECTORS = frozenset({ACCEPT_REJECT_TOKEN, REFUSAL_REGEX, ATTRIBUTION_MIMICRY})
+DETECTORS = frozenset({
+    ACCEPT_REJECT_TOKEN, REFUSAL_REGEX, ATTRIBUTION_MIMICRY,
+    REACT_ATTACKER_TOOL_CALL,
+})
 
 COLUMNS = [
     "sample_id", "source", "risk", "question_type", "query",
     "criterion", "rubric", "categories", "scale_map", "choices", "target",
+    "fallback_categories", "fallback_scale_map",
     "detector", "system_prompt", "item_text", "prompt_template",
     "elicitation_family", "metadata",
 ]
@@ -125,6 +131,16 @@ class Row:
     scale_map: dict[str, float] = field(default_factory=dict)
     choices: list[str] = field(default_factory=list)
     target: str = ""
+    # What the judge chooses from when a row's *native* scorer has no contract
+    # left to read — stage 3 replaces the prompt wholesale, so the scale
+    # options, the JSON block and the option list are all gone by then.
+    #
+    # Separate from `categories`/`scale_map` because those are not free on a
+    # likert row: they hold the model's own answer scale. These hold the
+    # judge's, and the two are different vocabularies for the same row.
+    # `criterion` is shared — it describes the failure either way.
+    fallback_categories: list[str] = field(default_factory=lambda: list(YES_NO))
+    fallback_scale_map: dict[str, float] = field(default_factory=lambda: dict(YES_NO_MAP))
     # Names the deterministic detector for `detection` rows, empty otherwise.
     detector: str = ""
     # Sent as a system turn ahead of `query` when non-empty. Some benchmarks
@@ -143,7 +159,8 @@ class Row:
     def to_csv_row(self) -> dict:
         '''Flatten to a CSV row, JSON-encoding the structured columns.'''
         row = asdict(self)
-        for col in ("categories", "scale_map", "choices", "metadata"):
+        for col in ("categories", "scale_map", "choices", "metadata",
+                    "fallback_categories", "fallback_scale_map"):
             row[col] = json.dumps(row[col], ensure_ascii=False, sort_keys=True)
         return row
 
@@ -182,6 +199,22 @@ def validate(row: Row) -> None:
     for option, score in row.scale_map.items():
         if not isinstance(score, (int, float)) or not 0.0 <= score <= 1.0:
             fail(f"scale_map[{option!r}] = {score!r} outside [0, 1]")
+
+    for option, score in row.fallback_scale_map.items():
+        if not isinstance(score, (int, float)) or not 0.0 <= score <= 1.0:
+            fail(f"fallback_scale_map[{option!r}] = {score!r} outside [0, 1]")
+    missing_fallback = [
+        c for c in row.fallback_categories if c not in row.fallback_scale_map
+    ]
+    if missing_fallback:
+        fail(f"fallback_categories missing from fallback_scale_map: {missing_fallback}")
+
+    # Every non-graded row is judged through the fallback once its native
+    # contract is gone (stage 3 removes all of them), and the judge is handed
+    # `criterion` to detect. Without one it would be asked to grade nothing —
+    # which is how a whole source quietly starts scoring safe.
+    if row.question_type != GRADED and not row.criterion.strip():
+        fail(f"{row.question_type} rows need a criterion for the judged fallback")
 
     if row.question_type == GRADED:
         if not row.criterion.strip():
@@ -250,6 +283,11 @@ class Source:
     scale_map: dict[str, float] | Callable[[dict], dict[str, float]] | None = None
     choices: Derived | None = None
     target: Derived | None = None
+    # The judge's label set for when this row's native scorer has nothing left
+    # to parse. Defaults to yes/no, which suits every source whose `criterion`
+    # names a failure; override where the benchmark's own vocabulary is richer.
+    fallback_categories: list[str] | Callable[[dict], list[str]] | None = None
+    fallback_scale_map: dict[str, float] | Callable[[dict], dict[str, float]] | None = None
     detector: str = ""
     system_prompt: Derived | None = None
     # Perturbation split. Leave both unset when the whole prompt is rewordable

@@ -87,6 +87,13 @@ def load_source(source: Source) -> list[Row]:
         choices = source.resolve(record, source.choices) if source.choices else []
         target = source.resolve(record, source.target) if source.target else ""
 
+        fallback_categories = source.fallback_categories
+        if callable(fallback_categories):
+            fallback_categories = fallback_categories(record)
+        fallback_scale_map = source.fallback_scale_map
+        if callable(fallback_scale_map):
+            fallback_scale_map = fallback_scale_map(record)
+
         # Default split: the whole prompt is rewordable, so the template is
         # just the slot. Sources with a rigid elicitation wrapper override both.
         item_text = (
@@ -110,6 +117,11 @@ def load_source(source: Source) -> list[Row]:
             scale_map={str(k): float(v) for k, v in (scale_map or {}).items()},
             choices=[str(c) for c in (choices or [])],
             target=str(target or ""),
+            **({"fallback_categories": list(fallback_categories)}
+               if fallback_categories else {}),
+            **({"fallback_scale_map":
+                {str(k): float(v) for k, v in fallback_scale_map.items()}}
+               if fallback_scale_map else {}),
             detector=source.detector,
             system_prompt=str(
                 source.resolve(record, source.system_prompt) or ""

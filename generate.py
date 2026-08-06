@@ -17,9 +17,9 @@ Unlike certify.py, --perturb and --simulate compose here — each family is an
 independent artifact file.
 
 Usage:
-    uv run python generate.py                          # all families, all benchmarks
-    uv run python generate.py --only harm --perturb paraphrase framing --perturb-k 1
-    uv run python generate.py --only harm --simulate --sim-k 1
+    uv run python generate.py                          # all families, all clusters
+    uv run python generate.py --only cyber --perturb paraphrase framing --perturb-k 1
+    uv run python generate.py --only cyber --simulate --sim-k 1
     uv run python generate.py --missing-only           # fill gaps (e.g. failed reframings)
     uv run python generate.py --force                  # regenerate everything from scratch
 
@@ -121,8 +121,8 @@ def parse():
              "the extra body — leave it off for those."
     )
     args.add_argument(
-        "--only", "-o", required=False, nargs="+", metavar="BENCHMARK",
-        help="Generate only for these benchmark keys (e.g. --only harm hr)."
+        "--only", "-o", required=False, nargs="+", metavar="RISK",
+        help="Generate only for these systemic-risk clusters (e.g. --only cyber manipulation)."
     )
     args.add_argument(
         "--missing-only", required=False, action="store_true",
@@ -228,13 +228,14 @@ if __name__ == "__main__":
                 existing = set() if args.force else existing_keys(name, family)
                 kept = [] if args.force else existing_rows(name, family)
                 incomplete: list[str] = []
+                reasons: dict[str, str] = {}
 
                 if family == "framing":
                     # deterministic — cheap to rebuild wholesale every time
                     rows = generate_framing(samples)
                     kept = []
                 elif family == SCENARIO_FAMILY:
-                    rows, incomplete = asyncio.run(generate_scenarios(
+                    rows, incomplete, reasons = asyncio.run(generate_scenarios(
                         samples, attacker, k, existing=existing,
                         max_connections=args.max_connections,
                         reasoning=args.reasoning,
@@ -275,6 +276,9 @@ if __name__ == "__main__":
                     "num_samples": len({r["id"] for r in all_rows}),
                     "num_variants": len(all_rows),
                     "incomplete_ids": incomplete,
+                    # why each dropped id failed — a systematic attacker/format
+                    # mismatch shows here as one reason repeated across ids
+                    "incomplete_reasons": reasons,
                     "partial": bool(args.limit),
                 })
                 outcome = f"wrote {len(rows)} new / {len(all_rows)} total rows"

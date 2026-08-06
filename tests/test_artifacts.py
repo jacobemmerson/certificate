@@ -1,7 +1,7 @@
 '''
 Tests for pipeline/artifacts.py (the datasets/generated/ store + pre-run
 validation) and pipeline/generation.py's offline rendering (SampleView through
-the per-benchmark adapters, deterministic framing rows). All synthetic — no
+the per-sample perturbation split, deterministic framing rows). All synthetic — no
 model calls; artifact files are written to a temp dir by pointing
 pipeline.artifacts.GENERATED_DIR at it.
 
@@ -77,7 +77,8 @@ class ArtifactStoreTestCase(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
         self.addCleanup(self._tmp.cleanup)
-        self.benchmarks = {"auth": {"tasks": [self.task], "name": "x"}}
+        # keyed by systemic risk, the way registry.py::init_benchmarks builds it
+        self.benchmarks = {"manipulation": {"tasks": [self.task], "name": "manipulation"}}
 
 
 class TestRoundTrip(ArtifactStoreTestCase):
@@ -110,7 +111,7 @@ class TestValidateArtifacts(ArtifactStoreTestCase):
     def test_missing_file_fails_with_generate_command(self):
         with self.assertRaises(FileNotFoundError) as ctx:
             validate_artifacts(self.benchmarks, families=["paraphrase"], simulate=False)
-        self.assertIn("--only auth --perturb paraphrase", str(ctx.exception))
+        self.assertIn("--only manipulation --perturb paraphrase", str(ctx.exception))
 
     def test_missing_sample_fails(self):
         write_family(self.name, "paraphrase", rewrite_rows(self.ids[1:]), meta={"prompt_version": "1"})
