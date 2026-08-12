@@ -16,6 +16,7 @@ token gate on tier 2, is in datasets/CLUSTERING.md.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 from collections import defaultdict
@@ -303,16 +304,114 @@ def _grouped_sample(
     return [rows[i] for i in sorted(chosen)], report
 
 
+UNIFORM = "uniform"
+DIVERSE = "diverse"
+
+
+def _stable_order(rows: list[Row], indices: list[int], seed: int) -> list[int]:
+    '''
+    `indices` ordered by a hash of each row's id — a uniform draw that is a
+    property of the *item* rather than of the pool.
+
+    `frame.sample(random_state=seed)` pins a shuffle of positions, so one extra
+    upstream row re-drew a large share of the selection (measured at 90% on
+    cyber_false_refusal for a single-row change). That churn silently changed
+    which items were certified between dataset versions and re-invalidated every
+    stage-2/3 artifact, which are keyed by sample_id. Hashing the id instead
+    makes an item's fate depend only on its own hash, so a pool change moves
+    nothing else.
+    '''
+    def key(index: int) -> bytes:
+        return hashlib.blake2b(
+            f"{seed}:{rows[index].sample_id}".encode(), digest_size=16
+        ).digest()
+
+    return sorted(indices, key=key)
+
+
+def _diverse_order(
+    rows: list[Row], indices: list[int], take: int, source: Source, seed: int
+) -> list[int]:
+    '''
+    Greedy farthest-point: repeatedly take the item least similar to everything
+    already taken.
+
+    Near-dedup only removes pairs above tau, and only for texts under
+    TOKEN_GATE — it never asks whether the *kept* set spans its stratum. This
+    does, so a quota of 90 drawn from 12,662 buys coverage rather than a lottery
+    ticket.
+
+    Compares the same payload near_dedup does (`dedup_on` where declared, the
+    query otherwise): PHT's items differ by historical event inside a shared
+    ~100-word instruction, and spreading on the rendered prompt would spread on
+    boilerplate. The first pick comes from `_stable_order` so the whole walk is
+    deterministic without being tied to input order.
+    '''
+    payload = _payload_fn(source)
+    token_sets = {index: tokens(payload(rows[index])) for index in indices}
+
+    first = _stable_order(rows, indices, seed)[0]
+    picked = [first]
+    # Each item's similarity to the closest thing already picked; the next pick
+    # is whatever minimises it.
+    nearest = {
+        index: jaccard(token_sets[index], token_sets[first]) for index in indices
+    }
+
+    taken = {first}
+    while len(picked) < take:
+        candidate = min(
+            (index for index in indices if index not in taken),
+            key=lambda index: (nearest[index], key_bytes(rows[index], seed)),
+        )
+        picked.append(candidate)
+        taken.add(candidate)
+        for index in indices:
+            nearest[index] = max(
+                nearest[index], jaccard(token_sets[index], token_sets[candidate])
+            )
+
+    return picked
+
+
+def key_bytes(row: Row, seed: int) -> bytes:
+    '''Deterministic tie-break, so equally-distant candidates resolve stably.'''
+    return hashlib.blake2b(
+        f"{seed}:{row.sample_id}".encode(), digest_size=16
+    ).digest()
+
+
+def _payload_fn(source: Source):
+    '''The text that identifies an item — near_dedup's rule, reused.'''
+    if source.dedup_on:
+        return lambda row: str(row.metadata.get(source.dedup_on, ""))
+    return lambda row: row.query
+
+
+def _take(
+    rows: list[Row], indices: list[int], take: int, source: Source, seed: int
+) -> list[int]:
+    '''Fill one stratum's allotment, by whichever selection the source declares.'''
+    if take >= len(indices):
+        return list(indices)
+    if source.select == UNIFORM:
+        return _stable_order(rows, indices, seed)[:take]
+    if source.select == DIVERSE:
+        return _diverse_order(rows, indices, take, source, seed)
+    raise ValueError(f"{source.name}: unknown select mode {source.select!r}")
+
+
 def _row_sample(
     rows: list[Row], source: Source, seed: int
 ) -> tuple[list[Row], dict]:
     quota = source.quota
     if quota is None or quota >= len(rows):
+        if source.select not in (UNIFORM, DIVERSE):
+            raise ValueError(f"{source.name}: unknown select mode {source.select!r}")
         return rows, {"strata": 0, "allocated": len(rows)}
 
     if not source.stratify:
-        frame = pd.DataFrame({"index": range(len(rows))})
-        chosen = frame.sample(n=quota, random_state=seed)["index"].tolist()
+        chosen = _take(rows, list(range(len(rows))), quota, source, seed)
         return [rows[i] for i in sorted(chosen)], {"strata": 1, "allocated": quota}
 
     keys = [
@@ -327,12 +426,7 @@ def _row_sample(
 
     chosen: list[int] = []
     for key, take in allocation.items():
-        indices = buckets[key]
-        if take >= len(indices):
-            chosen.extend(indices)
-            continue
-        frame = pd.DataFrame({"index": indices})
-        chosen.extend(frame.sample(n=take, random_state=seed)["index"].tolist())
+        chosen.extend(_take(rows, buckets[key], take, source, seed))
 
     return (
         [rows[i] for i in sorted(chosen)],

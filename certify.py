@@ -16,9 +16,22 @@ exact command otherwise).
 '''
 
 import json
+import os
+import sys
 from argparse import ArgumentParser
 
 from inspect_ai import eval
+
+
+def display_mode() -> str:
+    '''
+    Inspect's default is the Textual TUI, whose worker cancels the whole eval if
+    the terminal goes away or resizes under it (a disconnected/idle SSH pty, a
+    SIGWINCH) — which silently kills unattended overnight batches with a
+    CancelledError, not a model error. Force a non-interactive display whenever
+    stdout is not a real terminal, honouring an explicit INSPECT_DISPLAY override.
+    '''
+    return os.environ.get("INSPECT_DISPLAY") or ("full" if sys.stdout.isatty() else "log")
 from pipeline.artifacts import validate_artifacts
 from pipeline.registry import init_benchmarks, apply_stages, ALL_PERTURB_FAMILIES
 from pipeline.utils import results as results_tree
@@ -91,11 +104,21 @@ def parse():
              "benchmark in --only (or all benchmarks if --only is omitted): the target is re-run "
              "on the pregenerated deployment-scenario reframings from datasets/generated/ "
              "(run generate.py --simulate first). Composes with --perturb in one run/one log: "
-             "the panel reports harm_propensity_scenario/stability_scenario next to stage 2's harm_propensity/stability."
+             "the panel reports safety_scenario/stability_scenario next to stage 2's safety_perturbed/stability."
     )
     args.add_argument(
         "--sim-k", required=False, type=int, default=1,
         help="Use up to this many stored scenarios per item under --simulate; default=1."
+    )
+    args.add_argument(
+        "--max-connections", required=False, type=int, default=100,
+        help="Max concurrent model connections Inspect opens (default: 100)."
+    )
+    args.add_argument(
+        "--working-limit", required=False, type=int, default=900,
+        help="Max working seconds per sample before it fails and retries; bounds a "
+             "hung provider connection so one stuck request can't wedge the whole "
+             "run (default: 900). Excludes time spent waiting on rate limits/retries."
     )
 
     return args.parse_args()
@@ -165,8 +188,8 @@ if __name__ == "__main__":
 
     # Stage 2 and stage 3 compose in one run: both layer condition families
     # onto the same Task (one control generation, one log), and the wrapped
-    # scorers report them under separate metric pools — harm_propensity/stability for
-    # the perturbation families, harm_propensity_scenario/stability_scenario for the
+    # scorers report them under separate metric pools — safety_perturbed/stability for
+    # the perturbation families, safety_scenario/stability_scenario for the
     # scenario family. The certification score is the worst condition across
     # every enabled family (see pipeline/utils/scoring.py).
     run_perturb = bool(args.perturb) and not args.no_perturb
@@ -264,7 +287,9 @@ if __name__ == "__main__":
             epochs=args.epochs,
             sample_shuffle=bool(args.limit),
             limit=args.limit,
-            max_connections=100,
+            max_connections=args.max_connections,
+            working_limit=args.working_limit,
+            display=display_mode(),
             # Eval-level cache benefits judge/grader calls (the bulk of API
             # traffic under --perturb) and retries. The replay/reconsideration
             # solvers opt out explicitly (cache=False in

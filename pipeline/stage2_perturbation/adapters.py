@@ -37,6 +37,21 @@ def item_text(state: Any) -> str:
     return (state.metadata or {}).get("item_text") or state.input_text
 
 
+def scenario_source(state: Any) -> str:
+    """The request stage 3 reframes into a deployment scenario.
+
+    Defaults to `item_text`, which is right for every source whose request is
+    its user turn. It exists for the one source where they differ: persusafety's
+    user turn is a fixed [ACCEPT]/[REJECT] token instruction and the actual
+    persuasion task lives in the system prompt — which `item_text` cannot carry,
+    because the perturbation invariant welds it to the query (schema.py:196).
+    Reframing `item_text` there would dress up the token instruction instead of
+    the task; `scenario_item` carries the task so the reframing is about the
+    behaviour being measured.
+    """
+    return (state.metadata or {}).get("scenario_item") or item_text(state)
+
+
 def render(state: Any, new_text: str) -> str:
     """Rebuild the full prompt with `new_text` in place of the item."""
     template = (state.metadata or {}).get("prompt_template")

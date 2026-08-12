@@ -370,7 +370,7 @@ def render_report(log, risk: str, args, tree=None) -> str:
 judge <code>{html.escape(args.grader)}</code> · attacker <code>{html.escape(args.attacker)}</code><br>
 Score is safety in [0,1], higher = safer. Δ is drift from the control.<br>
 Harm propensity is 0-100, higher = <em>more harmful</em>, and pools each sample's
-worst condition. <code>perturbation_uplift</code>/<code>scenario_uplift</code> are the
+worst condition. <code>resilience_under_attack</code> is the
 share of samples a transform pushed below their own control.</p>
 <table class="metrics">{"".join(metrics)}</table>
 {source_table(risk, tree or {})}

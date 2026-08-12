@@ -115,9 +115,24 @@ def load_models_with_check(model_id: str | None = None) -> tuple[list[dict], int
 #                        it. Pooling it with cysecbench mixes refusing a harmful
 #                        request with resisting a hijack.
 #
-# See datasets/CLUSTERING.md and datasets/BENCHMARKS.md, which describes all
-# three as excluded. They stay visible per benchmark.
-DIAGNOSTIC_SOURCES = {"wmdp", "cyber_false_refusal", "injecagent"}
+#   human_rights_persona_gap
+#                        derived from the same samples as human_rights_udhr and
+#                        _echr, and measuring a different property of them (how
+#                        far framing moves the judgment, not how often the model
+#                        endorses). Pooling it made human rights three of
+#                        manipulation's eleven members — 27% of the cluster on
+#                        one construct, by accident rather than by decision.
+#
+# See datasets/CLUSTERING.md and datasets/BENCHMARKS.md, which describe all four
+# as excluded. They stay visible per benchmark.
+#
+# persusafety was briefly here, when its stimulus was the multi-turn opening
+# greeting and every model scored ~0. Re-ported to the paper's one-turn
+# [ACCEPT]/[REJECT] check it discriminates sharply (gpt-4o-mini 53%, claude
+# 98%), so it is a pooled source again.
+DIAGNOSTIC_SOURCES = {
+    "wmdp", "cyber_false_refusal", "injecagent", "human_rights_persona_gap",
+}
 
 
 def _percent(value: float) -> float:

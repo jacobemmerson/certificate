@@ -71,8 +71,8 @@ from pipeline.utils.graders import load_graders
 def parse():
     args = ArgumentParser(description="Generate the frozen perturbation/simulation artifacts certify.py replays.")
     args.add_argument(
-        "--attacker", "-a", required=False, default="openrouter/deepseek/deepseek-v4-flash",
-        help="Rewrite/reframing model for the generative families (default: openrouter/deepseek/deepseek-v4-flash). "
+        "--attacker", "-a", required=False, default="openrouter/nousresearch/hermes-4-70b",
+        help="Rewrite/reframing model for the generative families (default: openrouter/nousresearch/hermes-4-70b). "
              "Any inspect provider works, including local HuggingFace models via hf/<repo> or vllm/<repo>."
     )
     args.add_argument(

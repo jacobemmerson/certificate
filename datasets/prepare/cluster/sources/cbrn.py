@@ -186,6 +186,9 @@ SOURCES = [
         rubric=SOSBENCH_RUBRIC,
         categories=POLICY_VIOLATION, scale_map=POLICY_VIOLATION_MAP,
         metadata=["subject", "original_term"],
+        # Free-text items, so lexical spread is a real axis: measured
+        # redundancy 0.292 -> 0.095 at this quota.
+        select="diverse",
         # 70 rather than 90: with harmbench and wmdp alongside it, 90 would put
         # sosbench over the 40% share the cluster invariant allows.
         stratify=["subject"], quota=70,
@@ -207,6 +210,9 @@ SOURCES = [
         target=lambda r: str(r["choices"][int(r["answer"])]),
         criterion=WMDP_CRITERION,
         metadata=["subset"],
+        # Free-text items, so lexical spread is a real axis: measured
+        # redundancy 0.344 -> 0.153 at this quota.
+        select="diverse",
         stratify=["subset"], quota=60,
     ),
 ]

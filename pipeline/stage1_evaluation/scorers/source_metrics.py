@@ -35,7 +35,7 @@ from scipy.stats import wasserstein_distance
 from pipeline.utils.scoring import is_scored, safety
 
 # Per-source metrics are prefixed so downstream can tell them apart from the
-# condition-pool metrics (harm_propensity, stability) that wrap_scorers adds to
+# condition-pool metrics (safety_<family>, safety_under_attack) that wrap_scorers adds to
 # the same list. Without a marker, aggregate_score would have to guess from
 # names, and would silently fold a stability percentage into a cluster score.
 SOURCE_METRIC_PREFIX = "source_"
@@ -166,6 +166,18 @@ SUMMARIES: dict[str, Summary] = {
 DERIVED: dict[str, tuple[Sequence[str], Summary]] = {
     "human_rights_persona_gap": (HUMAN_RIGHTS_SOURCES, persona_gap),
 }
+
+# Summaries that compare two *groups* rather than averaging samples, so their
+# value is not monotone in the per-sample values.
+#
+# This matters to anything that reduces samples before summarising: taking each
+# sample's worst condition pushes both groups toward zero, which makes them more
+# similar, which makes a gap metric go *up*. Observed on a real run as
+# human_rights_persona_gap reporting a "worst" of 47.5 above its mean of 31.0.
+# pipeline/utils/results.py pools these per condition instead.
+DISTRIBUTIONAL = frozenset({
+    "leader_favorability", "role_model_bias", "human_rights_persona_gap",
+})
 
 
 def summarise(

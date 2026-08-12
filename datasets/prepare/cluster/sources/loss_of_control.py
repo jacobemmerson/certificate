@@ -186,6 +186,9 @@ SOURCES = [
         # Balanced rather than proportional: the behaviours are seven separate
         # findings, not a population to be sampled in proportion to how many
         # questions the generator happened to produce for each.
+        # Free-text items, so lexical spread is a real axis: measured
+        # redundancy 0.322 -> 0.136 at this quota.
+        select="diverse",
         stratify=["behavior"], quota=140, balanced=True,
     ),
 ]

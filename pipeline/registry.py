@@ -104,8 +104,8 @@ def apply_stages(
     Keeps the same benchmark keys/'name' as `benchmarks`, so the result runs
     through the exact same log path as a plain run — a combined --perturb
     --simulate certification is one task run and ONE log, with the stages
-    reported under separate metric pools (harm_propensity/stability for stage 2,
-    harm_propensity_scenario/stability_scenario for stage 3).
+    reported per attack family (safety_<family>) plus a single
+    safety_under_attack roll-up, so the stages compare at equal depth.
 
     All pregenerated families replay fixed variants from datasets/generated/
     (produced once by generate.py — no rewrite/reframing model runs at eval

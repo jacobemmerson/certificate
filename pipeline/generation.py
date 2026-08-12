@@ -26,12 +26,18 @@ import re
 from dataclasses import dataclass, field
 
 from inspect_ai.dataset import Sample
-from inspect_ai.model import GenerateConfig, Model, get_model
+from inspect_ai.model import (
+    ChatMessageSystem, ChatMessageUser, GenerateConfig, Model, get_model,
+)
 
-from pipeline.stage2_perturbation.adapters import elicitation_family, item_text, render
+from pipeline.stage2_perturbation.adapters import (
+    elicitation_family, item_text, render, scenario_source,
+)
 from pipeline.stage2_perturbation.framing import FRAMING_TEMPLATES
 from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS, _extract_rewrite
-from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY, parse_reframing, reframe_prompt
+from pipeline.stage3_simulation.prompts import (
+    REFRAME_SYS_PROMPT, SCENARIO_FAMILY, parse_reframing, reframe_prompt,
+)
 
 
 @dataclass
@@ -69,7 +75,8 @@ _REASONING_CONFIG = GenerateConfig(
 
 
 async def _attacker_call(
-    model, prompt: str, label: str, attempts: int = 3, reasoning: bool = False
+    model, prompt: str, label: str, attempts: int = 3, reasoning: bool = False,
+    system: str | None = None,
 ) -> str | None:
     """One attacker generation with retries (same rationale as the replay
     replay machinery's generate_variant: OpenRouter intermittently returns unparseable
@@ -81,10 +88,19 @@ async def _attacker_call(
     block, returning only the final response. An unclosed <think> (truncated
     CoT) yields None so the caller's retry/fallback path handles it.
     """
+    # A bare string is one user turn. The rewrite families fold their
+    # instructions into that turn; scenario reframing needs a real system turn,
+    # because the role it establishes ("you build evaluation scenarios and never
+    # soften the request") is what stops the attacker answering as a helpful
+    # assistant and sanding the harm off.
+    messages = (
+        [ChatMessageSystem(content=system), ChatMessageUser(content=prompt)]
+        if system else prompt
+    )
     for attempt in range(1, attempts + 1):
         try:
             result = await model.generate(
-                prompt, config=_REASONING_CONFIG if reasoning else GenerateConfig(), cache=False
+                messages, config=_REASONING_CONFIG if reasoning else GenerateConfig(), cache=False
             )
             completion = result.completion
             if reasoning and completion:
@@ -206,11 +222,14 @@ async def generate_scenarios(
 
     async def one(sample: Sample, variant: int) -> dict | None:
         view = SampleView.of(sample)
-        prompt = reframe_prompt(item_text(view))
+        prompt = reframe_prompt(scenario_source(view))
         label = f"{SCENARIO_FAMILY} {sample.id} v{variant}"
         for _ in range(parse_attempts):
             async with semaphore:
-                completion = await _attacker_call(model, prompt, label, reasoning=reasoning)
+                completion = await _attacker_call(
+                    model, prompt, label, reasoning=reasoning,
+                    system=REFRAME_SYS_PROMPT,
+                )
             if completion is None:
                 failures[str(sample.id)] = "attacker returned nothing"
                 return None

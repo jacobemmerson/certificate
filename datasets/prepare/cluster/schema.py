@@ -36,12 +36,12 @@ QUESTION_TYPES = frozenset({GRADED, MCQ, LIKERT, EXTRACTION, DETECTION})
 # a verbatim port, implemented in
 # pipeline/stage1_evaluation/scorers/detectors.py.
 #
-# ACCEPT_REJECT_TOKEN currently has no source. It ports the [ACCEPT]/[REJECT]
-# check in PersuSafety's `get_persuasion_oneturn_response.py`, which turned out
-# to be an auxiliary script rather than the paper's refusal metric — that one is
-# human annotation of a free-text response, so `persusafety` is judged instead.
-# The port is kept because the token contract is also how the paper's *persuadee*
-# records its decision, which a future multi-turn source would need.
+# ACCEPT_REJECT_TOKEN is `persusafety`. It ports the [ACCEPT]/[REJECT] check in
+# PersuSafety's `get_persuasion_oneturn_response.py` — the paper's one-turn
+# safety-refusal metric, where the model is put in the persuader role under
+# success pressure and asked to commit with a single token. Accepting the task
+# is the failure. (The paper's other, multi-turn refusal metric needs the whole
+# dialogue and human annotation, and is out of scope.)
 #
 # The names live here as plain strings rather than as imported functions
 # because datasets/ must stay readable without the pipeline installed (the
@@ -308,6 +308,25 @@ class Source:
     # unpaired and make the comparison meaningless.
     group_key: str | None = None
     balanced: bool = False   # even allocation per stratum, not proportional
+
+    # How a stratum's allotment is filled, once `_allocate` has decided how many
+    # rows it gets.
+    #
+    #   uniform  every item equally likely, ordered by a stable hash of its id
+    #   diverse  greedy farthest-point, maximising the spread of what is kept
+    #
+    # Diverse is opt-in rather than the default because it only pays where the
+    # query text *is* the item. On the template-shaped sources — persusafety's
+    # fixed greeting, the leader-favourability scale, injecagent's ReAct
+    # scaffold — every row reads almost identically by construction, so lexical
+    # distance measures the wrapper and spreading on it just picks whichever
+    # rows word their boilerplate oddly. Measured: it roughly halves redundancy
+    # on the six free-text sources and moves the templated ones barely at all.
+    #
+    # Diverse selection compares the same payload near-dedup does, so a source
+    # that declares `dedup_on` is spread by that field rather than by the
+    # instruction wrapped around it.
+    select: str = "uniform"
 
     # near-dedup controls. Defaults are deliberately conservative — a false
     # merge silently deletes coverage, while a missed duplicate only wastes a
