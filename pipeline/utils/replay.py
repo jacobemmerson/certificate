@@ -17,7 +17,9 @@ calls are cached) would collapse those into one generation.
 `replay` runs its target call(s) on a *deep copy* of state
 (`test = copy.deepcopy(state); ...`), so the shared state is never mutated,
 and records, per variant, the `query` sent to the target and the resulting
-`completion` on the *original* state, which it returns unchanged. The
+`completion` on the *original* state, which it returns unchanged. A sample's
+variants run concurrently — they are independent target calls — which lets one
+sample hold up to k connections per family at once. The
 recorded `query` is what lets scoring surface the exact prompt behind a
 sample's worst condition (pipeline/utils/scoring.py::_wrap_scorer's
 `worst_query`). The control's completion (the shared state.output) is exactly
@@ -28,10 +30,12 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import functools
 from typing import Callable
 
+from inspect_ai._util._async import tg_collect
 from inspect_ai.log import transcript
-from inspect_ai.model import ChatMessageUser
+from inspect_ai.model import ChatMessageSystem, ChatMessageUser
 from inspect_ai.solver import Generate, TaskState
 
 
@@ -73,10 +77,20 @@ async def generate_variant(
     return None
 
 
-def _query_messages(row: dict) -> list:
-    """Default row→messages mapping: a single user message with the stored
-    rendered query (every stage-2 replay family)."""
-    return [ChatMessageUser(content=row["query"])]
+def _query_messages(row: dict, state: TaskState) -> list:
+    """Default row→messages mapping: the stored rendered query as a user
+    message (every stage-2 replay family), behind the sample's own system
+    prompt when it has one.
+
+    Cluster rows may carry a system prompt of their own — the human_rights
+    persona arms and persusafety's setup (datasets/public/*.csv), which stage 1
+    sends as a two-message input. That prompt is part of what the row measures,
+    so a variant that dropped it would run unsteered and be compared against a
+    steered control, reading as drift the perturbation never caused.
+    """
+    system = (state.metadata or {}).get("system_prompt")
+    user = ChatMessageUser(content=row["query"])
+    return [ChatMessageSystem(content=system), user] if system else [user]
 
 
 async def replay(
@@ -84,12 +98,14 @@ async def replay(
     generate: Generate,
     family: str,
     variants_by_id: dict[str, list[dict]],
-    messages: Callable[[dict], list] = _query_messages,
+    messages: Callable[[dict, TaskState], list] = _query_messages,
 ) -> TaskState:
     """Run the target on every stored variant of this sample and record the
     results — the shared implementation behind every replay family. `messages`
-    maps a stored artifact row to the message list sent to the target
-    (stage 3 overrides it to rebuild the scenario's system+user pair).
+    maps a stored artifact row (and the sample's state) to the message list
+    sent to the target; stage 3 overrides it to rebuild the scenario's
+    system+user pair, deliberately replacing the sample's own system prompt
+    with the reframed deployment's.
     """
     rows = variants_by_id.get(str(state.sample_id), [])
     if not rows:
@@ -98,11 +114,19 @@ async def replay(
         # time) so the sample still runs its other conditions.
         transcript().info(f"{family}: no stored variants for sample {state.sample_id}")
 
-    variants = []
-    for row in rows:
+    async def run(row: dict) -> TaskState | None:
         test = copy.deepcopy(state)
-        test.messages = messages(row)
-        test = await generate_variant(generate, test, row["condition"])
+        test.messages = messages(row, state)
+        return await generate_variant(generate, test, row["condition"])
+
+    # A sample's variants are independent target calls, so run them together
+    # rather than serially. Note this lets one sample hold up to k-per-family
+    # connections at once, trading some sample-level concurrency for lower
+    # per-sample latency.
+    results = await tg_collect([functools.partial(run, row) for row in rows])
+
+    variants = []
+    for row, test in zip(rows, results):
         if test is None:
             continue
         variants.append({

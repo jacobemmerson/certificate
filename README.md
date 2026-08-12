@@ -52,11 +52,17 @@ uv run certify.py \
   --simulate    {OPTIONAL: run stage-3 scenario simulation by replaying the pregenerated reframings} \
   --sim-k       {OPTIONAL: use up to this many stored scenarios per item under --simulate, default=1}
 ```
-`--perturb` and `--simulate` compose in one run: each benchmark gets a single eval log in which the control is generated and judged once, stage 2 reports under the `lvr`/`consistency` metrics and stage 3 under `lvr_scenario`/`consistency_scenario` (the certification score is the worst condition across every enabled family). `certify.py` checks that the artifacts for the requested `--perturb`/`--simulate` families exist before spending anything, and fails fast with the exact `generate.py` command if they don't. If a grader model is not specified with `--grader`, a group of models is used for LLM-as-a-judge grading as specified in `GRADERS.md`.
+`--perturb` and `--simulate` compose in one run: each benchmark gets a single eval log in which the control is generated and judged once, stage 2 reports under the `harm_propensity`/`stability` metrics and stage 3 under `harm_propensity_scenario`/`stability_scenario` (the certification score is the worst condition across every enabled family). `certify.py` checks that the artifacts for the requested `--perturb`/`--simulate` families exist before spending anything, and fails fast with the exact `generate.py` command if they don't. If a grader model is not specified with `--grader`, a group of models is used for LLM-as-a-judge grading as specified in `GRADERS.md`.
 
 All results are stored in `models/models.json` which will automatically be updated with new models or replace previously run models. By default, the script will skip benchmarks that have already been processed; however, you can override this with by adding `--rerun` argument to `certify.py`. All logs will be in `logs/{benchmark_name}`; these can be accessed to use unreported metrics or other metadata about the samples.
 
 Runs using `--limit` are treated as smoke tests: since they only cover a random subset of each benchmark, results are **not** written to `models/models.json`, though they remain available in `logs/{model_name}`.
+
+After certification runs, aggregate the per-benchmark results into cross-benchmark Bradley–Terry rankings (also a separate manual step, free — it only reads `models.json`):
+```
+uv run aggregate.py
+```
+Each model gets a 0–100 comparative score (mean probability of outperforming the other cohort models), a 0–4 GPA (average standing across 24 analysis specifications), and a rank, written into `models/models.json` as a per-model `bt` block; detailed rankings, sensitivity, and pairwise win probabilities land in `analysis/benchmark_aggregation/`. See [`pipeline/stage4_aggregation/README.md`](pipeline/stage4_aggregation/README.md) for the statistics.
 
 **You can also use any package manager of your choice** (i.e. anaconda); install the requirements by omitting `uv` and execute the pipeline using `python certify.py` with the appropriate arguments.
 
@@ -64,7 +70,7 @@ To evaluate on individual benchmarks, you can use AISI Inspect's CLI `uv run ins
 
 ### Repository structure
 
-The source lives in [`pipeline/`](pipeline/README.md), organized into three stages: `stage1_evaluation/` (plain benchmark evals), `stage2_perturbation/` (surface-perturbation reliability auditing, enabled via `--perturb`), and `stage3_simulation/` (single-turn scenario simulation, enabled via `--simulate`). Stages 2 and 3 replay artifacts pregenerated once by [`generate.py`](generate.py) into [`datasets/generated/`](datasets/generated/README.md), so every model is evaluated on identical variants. Evaluation data lives in [`datasets/`](datasets/README.md) (`raw/` sources → `prepare/` scripts → `public/` CSVs → `generated/` artifacts); see [CONTRIBUTE.md](CONTRIBUTE.md) for adding a new benchmark. The adversarial attack suite (jailbreaks, attack-retry solver, multi-classifier harm scoring) lives on the **`adversarial-attacks`** branch.
+The source lives in [`pipeline/`](pipeline/README.md), organized into four stages: `stage1_evaluation/` (plain benchmark evals), `stage2_perturbation/` (surface-perturbation reliability auditing, enabled via `--perturb`), `stage3_simulation/` (single-turn scenario simulation, enabled via `--simulate`), and `stage4_aggregation/` (cross-benchmark Bradley–Terry aggregation, run via [`aggregate.py`](aggregate.py)). Stages 2 and 3 replay artifacts pregenerated once by [`generate.py`](generate.py) into [`datasets/generated/`](datasets/generated/README.md), so every model is evaluated on identical variants. Evaluation data lives in [`datasets/`](datasets/README.md) (`raw/` sources → `prepare/` scripts → `public/` CSVs → `generated/` artifacts); see [CONTRIBUTE.md](CONTRIBUTE.md) for adding a new benchmark. The adversarial attack suite (jailbreaks, attack-retry solver, multi-classifier harm scoring) lives on the **`adversarial-attacks`** branch.
 
 
 ### Benchmarks

@@ -1,0 +1,9 @@
+construct,measure_a,measure_b,pearson,spearman
+pressure_resistance,lhr_government,pht_explicit,0.8819956046276478,0.8294117647058824
+pressure_resistance,lhr_government,social_harm,0.5871197955056074,0.9115808548998288
+pressure_resistance,pht_explicit,social_harm,0.47142534725388235,0.838713869761017
+steering_susceptibility,lhr_government_drop,pht_push_drop,0.8579694559045695,0.7558823529411764
+baseline_discriminant_check,lhr_neutral,pht_no_push,0.15681483305210497,0.27058823529411763
+dab_discriminant_check,dab_fscale,dab_leader_favorability,0.12921957618174743,0.21075954230559693
+dab_discriminant_check,dab_fscale,dab_role_model_bias,0.10437603583458582,0.19012574096099305
+dab_discriminant_check,dab_leader_favorability,dab_role_model_bias,-0.32497930264635977,-0.2

@@ -4,13 +4,16 @@ content-equivalent framings. Templates are deterministic string formatting —
 no model calls — so any output change is attributable to the framing variable
 alone.
 
-Template families are keyed by `PerturbAdapter.elicitation_family` (see
-pipeline/stage2_perturbation/adapters.py). Benchmarks whose elicitation doesn't fit any of
-these (elicitation_family == "generic", e.g. role_model_bias's open-ended "list role
-models" prompt) are skipped by this family entirely — see
-pipeline/registry.py::_build_task.
+Template families are keyed by a sample's own `elicitation_family` (see
+pipeline/stage2_perturbation/adapters.py::elicitation_family). A risk cluster
+mixes elicitation families in one dataset, so applicability is per *sample*,
+not per task: rows whose family has no templates here (elicitation_family ==
+"generic", e.g. the open-ended "list role models" extraction rows) are skipped
+individually by pipeline/generation.py::generate_framing, and
+pipeline/artifacts.py::framing_ids scopes coverage checks to the subset that
+does apply.
 
-pipeline/stage2_perturbation/solvers.py::framing_solver generates one completion per
+pipeline/stage2_perturbation/solvers.py::framing replays one stored variant per
 template here (never touching the shared control state.output), so the
 control condition stays a true, unwrapped passthrough of the item, not any
 one of these templates.

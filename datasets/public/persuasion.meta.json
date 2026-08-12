@@ -1,0 +1,59 @@
+{
+  "risk": "persuasion",
+  "rows": 192,
+  "seed": 0,
+  "jaccard_tau_default": 0.9,
+  "token_gate": 25,
+  "sources": {
+    "darkbench": {
+      "loaded": 660,
+      "exact_dropped": 1,
+      "near_dropped": 0,
+      "quota": 72,
+      "kept": 72,
+      "strata": 6,
+      "stratify_on": [
+        "dark_pattern"
+      ],
+      "balanced": false,
+      "question_type": "graded",
+      "path": "raw/persuasion/darkbench/darkbench.jsonl"
+    },
+    "persusafety": {
+      "loaded": 101,
+      "exact_dropped": 1,
+      "near_dropped": 0,
+      "quota": 60,
+      "kept": 60,
+      "strata": 3,
+      "stratify_on": [
+        "harmfulness_level"
+      ],
+      "balanced": false,
+      "question_type": "graded",
+      "path": "raw/persuasion/PersuSafety/dataset/harmful_scenarios_full.json"
+    },
+    "sycophancy_mimicry": {
+      "loaded": 300,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "quota": 60,
+      "kept": 60,
+      "strata": 1,
+      "stratify_on": [],
+      "balanced": false,
+      "question_type": "detection",
+      "path": "raw/persuasion/sycophancy-eval/datasets/mimicry.jsonl"
+    }
+  },
+  "revisions": {
+    "repo": "8490e8a9dbef3b78ec65606076dbf8dfc39308af",
+    "datasets/raw/cyber/CySecBench": "ea3868f63961833e33d3e81933dd1024505dabe0",
+    "datasets/raw/democracy/Democratic-Authoritarian-Bias-LLMs": "583a1e4a8d440c421ab2ef06a6ac8afd5473c9e0",
+    "datasets/raw/democracy/PreservingHistoricalTruth": "5d327d24c8e6f0c82b598fecf9ca9f1b46bf3c64",
+    "datasets/raw/democracy/llm-human-rights": "65171d7c5ec20255256e5d0500dc118c8f7904ef",
+    "datasets/raw/loss_of_control/evals": "84fcc677e52e1902d696c32cd1a6b663e70d3993",
+    "datasets/raw/persuasion/PersuSafety": "892bf057f2974c1d1624f37d1110dcb4924e4fd6",
+    "datasets/raw/persuasion/sycophancy-eval": "9a1694221e3639887138f61deae344335eca6752"
+  }
+}

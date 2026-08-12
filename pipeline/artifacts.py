@@ -22,7 +22,7 @@ from pathlib import Path
 from inspect_ai import Task
 from inspect_ai._util.registry import registry_info
 
-from pipeline.stage2_perturbation.adapters import get_adapter
+from pipeline.stage2_perturbation.adapters import elicitation_family
 from pipeline.stage2_perturbation.framing import FRAMING_TEMPLATES, FRAMING_VERSION
 from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS, REWRITE_PROMPT_VERSION
 from pipeline.stage3_simulation.prompts import PROMPT_VERSION as SCENARIO_PROMPT_VERSION
@@ -44,7 +44,8 @@ PROMPT_VERSIONS = {
 
 
 def task_name(base_task: Task) -> str:
-    """Recover the original @task function's registry name (e.g. "fscale")."""
+    """Recover the original @task function's registry name — under the cluster
+    scheme one per systemic risk, e.g. "cyber"."""
     return registry_info(base_task).name
 
 
@@ -107,8 +108,23 @@ def sample_ids(task: Task) -> list[str]:
     return [str(sample.id) for sample in task.dataset]
 
 
-def framing_applies(task: str) -> bool:
-    return bool(FRAMING_TEMPLATES.get(get_adapter(task).elicitation_family))
+def framing_ids(task: Task) -> set[str]:
+    """Sample ids in this task that framing templates actually apply to.
+
+    Elicitation family is per-sample (a cluster mixes several), so framing
+    covers a subset — generate_framing skips the rest, and coverage checks
+    must expect the same subset rather than the whole dataset.
+    """
+    return {
+        str(sample.id)
+        for sample in task.dataset
+        if FRAMING_TEMPLATES.get(elicitation_family(sample))
+    }
+
+
+def framing_applies(task: Task) -> bool:
+    """Whether any sample in this task has framing templates at all."""
+    return bool(framing_ids(task))
 
 
 def validate_artifacts(
@@ -123,8 +139,8 @@ def validate_artifacts(
     a complete artifact file for every requested pregenerated family.
 
     Per family: rewrite families must cover every dataset sample id with at
-    least `perturb_k` variants; framing must cover every id (only checked for
-    tasks whose elicitation_family has templates); scenario must have a file,
+    least `perturb_k` variants; framing must cover every id it *applies* to
+    (elicitation family is per-sample — see framing_ids); scenario must have a file,
     but ids with fewer than `sim_k` variants only warn — generation drops
     unparseable reframings, mirroring the old live behavior, and replay just
     runs what exists (identically for every model). `reconsideration` is
@@ -144,7 +160,7 @@ def validate_artifacts(
             checks: list[tuple[str, int, bool]] = []  # (family, min_k, strict)
             strict_rewrite = not limit
             checks += [(f, perturb_k, strict_rewrite) for f in requested if f in REWRITE_FAMILIES]
-            if "framing" in requested and framing_applies(name):
+            if "framing" in requested and framing_applies(task):
                 checks.append(("framing", 1, strict_rewrite))
             if simulate:
                 checks.append((SCENARIO_FAMILY, sim_k, False))
@@ -158,9 +174,15 @@ def validate_artifacts(
                     errors.append(f"Missing artifacts for {name}/{family} ({path}). Run: {cmd}")
                     continue
 
+                # Framing is the one family with per-sample applicability: a
+                # cluster mixes elicitation families, and samples whose family
+                # has no templates are skipped by generate_framing. Expecting
+                # full coverage would fail every cluster that contains one.
+                expected = framing_ids(task) if family == "framing" else ids
+
                 by_id = load_family(name, family)
-                missing = ids - set(by_id)
-                short = {i for i in ids & set(by_id) if len(by_id[i]) < min_k}
+                missing = expected - set(by_id)
+                short = {i for i in expected & set(by_id) if len(by_id[i]) < min_k}
                 if missing or short:
                     detail = (
                         f"{name}/{family}: {len(missing)} sample(s) missing, "

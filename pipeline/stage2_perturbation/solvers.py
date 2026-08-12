@@ -73,8 +73,10 @@ def framing(variants_by_id: dict[str, list[dict]]) -> Solver:
     return solve
 
 
-# The rewrite-style replay families, keyed the way registry.py builds them
-# (framing is separate: its artifacts are deterministic and per-benchmark).
+# The rewrite-style replay families, keyed the way registry.py builds them.
+# framing is separate: its artifacts are deterministic, and it applies only to
+# the samples whose elicitation family has templates, so registry.py gates it
+# on pipeline/artifacts.py::framing_applies.
 REPLAY_SOLVERS = {
     "paraphrase": paraphrase,
     "register": register,
@@ -88,6 +90,10 @@ def reconsideration(challenge_text: str = DEFAULT_CHALLENGE) -> Solver:
     challenges its completion on a scratch copy, leaving the shared state
     (and its control output) as-is. Depends on the target's own output, so it
     cannot be pregenerated.
+
+    It appends to the copied message list rather than replacing it, so a row's
+    own system prompt survives without any special handling — the replay
+    families rebuild theirs instead (pipeline/utils/replay.py::_query_messages).
     """
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:

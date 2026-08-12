@@ -16,13 +16,28 @@ exact command otherwise).
 '''
 
 import json
+import os
+import sys
 from argparse import ArgumentParser
 
 from inspect_ai import eval
+
+
+def display_mode() -> str:
+    '''
+    Inspect's default is the Textual TUI, whose worker cancels the whole eval if
+    the terminal goes away or resizes under it (a disconnected/idle SSH pty, a
+    SIGWINCH) — which silently kills unattended overnight batches with a
+    CancelledError, not a model error. Force a non-interactive display whenever
+    stdout is not a real terminal, honouring an explicit INSPECT_DISPLAY override.
+    '''
+    return os.environ.get("INSPECT_DISPLAY") or ("full" if sys.stdout.isatty() else "log")
 from pipeline.artifacts import validate_artifacts
 from pipeline.registry import init_benchmarks, apply_stages, ALL_PERTURB_FAMILIES
-from pipeline.utils.scoring import SCENARIO
-from pipeline.utils.graders import load_graders, load_models_with_check, aggregate_score, consistency_rate
+from pipeline.utils import results as results_tree
+from pipeline.utils.graders import (
+    DIAGNOSTIC_SOURCES, load_graders, load_models_with_check, validate_graders,
+)
 
 def parse():
     
@@ -60,8 +75,9 @@ def parse():
         help="Randomly sample this many examples per task (default: run the full dataset). WARNING: if limit is present, results will not be saved. They can still be accessed in logs/MODEL_NAME/"
     )
     args.add_argument(
-        "--only", "-o", required=False, nargs="+", metavar="BENCHMARK",
-        help="Run only these benchmark keys (e.g. --only harm hr). Other existing results are preserved."
+        "--only", "-o", required=False, nargs="+", metavar="RISK",
+        help="Run only these systemic-risk clusters (e.g. --only cyber manipulation). "
+             "Other existing results are preserved."
     )
     args.add_argument(
         "--perturb", required=False, nargs="+", default=ALL_PERTURB_FAMILIES, choices=sorted(ALL_PERTURB_FAMILIES),
@@ -88,11 +104,21 @@ def parse():
              "benchmark in --only (or all benchmarks if --only is omitted): the target is re-run "
              "on the pregenerated deployment-scenario reframings from datasets/generated/ "
              "(run generate.py --simulate first). Composes with --perturb in one run/one log: "
-             "the panel reports lvr_scenario/consistency_scenario next to stage 2's lvr/consistency."
+             "the panel reports safety_scenario/stability_scenario next to stage 2's safety_perturbed/stability."
     )
     args.add_argument(
         "--sim-k", required=False, type=int, default=1,
         help="Use up to this many stored scenarios per item under --simulate; default=1."
+    )
+    args.add_argument(
+        "--max-connections", required=False, type=int, default=100,
+        help="Max concurrent model connections Inspect opens (default: 100)."
+    )
+    args.add_argument(
+        "--working-limit", required=False, type=int, default=900,
+        help="Max working seconds per sample before it fails and retries; bounds a "
+             "hung provider connection so one stuck request can't wedge the whole "
+             "run (default: 900). Excludes time spent waiting on rate limits/retries."
     )
 
     return args.parse_args()
@@ -124,17 +150,16 @@ def update(results, models, idx):
             if status.get('status') != 'success' and previously_complete:
                 print(f"[WARNING] {benchmark}: rerun was {status.get('status')}; keeping previous complete result")
                 results['scores'].pop(benchmark, None)
-                results['scores_meta'].pop(benchmark, None)
-                results['perturbations'].pop(benchmark, None)
-                results['simulations'].pop(benchmark, None)
+                results['results'].pop(benchmark, None)
                 results['status'].pop(benchmark, None)
 
         # take values from overlapping keys from the new results (right side of pipe operator)
         results['scores'] = prev.get('scores', {}) | results['scores']
-        results['scores_meta'] = prev.get('scores_meta', {}) | results['scores_meta']
-        results['perturbations'] = prev.get('perturbations', {}) | results.get('perturbations', {})
-        results['simulations'] = prev.get('simulations', {}) | results.get('simulations', {})
+        results['results'] = prev.get('results', {}) | results.get('results', {})
         results['status'] = prev_status | results.get('status', {})
+        # Recomputed after the merge, so a --only rerun reports across every
+        # risk the model has, not just the ones this run touched.
+        results['aggregate'] = results_tree.model_aggregate(results['results'])
         models[idx] = results
     else:
         # add new entry
@@ -163,8 +188,8 @@ if __name__ == "__main__":
 
     # Stage 2 and stage 3 compose in one run: both layer condition families
     # onto the same Task (one control generation, one log), and the wrapped
-    # scorers report them under separate metric pools — lvr/consistency for
-    # the perturbation families, lvr_scenario/consistency_scenario for the
+    # scorers report them under separate metric pools — safety_perturbed/stability for
+    # the perturbation families, safety_scenario/stability_scenario for the
     # scenario family. The certification score is the worst condition across
     # every enabled family (see pipeline/utils/scoring.py).
     run_perturb = bool(args.perturb) and not args.no_perturb
@@ -191,9 +216,11 @@ if __name__ == "__main__":
         print(f"Skipping: {', '.join(sorted(tasks_to_skip))}")
         BENCHMARKS = {key: entry for key, entry in BENCHMARKS.items() if key not in tasks_to_skip}
 
-    # Fail fast — before any eval spends money — unless every benchmark that
-    # will run has complete pregenerated artifacts in datasets/generated/
-    # (see pipeline/artifacts.py; the error names the generate.py command).
+    # Fail fast — before any eval spends money — on the two things that make a
+    # whole run worthless: an unusable judge (every sample errors on scoring, or
+    # worse, silently abstains into a perfect score), and missing artifacts.
+    validate_graders(grader)
+
     validate_artifacts(
         BENCHMARKS,
         families=args.perturb if run_perturb else None,
@@ -225,16 +252,32 @@ if __name__ == "__main__":
         models.json so an incomplete run is distinguishable from a clean one.
         '''
         ok = sum(1 for log in evaluations if log.status == "success")
-        completed = sum(getattr(log.results, "completed_samples", 0) or 0 for log in evaluations if log.results)
-        total = sum(getattr(log.results, "total_samples", 0) or 0 for log in evaluations if log.results)
+        # log.results is None on an errored task, so counting only from it
+        # reports a failed run as "0/0 samples" — which reads like an empty
+        # dataset rather than a run that broke. Fall back to the samples.
+        completed = sum(
+            (getattr(log.results, "completed_samples", None) if log.results else None)
+            or sum(1 for s in (log.samples or []) if not s.error)
+            for log in evaluations
+        )
+        total = sum(
+            (getattr(log.results, "total_samples", None) if log.results else None)
+            or len(log.samples or [])
+            for log in evaluations
+        )
+        errored = sum(1 for log in evaluations for s in (log.samples or []) if s.error)
+        if errored:
+            first = next(s for log in evaluations for s in (log.samples or []) if s.error)
+            reason = str(first.error).strip().splitlines()[-1][:200]
+            print(f"[ERROR] {errored} sample(s) errored; first: {reason}")
         status = "success" if ok == len(evaluations) else ("partial" if ok else "failed")
         return {"status": status, "completed_samples": completed, "total_samples": total}
 
-    def start_eval(tasks: list, task_name: str):
+    def start_eval(tasks: list):
         return eval(
             tasks,
             model=args.model,
-            log_dir=log_dir + f"/{task_name}",
+            log_dir=log_dir,
             continue_on_fail=True,
             retry_on_error=2,
             # tolerate scattered sample-level errors (e.g. an unparseable
@@ -244,7 +287,9 @@ if __name__ == "__main__":
             epochs=args.epochs,
             sample_shuffle=bool(args.limit),
             limit=args.limit,
-            max_connections=100,
+            max_connections=args.max_connections,
+            working_limit=args.working_limit,
+            display=display_mode(),
             # Eval-level cache benefits judge/grader calls (the bulk of API
             # traffic under --perturb) and retries. The replay/reconsideration
             # solvers opt out explicitly (cache=False in
@@ -254,47 +299,61 @@ if __name__ == "__main__":
             cache=True,
         )
 
-    # ----- main loop -----
+    # ----- run -----
+    # One eval() over every cluster, not one per cluster in a Python loop.
+    # Each cluster is now a single task, so a serial loop would leave the
+    # connection pool idle while one cluster drained — Inspect schedules
+    # across tasks itself. Per-cluster reporting comes from partitioning the
+    # returned logs by task name afterwards; `continue_on_fail` and
+    # `fail_on_error` keep one bad cluster from sinking the rest.
     scores = {}
-    scores_meta = {}
-    perturbations = {}
-    simulations = {}
+    results_by_risk = {}
     statuses = {}
-    for benchmark, tasks in BENCHMARKS.items():
 
-        try:
-            res = start_eval(
-                tasks=tasks['tasks'],
-                task_name=tasks['name']
+    all_tasks = [task for entry in BENCHMARKS.values() for task in entry["tasks"]]
+    try:
+        logs = start_eval(all_tasks) or []
+    except Exception as e:
+        print(f"[ERROR] evaluation failed: {e}")
+        logs = []
+        statuses = {key: {"status": "failed", "error": str(e)} for key in BENCHMARKS}
+
+    by_cluster: dict[str, list] = {}
+    for log in logs:
+        by_cluster.setdefault(str(log.eval.task), []).append(log)
+
+    for benchmark, entry in BENCHMARKS.items():
+        res = by_cluster.get(entry["name"], [])
+        if not res:
+            statuses.setdefault(benchmark, {"status": "failed", "error": "no log produced"})
+            print(f"[ERROR] {benchmark}: no log produced")
+            continue
+
+        statuses[benchmark] = check_status(res)
+        if statuses[benchmark]['status'] != 'success':
+            print(f"[WARNING] {benchmark}: run was {statuses[benchmark]['status']} "
+                  f"({statuses[benchmark]['completed_samples']}/{statuses[benchmark]['total_samples']} samples)")
+
+        # score only the task logs that succeeded; a partial run's
+        # scores are stored but flagged by its status record
+        ok = [log for log in res if log.status == "success"]
+        if ok:
+            # One tree per risk, replacing what used to be three parallel
+            # sections joined by hand. Every condition of every benchmark comes
+            # out of the same log (pipeline/registry.py::apply_stages), so the
+            # builder splits them by family itself rather than needing the run
+            # to be sliced up here.
+            tree = results_tree.build(ok, DIAGNOSTIC_SOURCES)
+            results_by_risk.update(tree)
+
+            # The flat headline stays: certify.py's own skip logic reads
+            # `scores.keys()` to decide what a rerun can leave alone, and a
+            # reader wants one number per risk without walking the tree.
+            aggregate = (tree.get(entry["name"], {}).get("aggregate") or {})
+            scores[benchmark] = (
+                aggregate.get("worst")
+                if aggregate.get("worst") is not None else -1
             )
-
-            if res:
-                statuses[benchmark] = check_status(res)
-                if statuses[benchmark]['status'] != 'success':
-                    print(f"[WARNING] {benchmark}: run was {statuses[benchmark]['status']} "
-                          f"({statuses[benchmark]['completed_samples']}/{statuses[benchmark]['total_samples']} samples)")
-
-                # score only the task logs that succeeded; a partial run's
-                # scores are stored but flagged by its status record
-                ok = [log for log in res if log.status == "success"]
-                if ok:
-                    average, meta = aggregate_score(ok)
-                    scores[benchmark] = average
-                    scores_meta[benchmark] = meta
-
-                    # Both stages come out of the same log the certification
-                    # scores just came from (see pipeline/registry.py::apply_stages);
-                    # consistency_rate's family filter splits them into their
-                    # separate models.json sections, control included in each
-                    # as the shared baseline.
-                    if run_perturb:
-                        perturbations[benchmark] = consistency_rate(ok, families=set(args.perturb))
-                    if args.simulate:
-                        simulations[benchmark] = consistency_rate(ok, families={SCENARIO})
-
-        except Exception as e:
-            print(f"[ERROR] on {benchmark}: {e}")
-            statuses[benchmark] = {"status": "failed", "error": str(e)}
 
     if (not args.limit):
         # ----- format and store results -----
@@ -305,9 +364,8 @@ if __name__ == "__main__":
             "region": args.region,
             "specialty": args.specialty,
             "scores": scores,
-            "scores_meta": scores_meta,
-            "perturbations": perturbations,
-            "simulations": simulations,
+            "aggregate": results_tree.model_aggregate(results_by_risk),
+            "results": results_by_risk,
             "status": statuses,
         }
 

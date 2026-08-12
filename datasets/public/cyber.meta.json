@@ -1,0 +1,93 @@
+{
+  "risk": "cyber",
+  "rows": 300,
+  "seed": 0,
+  "jaccard_tau_default": 0.9,
+  "token_gate": 25,
+  "sources": {
+    "cysecbench": {
+      "loaded": 12662,
+      "exact_dropped": 2,
+      "near_dropped": 2,
+      "quota": 90,
+      "kept": 90,
+      "strata": 10,
+      "stratify_on": [
+        "Category"
+      ],
+      "balanced": false,
+      "question_type": "graded",
+      "path": "raw/cyber/CySecBench/Dataset/Full dataset/cysecbench.csv"
+    },
+    "cyberseceval_mitre": {
+      "loaded": 1000,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "quota": 80,
+      "kept": 80,
+      "strata": 10,
+      "stratify_on": [
+        "mitre_category"
+      ],
+      "balanced": false,
+      "question_type": "graded",
+      "path": "raw/cyber/PurpleLlama/CybersecurityBenchmarks/datasets/mitre/mitre_benchmark_100_per_category_with_augmentation.json"
+    },
+    "agentharm": {
+      "loaded": 52,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "quota": 40,
+      "kept": 40,
+      "strata": 2,
+      "stratify_on": [
+        "category"
+      ],
+      "balanced": false,
+      "question_type": "graded",
+      "path": "raw/cyber/AgentHarm/benchmark/harmful_behaviors_*.json"
+    },
+    "cyber_false_refusal": {
+      "loaded": 750,
+      "exact_dropped": 1,
+      "near_dropped": 1,
+      "quota": 40,
+      "kept": 40,
+      "strata": 1,
+      "stratify_on": [],
+      "balanced": false,
+      "question_type": "detection",
+      "path": "raw/cyber/PurpleLlama/CybersecurityBenchmarks/datasets/mitre_frr/mitre_frr.json"
+    },
+    "injecagent": {
+      "loaded": 1054,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "quota": 50,
+      "kept": 50,
+      "strata": 6,
+      "stratify_on": [
+        "Attack Type"
+      ],
+      "balanced": false,
+      "question_type": "detection",
+      "path": "raw/cyber/InjecAgent/data/test_cases_*_base.json"
+    }
+  },
+  "revisions": {
+    "repo": "eb897eecbc5ea2e16b7cda52fa4a3d236ff3b685",
+    "datasets/raw/cbrn/HarmBench": "8e1604d1171fe8a48d8febecd22f600e462bdcdd",
+    "datasets/raw/cyber/AgentHarm": "e23b3fe60a0da9037314b88e5ee3a0c054970dad",
+    "datasets/raw/cyber/CySecBench": "ea3868f63961833e33d3e81933dd1024505dabe0",
+    "datasets/raw/cyber/InjecAgent": "f19c9f2c79a41046eb13c03c51a24c567a8ffa07",
+    "datasets/raw/cyber/PurpleLlama": "acfdd58f7c605eec53af4eed3f7ecf302267f0f8",
+    "datasets/raw/loss_of_control/evals": "84fcc677e52e1902d696c32cd1a6b663e70d3993",
+    "datasets/raw/loss_of_control/sad": "dfc5c9831a9bcc5c9a9dbdcaa2955aae983cd1d3",
+    "datasets/raw/manipulation/Democratic-Authoritarian-Bias-LLMs": "583a1e4a8d440c421ab2ef06a6ac8afd5473c9e0",
+    "datasets/raw/manipulation/PersuSafety": "892bf057f2974c1d1624f37d1110dcb4924e4fd6",
+    "datasets/raw/manipulation/PreservingHistoricalTruth": "5d327d24c8e6f0c82b598fecf9ca9f1b46bf3c64",
+    "datasets/raw/manipulation/llm-human-rights": "65171d7c5ec20255256e5d0500dc118c8f7904ef",
+    "datasets/raw/manipulation/persuasion": "b520c793895e7bea0090816551e9f395f9256082",
+    "datasets/raw/manipulation/sycophancy-eval": "9a1694221e3639887138f61deae344335eca6752"
+  }
+}
