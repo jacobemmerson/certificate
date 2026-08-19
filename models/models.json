@@ -1846,7 +1846,9 @@
                 "completed_samples": 562,
                 "total_samples": 562
             }
-        }
+        },
+        "aa_intelligence_index": 55.3,
+        "aa_model_match": "Claude Sonnet 5 (Adaptive Reasoning, Max Effort)"
     },
     {
         "id": "claude-haiku-4.5",
@@ -3630,7 +3632,9 @@
                 "completed_samples": 562,
                 "total_samples": 562
             }
-        }
+        },
+        "aa_intelligence_index": 29.9,
+        "aa_model_match": "Claude 4.5 Haiku (Reasoning)"
     },
     {
         "id": "gpt-5.6-luna-pro",
@@ -5390,7 +5394,9 @@
                 "completed_samples": 562,
                 "total_samples": 562
             }
-        }
+        },
+        "aa_intelligence_index": 52.3,
+        "aa_model_match": "GPT-5.6 Luna (max)"
     },
     {
         "id": "gemma-4-31b-it",
@@ -7169,7 +7175,9 @@
                 "completed_samples": 562,
                 "total_samples": 562
             }
-        }
+        },
+        "aa_intelligence_index": 29.7,
+        "aa_model_match": "Gemma 4 31B (Reasoning)"
     },
     {
         "id": "gemini-3.6-flash",
@@ -8956,7 +8964,9 @@
                 "completed_samples": 562,
                 "total_samples": 562
             }
-        }
+        },
+        "aa_intelligence_index": 51.6,
+        "aa_model_match": "Gemini 3.6 Flash (high)"
     },
     {
         "id": "llama-3.1-8b-instruct",
@@ -10754,7 +10764,9 @@
                 "completed_samples": 562,
                 "total_samples": 562
             }
-        }
+        },
+        "aa_intelligence_index": 7.4,
+        "aa_model_match": "Llama 3.1 Instruct 8B"
     },
     {
         "id": "glm-5.2",
@@ -12536,7 +12548,9 @@
                 "completed_samples": 562,
                 "total_samples": 562
             }
-        }
+        },
+        "aa_intelligence_index": 52.6,
+        "aa_model_match": "GLM-5.2 (max)"
     },
     {
         "id": "glm-5",
@@ -14316,7 +14330,9 @@
                 "completed_samples": 562,
                 "total_samples": 562
             }
-        }
+        },
+        "aa_intelligence_index": 40.6,
+        "aa_model_match": "GLM-5 (Reasoning)"
     },
     {
         "id": "qwen3.7-flash",
@@ -16091,7 +16107,9 @@
                 "completed_samples": 562,
                 "total_samples": 562
             }
-        }
+        },
+        "aa_intelligence_index": 39.4,
+        "aa_model_match": "Qwen3.7 Plus"
     },
     {
         "id": "grok-4.5",
@@ -17853,7 +17871,9 @@
                 "completed_samples": 562,
                 "total_samples": 562
             }
-        }
+        },
+        "aa_intelligence_index": 55.8,
+        "aa_model_match": "Grok 4.5 (high)"
     },
     {
         "id": "grok-4.3",
@@ -19619,7 +19639,9 @@
                 "completed_samples": 562,
                 "total_samples": 562
             }
-        }
+        },
+        "aa_intelligence_index": 37.9,
+        "aa_model_match": "Grok 4.3 (high)"
     },
     {
         "id": "deepseek-v4-flash",
@@ -21373,7 +21395,9 @@
                 "completed_samples": 562,
                 "total_samples": 562
             }
-        }
+        },
+        "aa_intelligence_index": 29.3,
+        "aa_model_match": "DeepSeek V4 Flash (Non-reasoning)"
     },
     {
         "id": "deepseek-v4-pro",
@@ -23133,7 +23157,9 @@
                 "completed_samples": 562,
                 "total_samples": 562
             }
-        }
+        },
+        "aa_intelligence_index": 45.3,
+        "aa_model_match": "DeepSeek V4 Pro (Reasoning, Max Effort)"
     },
     {
         "id": "mistral-medium-3-5",
@@ -24894,7 +24920,9 @@
                 "completed_samples": 562,
                 "total_samples": 562
             }
-        }
+        },
+        "aa_intelligence_index": 30.4,
+        "aa_model_match": "Mistral Medium 3.5"
     },
     {
         "id": "mistral-small-2603",
@@ -26642,7 +26670,9 @@
                 "completed_samples": 562,
                 "total_samples": 562
             }
-        }
+        },
+        "aa_intelligence_index": 19.7,
+        "aa_model_match": "Mistral Small 4 (Reasoning)"
     },
     {
         "id": "gpt-oss-120b",
@@ -28436,7 +28466,9 @@
                 "completed_samples": 562,
                 "total_samples": 562
             }
-        }
+        },
+        "aa_intelligence_index": 24.1,
+        "aa_model_match": "gpt-oss-120b (high)"
     },
     {
         "id": "muse-spark-1.2",
@@ -28749,6 +28781,8 @@
                 "completed_samples": 562,
                 "total_samples": 562
             }
-        }
+        },
+        "aa_intelligence_index": 56.8,
+        "aa_model_match": "Muse Spark 1.2 (xhigh)"
     }
 ]
