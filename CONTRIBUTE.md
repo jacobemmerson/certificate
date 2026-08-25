@@ -202,10 +202,12 @@ PYTHONPATH=. uv run inspect eval pipeline/stage1_evaluation/evals/clusters.py@cy
 uv run python3 certify.py -m <target-model> -g <grader-model> --only cyber --limit 2
 ```
 
-Check the build report before anything else: `loaded` / `exact` / `near` / `kept`
-per source. A large `exact` drop means missing `distinct_on` (step 2); a large
-`near` drop means your source is templated and wants a higher `tau` or a
-`distinct_on` on the varying term. Dropped pairs are written to
+Check the build report before anything else: `loaded` / `exact` / `near` /
+`cross` / `kept` per source. A large `exact` drop means missing `distinct_on`
+(step 2); a large `near` drop means your source is templated and wants a higher
+`tau` or a `distinct_on` on the varying term. Any `cross` drop means your source
+ships prompts an earlier source in the same cluster already ships — worth
+checking whether it is vendoring another benchmark before you tune anything. Dropped pairs are written to
 `datasets/public/<risk>.dropped.jsonl` so the threshold is reviewable rather
 than trusted.
 

@@ -6,8 +6,8 @@ Build the risk-cluster datasets.
 
 Writes datasets/public/<risk>.csv plus a <risk>.meta.json sibling (provenance:
 seed, quotas, per-tier drop counts, source revisions) and <risk>.dropped.jsonl
-(the near-duplicate pairs tier 2 removed, so the threshold is reviewable rather
-than trusted).
+(the pairs tiers 1b and 2 removed, so the threshold is reviewable rather than
+trusted; each record carries the `tier` that dropped it).
 
 Selection is lexical only — no embeddings. The evidence for that, and for the
 token gate on tier 2, is in datasets/CLUSTERING.md.
@@ -185,6 +185,57 @@ def exact_dedup(
     return kept, len(rows) - len(kept)
 
 
+
+def cross_source_dedup(
+    pools: list[tuple[Source, list[Row]]]
+) -> tuple[list[tuple[Source, list[Row]]], list[dict]]:
+    """Tier 1b: drop a prompt a later source ships identically to an earlier one.
+
+    exact_dedup runs inside one source, so a benchmark that vendors another's
+    items puts the same prompt in the cluster twice under two sample_ids —
+    double-weighting it in every cluster mean.
+
+    Two rules make this tier safe to run without review, unlike near_dedup:
+
+    - It compares the prompt *as delivered*, user text plus system text. A
+      source that wraps the same question in its own system prompt is asking
+      something else, and survives.
+    - A source's own texts are registered only once its whole pool has been
+      walked, so identical text inside one source never collides with itself.
+      That is tier 1's call to make, where `distinct_on` can declare the rows
+      distinct items; across sources there is no such shared declaration, so
+      identical delivered text is a copy.
+
+    Earlier sources win, making the survivor a function of registration order
+    rather than of which pool happened to be walked first.
+    """
+    def key(row: Row) -> tuple[str, str]:
+        return normalised(row.query), normalised(row.system_prompt)
+
+    seen: dict[tuple[str, str], Row] = {}
+    kept_pools, dropped = [], []
+
+    for source, rows in pools:
+        kept = []
+        for row in rows:
+            incumbent = seen.get(key(row))
+            if incumbent is None:
+                kept.append(row)
+                continue
+            dropped.append({
+                "tier": "exact_cross_source",
+                "similarity": 1.0,
+                "kept": incumbent.sample_id,
+                "kept_text": incumbent.query[:300],
+                "dropped": row.sample_id, "dropped_text": row.query[:300],
+            })
+        for row in kept:
+            seen.setdefault(key(row), row)
+        kept_pools.append((source, kept))
+
+    return kept_pools, dropped
+
+
 # ----- tier 2: lexical near-dedup -----
 
 def _distinguishable(left: Row, right: Row, distinct_on: Sequence[str]) -> bool:
@@ -254,6 +305,7 @@ def near_dedup(
             continue
         dropped_indices.add(right)
         dropped_pairs.append({
+            "tier": "near",
             "similarity": round(score, 4),
             "kept": rows[left].sample_id, "kept_text": payload(rows[left])[:300],
             "dropped": rows[right].sample_id, "dropped_text": payload(rows[right])[:300],
@@ -492,6 +544,11 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
     all_dropped: list[dict] = []
     report = {}
 
+    # Tiers 0-2 are per-source, because tau, dedup_on and distinct_on are
+    # per-source declarations. Tier 1b then runs over the assembled pools —
+    # before tier 3, so a copy is removed while its source can still backfill
+    # the quota from its own pool rather than leaving the cluster short.
+    pools = []
     for source in sources:
         rows = load_source(source)
         loaded = len(rows)
@@ -509,20 +566,28 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
             near_dropped = []
         all_dropped.extend(near_dropped)
 
-        rows, allocation = stratified_sample(rows, source, seed)
-
         report[source.name] = {
             "loaded": loaded,
             "exact_dropped": exact_dropped,
             "near_dropped": len(near_dropped),
+            "cross_source_dropped": 0,
             "quota": source.quota,
-            "kept": len(rows),
-            "strata": allocation["strata"],
             "stratify_on": list(source.stratify),
             "balanced": source.balanced,
             "question_type": source.question_type,
             "path": source.path,
         }
+        pools.append((source, rows))
+
+    sizes = {source.name: len(rows) for source, rows in pools}
+    pools, cross_dropped = cross_source_dedup(pools)
+    all_dropped.extend(cross_dropped)
+
+    for source, rows in pools:
+        report[source.name]["cross_source_dropped"] = sizes[source.name] - len(rows)
+        rows, allocation = stratified_sample(rows, source, seed)
+        report[source.name]["kept"] = len(rows)
+        report[source.name]["strata"] = allocation["strata"]
         all_rows.extend(rows)
 
     return all_rows, report, all_dropped
@@ -582,17 +647,18 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
 
 def print_report(risk: str, report: dict, rows: list[Row]):
     print(f"\n=== {risk} ===")
-    header = f"  {'source':22s} {'loaded':>7s} {'exact':>6s} {'near':>6s} {'kept':>6s} {'share':>6s}"
+    header = (f"  {'source':22s} {'loaded':>7s} {'exact':>6s} {'near':>6s} "
+              f"{'cross':>6s} {'kept':>6s} {'share':>6s}")
     print(header)
     print("  " + "-" * (len(header) - 2))
     total = len(rows) or 1
     for name, stats in report.items():
         print(
             f"  {name:22s} {stats['loaded']:7d} {stats['exact_dropped']:6d} "
-            f"{stats['near_dropped']:6d} {stats['kept']:6d} "
-            f"{100 * stats['kept'] / total:5.1f}%"
+            f"{stats['near_dropped']:6d} {stats['cross_source_dropped']:6d} "
+            f"{stats['kept']:6d} {100 * stats['kept'] / total:5.1f}%"
         )
-    print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {total:6d}")
+    print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {'':6s} {total:6d}")
 
 
 def main():
