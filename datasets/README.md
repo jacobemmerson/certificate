@@ -26,8 +26,8 @@ Every source is read from `raw/` directly — there is no intermediate flattenin
 step, and no source-specific loader between the pipeline and its data.
 
 Each build writes `public/<risk>.csv`, a `<risk>.meta.json` (seed, quotas,
-per-tier drop counts, source revisions) and `<risk>.dropped.jsonl` (the
-near-duplicate pairs removed, so the threshold stays reviewable).
+per-tier drop counts, source revisions) and `<risk>.dropped.jsonl` (the pairs
+removed by tiers 1b and 2, so the threshold stays reviewable).
 
 ### Adding a benchmark to a cluster
 

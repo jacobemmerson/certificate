@@ -95,6 +95,9 @@ source that declares `dedup_on` or stratifies finely.
   why live gains are smaller than whole-pool estimates.
 - **Near-dedup still runs.** Farthest-point largely subsumes it, but tier 2 is
   unchanged — it is what produces the reviewable `<risk>.dropped.jsonl`.
+- **Cross-source dedup runs before the quota.** Tier 1b removes a prompt a later
+  source ships identically to an earlier one, so the copy never spends budget
+  and the source backfills from its own pool.
 
 ## Changing it
 

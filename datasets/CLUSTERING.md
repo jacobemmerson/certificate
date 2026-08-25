@@ -671,7 +671,7 @@ No embeddings, no facility-location. The measurements in
 its complexity on these pools: the only place it would help is long free-text
 scenarios, and those pools are all small enough to keep whole.
 
-Four tiers, cheapest first. Each is deterministic and every drop is inspectable.
+Five tiers, cheapest first. Each is deterministic and every drop is inspectable.
 
 **Tier 0 — structural collapse.** Group by the source's own case key and discard
 redundant axis expansions. Free, and by far the largest reduction:
@@ -683,6 +683,36 @@ redundant axis expansions. Free, and by far the largest reduction:
 
 **Tier 1 — exact-match dedup.** Normalize (lowercase, collapse to `[a-z0-9]+`
 tokens, single-space join), drop repeats. Free. Catches 3 of PHT's 498.
+
+**Tier 1b — cross-source exact dedup.** Tier 1 runs inside one source, because
+`tau`, `dedup_on` and `distinct_on` are per-source declarations and a
+cross-source pair has none of them defined. So a benchmark that vendors
+another's items puts the same prompt in the cluster twice, under two
+sample_ids, double-weighting it in every cluster mean. Tier 1b closes that: it
+runs over the assembled pools, before the quota, so a copy is removed while its
+source can still backfill from its own pool.
+
+Two rules keep it free of the failure mode that forces tier 2's guards:
+
+> **It compares the prompt as delivered** — user text plus system text,
+> normalised. A source wrapping the same question in its own system prompt is
+> asking something else, and survives.
+
+> **A source's own texts register only after its whole pool is walked**, so
+> identical text inside one source never collides with itself. That is tier 1's
+> call, where `distinct_on` can declare the rows distinct items; across sources
+> there is no shared declaration, so identical delivered text is a copy.
+
+There is no threshold, so there is no false-positive mode — only byte-identical
+normalised text collides. Measured on the current build: **0 drops** in all four
+clusters (max cross-source Jaccard is 0.32 in cbrn, 0.23 in cyber). The tier is
+a guard for new sources rather than a reduction, and `cross_source_dropped` in
+`<risk>.meta.json` is the number to watch when one lands.
+
+Widening tier 2 across sources instead was measured and rejected: it would find
+nothing in cbrn or cyber, and in manipulation it would fire only on shared
+boilerplate — `authoritarian_values` and `leader_favorability` reach 0.646 on
+their common Likert wrapper while being different instruments.
 
 **Tier 2 — Jaccard near-dedup.** Token-set Jaccard with an inverted-index block
 on low-frequency tokens (skip any appearing in >60 docs). Drop above tau, keep
@@ -770,7 +800,8 @@ directly. Measuring pairwise similarity to *rediscover* those partitions is the
 complexity this plan is declining to add.
 
 **Tier 4 — emit.** `datasets/public/<risk>.csv` with the selected samples
-plus provenance: per-source tau, strata and quotas, seed, drop counts per tier,
+plus provenance: per-source tau, strata and quotas, seed, drop counts per tier
+(`exact_dropped`, `near_dropped`, `cross_source_dropped`),
 and the submodule SHA / HF revision of every source. Also write the dropped
 Jaccard pairs to `<risk>.dropped.jsonl` so tau is reviewable rather than trusted.
 
