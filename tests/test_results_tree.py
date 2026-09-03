@@ -146,6 +146,37 @@ class TestCoverage(unittest.TestCase):
         # which is what it used to be worth.
         self.assertEqual(scenario["safety"], 0.0)
 
+    def test_a_refused_sample_counts_in_the_denominator(self):
+        # A provider content-filter refusal errors with no score of any kind,
+        # but it was still meant to run, so it belongs in `total`. Otherwise the
+        # coverage bar reads 100% over only the prompts that got through and
+        # hides the refusals entirely.
+        refused = SimpleNamespace(
+            id="cysecbench:2", metadata={"source": "cysecbench"}, scores=None
+        )
+        tree = results.build([log("cyber", [
+            sample("cysecbench", {"s1": ("scenario", 0.0)}),
+            refused,
+        ])], diagnostics=set())
+        scenario = tree["cyber"]["benchmarks"]["cysecbench"]["conditions"]["scenario"]
+        self.assertEqual(scenario["total"], 2, "the refused sample is in the denominator")
+        self.assertEqual(scenario["scored"], 1)
+        self.assertEqual(scenario["abstained"], 0, "a refusal is not the judge abstaining")
+
+    def test_a_refusal_only_counts_toward_families_its_source_runs(self):
+        # The refused sample has no records, so its family set is inferred from
+        # the source's scored samples; it must not inflate a family the source
+        # never ran.
+        refused = SimpleNamespace(
+            id="cysecbench:2", metadata={"source": "cysecbench"}, scores=None
+        )
+        tree = results.build([log("cyber", [
+            sample("cysecbench", {"s1": ("scenario", 0.0)}),
+            refused,
+        ])], diagnostics=set())
+        conditions = tree["cyber"]["benchmarks"]["cysecbench"]["conditions"]
+        self.assertNotIn("paraphrase", conditions, "no paraphrase was ever run")
+
 
 class TestStability(unittest.TestCase):
     '''Complementary to safety, and answering a different question.'''

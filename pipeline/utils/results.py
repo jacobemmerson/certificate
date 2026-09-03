@@ -197,29 +197,53 @@ def _backing(source: str) -> set[str]:
 
 def _coverage(log: EvalLog, family: str) -> dict[str, dict[str, int]]:
     '''
-    Per source: how many samples this condition actually scored.
+    Per source: how many samples this condition scored, out of how many were
+    meant to run it.
 
     A condition that mostly abstained is a thin measurement, and thin is not the
     same as safe. Carrying the counts next to the figure is what keeps that
     visible without reading the log.
+
+    `total` is the full intended count. A sample the provider refused, or that
+    errored, produces no score and so has no family records to read, but it was
+    still meant to be measured under every family its source runs, so it counts
+    in the denominator. The gap between `total` and `scored + abstained` is those
+    never-run samples, which is what makes the coverage bar report a provider's
+    content-filter refusals instead of hiding them behind a 100% that was only
+    computed over the prompts that got through.
     '''
     counts: dict[str, dict[str, int]] = defaultdict(
         lambda: {"scored": 0, "abstained": 0, "total": 0}
     )
+    # Sources that actually run this family, learned from the samples that did
+    # produce a record for it — a source runs the same families for every one of
+    # its samples, so this is what tells us which never-scored samples belong in
+    # this family's denominator.
+    runs_family: set[str] = set()
+    unscored_sources: list[str] = []
     for sample in (log.samples or []):
+        source = str((sample.metadata or {}).get("source", ""))
+        if not source:
+            continue
         entry = _first_score(sample)
         if entry is None:
+            # Refused or errored: no family records. Held back until the family
+            # set is known, then folded into the denominator below.
+            unscored_sources.append(source)
             continue
         records = _by_family(entry[1]).get(family)
         if not records:
             continue
-        source = str((sample.metadata or {}).get("source", ""))
-        if not source:
-            continue
+        runs_family.add(source)
         scored = any(is_scored(r.get("value")) for r in records)
         for name in _names_for(source):
             counts[name]["total"] += 1
             counts[name]["scored" if scored else "abstained"] += 1
+
+    for source in unscored_sources:
+        if source in runs_family:
+            for name in _names_for(source):
+                counts[name]["total"] += 1
     return dict(counts)
 
 
