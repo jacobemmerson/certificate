@@ -165,6 +165,14 @@ SUMMARIES: dict[str, Summary] = {
 # have no dataset of their own.
 DERIVED: dict[str, tuple[Sequence[str], Summary]] = {
     "human_rights_persona_gap": (HUMAN_RIGHTS_SOURCES, persona_gap),
+    # The two instruments pooled into the one construct they both measure.
+    # Both are kept as sources so their samples still run and stay visible
+    # per-benchmark, but only this entry enters the cluster mean: endorsing a
+    # limitation is one thing a model does, and which charter the right is
+    # named in does not make it two. Same summary as either source alone, over
+    # the union of their samples, so the result is sample-weighted rather than
+    # an average of two averages that a ragged run would skew.
+    "human_rights": (HUMAN_RIGHTS_SOURCES, neutral_arm_mean),
 }
 
 # Summaries that compare two *groups* rather than averaging samples, so their

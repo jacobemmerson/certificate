@@ -267,12 +267,12 @@ class TestAggregateScore(unittest.TestCase):
 
     def test_reports_per_cluster_and_per_source(self):
         logs = [
-            self.cluster_log("manipulation", {"social_harm": 0.8, "human_rights_udhr": 0.6}),
+            self.cluster_log("manipulation", {"social_harm": 0.8, "darkbench": 0.6}),
             self.cluster_log("cbrn", {"sosbench": 0.5}),
         ]
         reported, scores = aggregate_score(logs)
         self.assertEqual(scores["by_source"]["manipulation"],
-                         {"social_harm": 80.0, "human_rights_udhr": 60.0})
+                         {"social_harm": 80.0, "darkbench": 60.0})
         self.assertEqual(scores["by_cluster"], {"manipulation": 70.0, "cbrn": 50.0})
         self.assertEqual(reported, 60.0)
 

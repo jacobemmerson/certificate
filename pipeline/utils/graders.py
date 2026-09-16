@@ -72,6 +72,50 @@ def validate_graders(graders: str | list[str]) -> None:
         )
 
 
+def validate_target(model: str, model_args: dict | None = None) -> None:
+    '''
+    Fail fast unless the model under test answers with something.
+
+    The mirror of validate_graders, and for the same reason. A model that
+    returns an empty completion does not error: every sample completes, every
+    judge abstains, the run is recorded as a success and the score comes out
+    -1. meta/muse-spark-1.2 did exactly that — four clusters, 1188 samples and
+    the whole grader bill, to discover the endpoint answers `content: null` to
+    everything including "hi".
+
+    `model_args` carries the run's provider routing, so the canary is answered
+    by the same endpoint the eval will be pinned to: a model that works on one
+    endpoint and is mute on another must fail here rather than later.
+    '''
+    import asyncio
+
+    from inspect_ai._util.dotenv import init_dotenv
+    from inspect_ai.model import get_model
+
+    init_dotenv()
+
+    async def ask() -> str:
+        return (await get_model(model, **(model_args or {})).generate(
+            "Reply with the single word: ok"
+        )).completion
+
+    try:
+        completion = asyncio.run(ask())
+    except Exception as exc:
+        raise SystemExit(
+            f"Model under test unusable — no evals were started:\n"
+            f"  {model}: {type(exc).__name__}: {str(exc).strip().splitlines()[-1][:200]}"
+        )
+
+    if not completion.strip():
+        raise SystemExit(
+            f"Model under test returned an empty completion — no evals were started:\n"
+            f"  {model} answered a trivial prompt with nothing.\n\n"
+            "Every sample would complete, every judge would abstain, and the run would be "
+            "recorded as a success scoring -1. Check the model serves this endpoint at all."
+        )
+
+
 async def _gather(fn, items):
     import asyncio
 
@@ -115,23 +159,29 @@ def load_models_with_check(model_id: str | None = None) -> tuple[list[dict], int
 #                        it. Pooling it with cysecbench mixes refusing a harmful
 #                        request with resisting a hijack.
 #
-#   human_rights_persona_gap
-#                        derived from the same samples as human_rights_udhr and
-#                        _echr, and measuring a different property of them (how
-#                        far framing moves the judgment, not how often the model
-#                        endorses). Pooling it made human rights three of
-#                        manipulation's eleven members — 27% of the cluster on
-#                        one construct, by accident rather than by decision.
+# See datasets/CLUSTERING.md and datasets/BENCHMARKS.md, which describe all
+# three as excluded. They stay visible per benchmark.
 #
-# See datasets/CLUSTERING.md and datasets/BENCHMARKS.md, which describe all four
-# as excluded. They stay visible per benchmark.
+# human_rights_persona_gap was here, on the grounds that it is derived from the
+# same samples as human_rights_udhr and _echr and measures a different property
+# of them. It is pooled now: whether a model can be argued out of a right is a
+# safety property in its own right, not a footnote to how often it endorses one,
+# and the planned alignment_faking source scores a gap of exactly this shape
+# (docs/loss-of-control-plan.md). The cost is that human rights now reaches the
+# cluster mean through three of twelve members; collapsing _udhr and _echr into
+# one source would put that construct back on one weight.
 #
 # persusafety was briefly here, when its stimulus was the multi-turn opening
 # greeting and every model scored ~0. Re-ported to the paper's one-turn
 # [ACCEPT]/[REJECT] check it discriminates sharply (gpt-4o-mini 53%, claude
 # 98%), so it is a pooled source again.
 DIAGNOSTIC_SOURCES = {
-    "wmdp", "cyber_false_refusal", "injecagent", "human_rights_persona_gap",
+    "wmdp", "cyber_false_refusal", "injecagent",
+    # Not diagnostics in the "measures something else" sense the others are.
+    # These two are pooled into the derived `human_rights` entry and excluded
+    # here so the construct enters the cluster mean once rather than twice;
+    # they stay visible per-benchmark. See source_metrics.py::DERIVED.
+    "human_rights_udhr", "human_rights_echr",
 }
 
 
