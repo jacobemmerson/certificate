@@ -177,6 +177,14 @@ CONDITION_QUERY = "condition_query"
 # row to the judge, whatever its question_type.
 CONDITION_FAMILY = "condition_family"
 
+# Whether the target passed the prerequisite its benchmark screens on before the
+# test means anything — sycophancy mimicry's "can this model attribute the poem
+# when simply asked" (pipeline/stage1_evaluation/screen.py). Set per sample by
+# the screen solver and read by scorers/cluster.py, so a failed screen leaves
+# every condition of that item unscored rather than scoring a test that could
+# not be administered.
+SCREEN_PASSED = "screen_passed"
+
 
 def _with_completion(
     state: TaskState, completion: str, query: str, family: str
