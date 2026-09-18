@@ -20,11 +20,10 @@ and records, per variant, the `query` sent to the target and the resulting
 `completion` on the *original* state, which it returns unchanged. A sample's
 variants run concurrently — they are independent target calls — which lets one
 sample hold up to k connections per family at once. The
-recorded `query` is what lets scoring surface the exact prompt behind a
-sample's worst condition (pipeline/utils/scoring.py::_wrap_scorer's
-`worst_query`). The control's completion (the shared state.output) is exactly
-what generate() alone would have produced; replay solvers only ever add
-metadata.
+recorded `query` is what lets a condition's judge see the exact prompt it is
+scoring (pipeline/utils/scoring.py::scoring_step). The control's completion
+(the shared state.output) is exactly what generate() alone would have
+produced; replay solvers only ever add metadata.
 """
 from __future__ import annotations
 
@@ -40,10 +39,13 @@ from inspect_ai.solver import Generate, TaskState
 
 
 def truncated(variants_by_id: dict[str, list[dict]], k: int) -> dict[str, list[dict]]:
-    """The first k stored variants per sample — --perturb-k/--sim-k mean
-    "use up to k of the frozen variants", so every model gets the same subset.
-    """
-    return {sample_id: rows[:k] for sample_id, rows in variants_by_id.items()}
+    """The first k *real* stored variants per sample. Fallback rows (the
+    original text, kept so the artifact stays complete) are never replayed,
+    so they must not occupy one of the k slots either."""
+    return {
+        sample_id: [row for row in rows if not row.get("fallback")][:k]
+        for sample_id, rows in variants_by_id.items()
+    }
 
 
 def record_variants(state: TaskState, family: str, variants: list[dict]) -> None:
@@ -107,7 +109,17 @@ async def replay(
     system+user pair, deliberately replacing the sample's own system prompt
     with the reframed deployment's.
     """
-    rows = variants_by_id.get(str(state.sample_id), [])
+    # A fallback row is the *original* text: generation refused, failed, or
+    # returned something that was not a rewrite (rewrite.py::rewrite_defect),
+    # so the row carries the control prompt under a perturbation's label.
+    # Scoring it would credit the family with the control's result and pull the
+    # family's score toward the baseline it is supposed to be compared against.
+    # Dropped here rather than at scoring time so the target call is not paid
+    # for either.
+    rows = [
+        row for row in variants_by_id.get(str(state.sample_id), [])
+        if not row.get("fallback")
+    ]
     if not rows:
         # certify.py's pre-run validation guarantees coverage; this guards
         # tolerated gaps (scenario reframings that never parsed at generation

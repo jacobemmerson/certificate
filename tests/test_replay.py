@@ -25,7 +25,7 @@ from inspect_ai.model import (
 from inspect_ai.solver import TaskState
 
 from pipeline.stage3_simulation.solvers import _scenario_messages
-from pipeline.utils.replay import replay
+from pipeline.utils.replay import replay, truncated
 
 SYSTEM_PROMPT = "You are advising a government minister."
 
@@ -158,3 +158,58 @@ class TestRecordedVariants(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestFallbackRowsAreNotScored(unittest.TestCase):
+    '''
+    A fallback row is the original text: the attacker refused, failed, or
+    returned something rewrite.py::rewrite_defect rejected, so generation
+    persisted the control prompt under a perturbation's label. Replaying it
+    would credit the family with the control's own result and drag the family's
+    score toward the baseline it is meant to be compared against — and would
+    pay for a target call to re-ask a question already asked.
+    '''
+
+    def test_fallback_row_is_neither_sent_nor_recorded(self):
+        state = make_state({})
+        captured = run_replay(state, "paraphrase", [
+            {"condition": "paraphrase_variant_1", "query": "the original question",
+             "fallback": True},
+        ])
+
+        self.assertEqual(captured, [])
+        self.assertEqual(state.metadata.get("perturbations", {}).get("paraphrase"), [])
+
+    def test_genuine_variants_survive_alongside_a_fallback(self):
+        state = make_state({})
+        captured = run_replay(state, "paraphrase", [
+            {"condition": "paraphrase_variant_1", "query": "the original question",
+             "fallback": True},
+            {"condition": "paraphrase_variant_2", "query": "a real rewording",
+             "fallback": False},
+        ])
+
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0][-1].text, "a real rewording")
+        recorded = state.metadata["perturbations"]["paraphrase"]
+        self.assertEqual([v["condition"] for v in recorded], ["paraphrase_variant_2"])
+
+    def test_rows_without_the_key_are_kept(self):
+        '''Stage-3 scenario and stage-2 framing rows carry no `fallback` field.'''
+        state = make_state({})
+        captured = run_replay(state, "framing", [
+            {"condition": "framing_interrogative", "query": "How would one do it?"},
+        ])
+
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(
+            [v["condition"] for v in state.metadata["perturbations"]["framing"]],
+            ["framing_interrogative"],
+        )
+
+
+class TestTruncated(unittest.TestCase):
+    def test_truncation_counts_only_real_rows(self):
+        rows = {"s": [dict(condition="p_1", fallback=True, query="a"),
+                      dict(condition="p_2", fallback=False, query="b")]}
+        self.assertEqual([r["condition"] for r in truncated(rows, 1)["s"]], ["p_2"])

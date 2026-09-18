@@ -192,8 +192,9 @@ def validate_artifacts(
                 )
 
                 by_id = load_family(name, family)
-                missing = expected - set(by_id)
-                short = {i for i in expected & set(by_id) if len(by_id[i]) < min_k}
+                real = {i: [r for r in rows if not r.get("fallback")] for i, rows in by_id.items()}
+                missing = expected - {i for i, rows in real.items() if rows}
+                short = {i for i in expected & set(real) if 0 < len(real[i]) < min_k}
                 if missing or short:
                     detail = (
                         f"{name}/{family}: {len(missing)} sample(s) missing, "

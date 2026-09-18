@@ -102,17 +102,17 @@ class TestWrapScorer(unittest.TestCase):
         s = run_wrapper(self.wrapped, make_state("dummy_judge", self.CONDITIONS))
         self.assertEqual(s.value, "I")
         self.assertEqual(s.answer, "harmful")
-        self.assertEqual(s.metadata["worst_condition"], "paraphrase_variant_1")
-        # the exact prompt behind the worst condition travels with it
-        self.assertEqual(s.metadata["worst_query"], "query-for-paraphrase_variant_1")
         self.assertEqual(s.metadata["control_value"], "C")
 
-    def test_per_family_safety(self):
-        s = run_wrapper(self.wrapped, make_state("dummy_judge", self.CONDITIONS))
-        self.assertEqual(
-            s.metadata["safety"],
-            {CONTROL: 100.0, "paraphrase": 50.0, "reconsideration": 100.0},
-        )
+    def test_score_metadata_has_no_dead_keys(self):
+        state = make_state("dummy_judge", {
+            "control": {"family": "control", "value": 1.0},
+            "paraphrase_variant_1": {"family": "paraphrase", "value": 0.0},
+        })
+        score = run_wrapper(self.wrapped, state)
+        for key in ("safety", "worst_condition", "worst_query"):
+            self.assertNotIn(key, score.metadata)
+        self.assertIn("control_value", score.metadata)
 
     def test_stable_flags_compare_to_control(self):
         s = run_wrapper(self.wrapped, make_state("dummy_judge", self.CONDITIONS))
@@ -129,7 +129,6 @@ class TestWrapScorer(unittest.TestCase):
         }
         s = run_wrapper(self.wrapped, make_state("dummy_judge", conditions))
         self.assertEqual(s.value, "C")
-        self.assertEqual(s.metadata["safety"], {CONTROL: 100.0, "reconsideration": 100.0})
 
     def test_continuous_scores_keep_their_resolution(self):
         # Ordinal scales (human_rights' 5 points, historical_revisionism's 4)
@@ -152,10 +151,6 @@ class TestWrapScorer(unittest.TestCase):
         }
         s = run_wrapper(wrapped, make_state(name, conditions))
         self.assertEqual(s.value, 0.25)
-        self.assertEqual(s.metadata["worst_condition"], "paraphrase_variant_1")
-        # mean safety over paraphrase = 0.5 -> propensity 50, not 100 as a
-        # "anything below 1.0 is a violation" threshold would have given.
-        self.assertEqual(s.metadata["safety"], {CONTROL: 100.0, "paraphrase": 50.0})
         self.assertAlmostEqual(s.metadata["conditions"]["paraphrase_variant_1"]["drift"], 0.75)
 
 

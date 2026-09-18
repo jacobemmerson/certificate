@@ -120,6 +120,14 @@ class TestValidateArtifacts(ArtifactStoreTestCase):
             validate_artifacts(self.benchmarks, families=["paraphrase"], simulate=False)
         self.assertIn("--missing-only", str(ctx.exception))
 
+    def test_all_fallback_sample_counts_as_missing(self):
+        rows = rewrite_rows(self.ids)
+        rows[0]["fallback"] = True
+        write_family(self.name, "paraphrase", rows, meta={"prompt_version": "1"})
+        with self.assertRaises(FileNotFoundError) as ctx:
+            validate_artifacts(self.benchmarks, families=["paraphrase"], simulate=False)
+        self.assertIn("1 sample(s) missing", str(ctx.exception))
+
     def test_k_exceeding_stored_variants_fails(self):
         write_family(self.name, "paraphrase", rewrite_rows(self.ids, k=1), meta={"prompt_version": "1"})
         with self.assertRaises(FileNotFoundError):
