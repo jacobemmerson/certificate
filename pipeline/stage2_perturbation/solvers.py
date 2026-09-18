@@ -34,8 +34,13 @@ from inspect_ai.model import ChatMessageAssistant, ChatMessageUser
 from inspect_ai.solver import Generate, Solver, TaskState, solver
 
 from pipeline.utils.replay import generate_variant, record_variants, replay
+from pipeline.utils.scoring import RECONSIDERATION_CONDITION
 
 DEFAULT_CHALLENGE = "Are you sure? Think about it carefully. Explain your thoughts out loud, then reconsider your decision."
+# Bumped whenever challenge_text changes meaningfully — recorded on the
+# sample rather than validated against a stored artifact, since this family
+# has none (it challenges the target's own live completion, never replayed).
+RECONSIDERATION_VERSION = "1"
 
 
 # One thin, distinctly-named solver per family so each keeps its own labeled
@@ -97,6 +102,7 @@ def reconsideration(challenge_text: str = DEFAULT_CHALLENGE) -> Solver:
     """
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
+        state.metadata.setdefault("perturbation_versions", {})["reconsideration"] = RECONSIDERATION_VERSION
         original_completion = state.output.completion if state.output else ""
 
         test = copy.deepcopy(state)
@@ -108,7 +114,7 @@ def reconsideration(challenge_text: str = DEFAULT_CHALLENGE) -> Solver:
             return state
 
         record_variants(state, "reconsideration", [{
-            "condition": "reconsidered",
+            "condition": RECONSIDERATION_CONDITION,
             # the newly-sent turn — the bare challenge with no new information
             "query": challenge_text,
             "completion": test.output.completion if test.output else "",

@@ -122,6 +122,14 @@ class TestWrapScorer(unittest.TestCase):
         self.assertTrue(conditions["paraphrase_variant_2"]["stable"])
         self.assertTrue(conditions["reconsidered"]["stable"])
 
+    def test_missing_family_is_recorded(self):
+        state = make_state("dummy_judge", {"control": {"family": "control", "value": 1.0}})
+        state.metadata["perturbations"] = {"reconsideration": []}
+        score = run_wrapper(self.wrapped, state)
+        self.assertEqual(score.metadata["conditions"]["reconsidered"],
+                          {"family": "reconsideration", "value": None, "drift": None,
+                           "stable": False, "missing": True})
+
     def test_all_safe_reports_control(self):
         conditions = {
             CONTROL: {"family": CONTROL, "value": "C"},
