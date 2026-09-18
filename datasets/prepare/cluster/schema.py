@@ -28,6 +28,9 @@ DETECTION = "detection"    # the benchmark's own deterministic detector decides
 
 QUESTION_TYPES = frozenset({GRADED, MCQ, LIKERT, EXTRACTION, DETECTION})
 
+JUDGE_STYLES = ("reasoned", "classifier")
+ROLES = ("pooled", "diagnostic")
+
 # `detection` exists because some benchmarks do not use a judge at all, and
 # replacing their detector with one changes what is being measured rather than
 # how it is computed: CyberSecEval's false-refusal set applies a refusal regex,
@@ -62,6 +65,7 @@ COLUMNS = [
     "fallback_categories", "fallback_scale_map",
     "detector", "system_prompt", "item_text", "prompt_template",
     "elicitation_family", "metadata",
+    "judge_style", "role", "pool", "summary", "rewrite",
 ]
 
 # ----- elicitation families -----
@@ -155,6 +159,12 @@ class Row:
     prompt_template: str = ITEM
     elicitation_family: str = GENERIC
     metadata: dict = field(default_factory=dict)
+    # --- per-benchmark facts the pipeline used to hold as name sets ---
+    judge_style: str = "reasoned"   # "classifier" = bare label, no reasoning
+    role: str = "pooled"            # "diagnostic" = visible per-benchmark, out of the cluster mean
+    pool: str = ""                  # sources sharing a pool enter the cluster mean once
+    summary: str = "mean"           # a summary registered in scorers/source_metrics.py
+    rewrite: bool = True            # stage-2 rewrite families apply to this row
 
     def to_csv_row(self) -> dict:
         '''Flatten to a CSV row, JSON-encoding the structured columns.'''
@@ -162,6 +172,7 @@ class Row:
         for col in ("categories", "scale_map", "choices", "metadata",
                     "fallback_categories", "fallback_scale_map"):
             row[col] = json.dumps(row[col], ensure_ascii=False, sort_keys=True)
+        row["rewrite"] = "true" if self.rewrite else "false"
         return row
 
 
@@ -195,6 +206,14 @@ def validate(row: Row) -> None:
     # would silently send the target something other than what was scored.
     if row.prompt_template.replace(ITEM, row.item_text) != row.query:
         fail("prompt_template does not reconstruct query from item_text")
+
+    if row.judge_style not in JUDGE_STYLES:
+        fail(f"unknown judge_style {row.judge_style!r}")
+    if row.role not in ROLES:
+        fail(f"unknown role {row.role!r}")
+    for needed in row.metadata.get("must_survive") or []:
+        if needed not in row.query:
+            fail(f"must_survive {needed!r} is not in the query")
 
     for option, score in row.scale_map.items():
         if not isinstance(score, (int, float)) or not 0.0 <= score <= 1.0:
@@ -234,6 +253,8 @@ def validate(row: Row) -> None:
         # target must be the answer text and must be one of the choices.
         if row.target not in row.choices:
             fail("mcq target must be the answer text, and appear in choices")
+        if row.target.strip().startswith("<") and row.target.strip().endswith(">"):
+            fail(f"mcq target looks like an unfilled placeholder: {row.target!r}")
 
     elif row.question_type == LIKERT:
         if not row.scale_map:
@@ -297,6 +318,23 @@ class Source:
     prompt_template: Derived | None = None
     elicitation_family: str = GENERIC
     metadata: Sequence[str] = ()
+
+    judge_style: str = "reasoned"
+    role: str = "pooled"
+    pool: str = ""
+    summary: str = "mean"
+    # None = derive from question_type: detection rows keep their construct in
+    # item_text, so rewording them measures the rewriter, not the model.
+    rewrite: bool | None = None
+    # The closing instruction or question. Rendered into prompt_template after
+    # the item, so a rewrite can never drop it.
+    ask: Derived | None = None
+    # Strings every rewrite of this row must still contain (a required output
+    # token, a misattributed name). Per-row via a callable.
+    must_survive: Sequence[str] | Callable[[dict], list[str]] = ()
+
+    def rewrite_default(self) -> bool:
+        return self.rewrite if self.rewrite is not None else self.question_type != DETECTION
 
     # selection
     stratify: Sequence[str] = ()

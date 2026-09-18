@@ -68,6 +68,10 @@ def load_source(source: Source) -> list[Row]:
         dirname_field=source.dirname_field,
         first_row_field=source.first_row_field,
     )
+    return rows_from_frame(source, frame)
+
+
+def rows_from_frame(source: Source, frame) -> list[Row]:
     if source.transform is not None:
         frame = source.transform(frame)
 
@@ -106,6 +110,18 @@ def load_source(source: Source) -> list[Row]:
             if source.prompt_template else ITEM
         )
 
+        ask = str(source.resolve(record, source.ask) or "") if source.ask else ""
+        if ask:
+            # The ask is part of the query the model sees, but never part of
+            # what stage 2 may reword.
+            item_text = str(query)[: -len(ask)].rstrip() if str(query).endswith(ask) else item_text
+            prompt_template = f"{ITEM}\n\n{ask}"
+            query = f"{item_text}\n\n{ask}"
+
+        must_survive = source.must_survive
+        if callable(must_survive):
+            must_survive = must_survive(record)
+
         row = Row(
             sample_id=f"{source.name}:{native_id}",
             source=source.name,
@@ -130,7 +146,10 @@ def load_source(source: Source) -> list[Row]:
             item_text=item_text,
             prompt_template=prompt_template,
             elicitation_family=source.elicitation_family,
-            metadata={key: _plain(record.get(key)) for key in source.metadata},
+            judge_style=source.judge_style, role=source.role, pool=source.pool,
+            summary=source.summary, rewrite=source.rewrite_default(),
+            metadata={**{key: _plain(record.get(key)) for key in source.metadata},
+                      **({"must_survive": list(must_survive)} if must_survive else {})},
         )
         validate(row)
         rows.append(row)
