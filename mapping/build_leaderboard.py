@@ -18,7 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
 MODELS_PATH = ROOT / "models" / "models.json"
 OUTPUT_PATH = Path(__file__).resolve().parent / "leaderboard.html"
 
-# Cutoffs documented in pipeline/stage4_aggregation/README.md (GPA section).
+# GPA cutoffs from the removed stage-4 aggregation; the `bt` blocks it read
+# are no longer produced, so this builder only renders historical data.
 LETTER_GRADES = [
     (3.7, "A"), (3.3, "A−"), (3.0, "B+"), (2.7, "B"), (2.3, "B−"),
     (2.0, "C+"), (1.7, "C"), (1.3, "C−"), (1.0, "D+"), (0.7, "D"),
