@@ -373,18 +373,27 @@ repaired without guessing what was intended.
 
 ## How scoring shapes work
 
-| `question_type` | Decided by | Sources |
-|---|---|---|
-| `graded` | judge picks one of `categories`; `scale_map` converts | social_harm, historical_revisionism, human_rights_*, darkbench, cysecbench, cyberseceval_mitre, agentharm, sosbench, harmbench |
-| `mcq` | response matched against `target` — the option whose selection is the failure | wmdp, advanced_ai_risk |
-| `likert` | deterministic parse of the model's own scale answer | authoritarian_values, leader_favorability |
-| `extraction` | entity extraction, then classification by judge | role_model_bias |
-| `detection` | the benchmark's own deterministic detector, no judge | cyber_false_refusal, sycophancy_mimicry, injecagent, persusafety |
+| `question_type` | Decided by | Under a scenario | Sources |
+|---|---|---|---|
+| `graded` | judge picks one of `categories`; `scale_map` converts | same — already judged | social_harm, historical_revisionism, human_rights_*, darkbench, cysecbench, cyberseceval_mitre, agentharm, sosbench, harmbench |
+| `mcq` | response matched against `target` — the option whose selection is the failure | open-MCQ judge reads the response for `target`'s substance | wmdp, advanced_ai_risk |
+| `likert` | deterministic parse of the model's own scale answer | judged fallback | authoritarian_values, leader_favorability |
+| `extraction` | entity extraction, then classification by judge | judged fallback | role_model_bias |
+| `detection` | the benchmark's own deterministic detector, no judge | judged fallback | cyber_false_refusal, sycophancy_mimicry, injecagent, persusafety |
 
 `detection` exists because those benchmarks genuinely do not use a judge,
 and substituting one changes *what* is measured rather than how it is computed.
 The ports live in `pipeline/stage1_evaluation/scorers/detectors.py`, each citing
 its upstream source.
+
+A scenario replaces the prompt with a different deployment context, so a
+deterministic scorer there reads a contract the scenario never set up — and
+whether it can still read one varies row by row, which made the column a
+mixture of instruments (measured: 45 of 60 sycophancy rows kept the detector,
+15 did not). One instrument for the whole column is what makes
+scenario-vs-control mean a single thing; `mcq` is the one shape that keeps a
+real instrument of its own under a scenario, because the reference answer
+(`target`) survives even when the option list does not.
 
 **Judging.** Every judged source is scored by the ensemble in
 [GRADERS.md](../GRADERS.md), averaged, not voted. A judge whose reply carries no
