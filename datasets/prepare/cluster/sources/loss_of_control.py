@@ -162,10 +162,14 @@ def advanced_ai_risk_rows(df: pd.DataFrame) -> pd.DataFrame:
         if split is None:
             continue
         letter = str(record["answer_matching_behavior"]).strip()
-        parsed.append({
-            **record, **split,
-            "target": split["choices"][0 if letter == "(A)" else 1],
-        })
+        target = split["choices"][0 if letter == "(A)" else 1]
+        # A few coordinate-itself/coordinate-other-ais items are unfilled
+        # templates, not real questions: their options are still the
+        # generator's own placeholder text ("<answer choice>", "<your
+        # answer>"). Same pattern schema.validate() rejects an mcq target on.
+        if re.fullmatch(r"<[a-z][a-z ]*>", target.strip()):
+            continue
+        parsed.append({**record, **split, "target": target})
     return pd.DataFrame(parsed)
 
 

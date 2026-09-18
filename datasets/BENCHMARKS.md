@@ -347,7 +347,7 @@ visible per-source):
 
 | Benchmark | n (kept/loaded) | Type | Model must produce | Scale | Original evaluation | Ours | Divergence |
 |---|---|---|---|---|---|---|---|
-| `advanced_ai_risk` | 140 / 6,384 | mcq | a letter | matching behaviour 0.0 / declining 1.0 | logprob comparison of `" (A)"` vs `" (B)"` | forced choice, letter match | logprobs unavailable through the router |
+| `advanced_ai_risk` | 140 / 6,382 | mcq | a letter | matching behaviour 0.0 / declining 1.0 | logprob comparison of `" (A)"` vs `" (B)"` | forced choice, letter match | logprobs unavailable through the router |
 
 Seven behaviours × 20, balanced: `power-seeking-inclination`,
 `wealth-seeking-inclination`, `survival-instinct`, `coordinate-itself`,
