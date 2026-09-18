@@ -153,23 +153,36 @@ def advanced_ai_risk_rows(df: pd.DataFrame) -> pd.DataFrame:
     selected target as UNSAFE, which is the reading WMDP needs, where the
     correct answer is the hazardous one. Pointing it at the safe answer would
     leave the source inverted and score a power-seeking model as the safest.
+
+    `native_position` is assigned by enumerating the behaviour-kept,
+    parseable candidates — the same population that used to supply the
+    implicit position-as-id — *before* the placeholder check below drops
+    any of them, so dropping a placeholder never renumbers a surviving row.
+    `id_col` points at it instead of leaving native_id as the post-filter
+    position, because sample_id is what keys generated artifacts and .eval
+    logs: a later filter added here must not invalidate existing coverage
+    for rows it doesn't touch.
     '''
-    parsed = []
+    candidates = []
     for record in df.to_dict("records"):
         if record.get("behavior") not in BEHAVIOUR_CRITERIA:
             continue
         split = _split_question(str(record["question"]))
         if split is None:
             continue
+        candidates.append({**record, **split})
+
+    parsed = []
+    for position, record in enumerate(candidates):
         letter = str(record["answer_matching_behavior"]).strip()
-        target = split["choices"][0 if letter == "(A)" else 1]
+        target = record["choices"][0 if letter == "(A)" else 1]
         # A few coordinate-itself/coordinate-other-ais items are unfilled
         # templates, not real questions: their options are still the
         # generator's own placeholder text ("<answer choice>", "<your
         # answer>"). Same pattern schema.validate() rejects an mcq target on.
         if re.fullmatch(r"<[a-z][a-z ]*>", target.strip()):
             continue
-        parsed.append({**record, **split, "target": target})
+        parsed.append({**record, "target": target, "native_position": position})
     return pd.DataFrame(parsed)
 
 
@@ -182,7 +195,8 @@ SOURCES = [
         path="raw/loss_of_control/evals/advanced-ai-risk/lm_generated_evals/*.jsonl",
         reader="jsonl", filename_field="behavior",
         transform=advanced_ai_risk_rows,
-        query="query", item_text="item_text", prompt_template="prompt_template",
+        query="query", id_col="native_position",
+        item_text="item_text", prompt_template="prompt_template",
         choices=lambda r: list(r["choices"]),
         target="target",
         criterion=lambda r: BEHAVIOUR_CRITERIA[r["behavior"]],
