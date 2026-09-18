@@ -122,6 +122,13 @@ def framing_ids(task: Task) -> set[str]:
     }
 
 
+def rewrite_ids(task: Task) -> set[str]:
+    """Samples the rewrite families apply to: those whose row declared
+    `rewrite` (default: everything but detection rows, whose construct lives
+    inside the text a rewrite would change)."""
+    return {str(s.id) for s in task.dataset if (s.metadata or {}).get("rewrite", True)}
+
+
 def framing_applies(task: Task) -> bool:
     """Whether any sample in this task has framing templates at all."""
     return bool(framing_ids(task))
@@ -178,7 +185,11 @@ def validate_artifacts(
                 # cluster mixes elicitation families, and samples whose family
                 # has no templates are skipped by generate_framing. Expecting
                 # full coverage would fail every cluster that contains one.
-                expected = framing_ids(task) if family == "framing" else ids
+                expected = (
+                    framing_ids(task) if family == "framing"
+                    else rewrite_ids(task) if family in REWRITE_FAMILIES
+                    else ids
+                )
 
                 by_id = load_family(name, family)
                 missing = expected - set(by_id)

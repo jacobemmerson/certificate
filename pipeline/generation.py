@@ -137,6 +137,7 @@ async def generate_rewrites(
     model = get_model(attacker_model)
     semaphore = asyncio.Semaphore(max_connections)
     existing = existing or set()
+    samples = [s for s in samples if (s.metadata or {}).get("rewrite", True)]
 
     async def one(sample: Sample, variant: int) -> dict:
         view = SampleView.of(sample)

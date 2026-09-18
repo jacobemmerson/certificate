@@ -18,6 +18,7 @@ from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
 from pipeline.artifacts import (
     load_family,
+    rewrite_ids,
     sample_ids,
     task_name,
     validate_artifacts,
@@ -143,6 +144,20 @@ class TestValidateArtifacts(ArtifactStoreTestCase):
         rows = rewrite_rows(self.ids[1:], "scenario")
         write_family(self.name, "scenario", rows, meta={"prompt_version": "1"})
         validate_artifacts(self.benchmarks, families=None, simulate=True)
+
+    def test_rewrite_ids_skip_rows_that_declare_no_rewrite(self):
+        task = fixture_task()
+        ids = [str(s.id) for s in task.dataset]
+        task.dataset[0].metadata["rewrite"] = False
+        self.assertEqual(rewrite_ids(task), set(ids[1:]))
+
+    def test_validation_expects_only_rewrite_ids(self):
+        task = fixture_task()
+        ids = [str(s.id) for s in task.dataset]
+        task.dataset[0].metadata["rewrite"] = False
+        write_family(task_name(task), "paraphrase", rewrite_rows(ids[1:]), {})
+        benchmarks = {"x": {"tasks": [task]}}
+        validate_artifacts(benchmarks, ["paraphrase"], simulate=False)   # must not raise
 
     def test_framing_not_required_when_no_sample_qualifies(self):
         # the fixture task's samples are "opinion", so framing IS required...
