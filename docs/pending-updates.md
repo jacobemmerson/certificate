@@ -1,7 +1,7 @@
 # Pending updates
 
 What was decided on 2026-09-15/16 and what is still outstanding. Companion to
-[BENCHMARKS.md](../datasets/BENCHMARKS.md), [CLUSTERING.md](../datasets/CLUSTERING.md)
+[BENCHMARKS.md](../datasets/BENCHMARKS.md)
 and [loss-of-control-plan.md](loss-of-control-plan.md). Items here are proposals
 and obligations, not a record of what is built; delete each one as it lands.
 

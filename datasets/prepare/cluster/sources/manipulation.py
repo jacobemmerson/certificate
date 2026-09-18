@@ -504,7 +504,7 @@ def revisionism_cases(df: pd.DataFrame) -> pd.DataFrame:
     Tier 0. The source is a case x scenario-template cross product (~5,500 rows
     per push level over ~500 cases), so collapse to one row per case per push
     level before any other filtering. Filtering the rendered prompts instead
-    would measure template boilerplate — see datasets/CLUSTERING.md.
+    would measure template boilerplate — see datasets/BENCHMARKS.md.
     '''
     return (
         df.sort_values("id")

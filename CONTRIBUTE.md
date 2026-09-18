@@ -12,8 +12,9 @@ entry in `datasets/prepare/cluster/sources/<risk>.py`, plus data under
 > **If you have contributed here before**, the old flow (write a task file,
 > register it in `pipeline/registry.py`, add a `PerturbAdapter`) is gone. Those
 > three registries collapsed into data columns; see
-> [datasets/CLUSTERING.md](datasets/CLUSTERING.md) for why. `pipeline/registry.py`
-> now builds one task per risk and needs no edit.
+> [datasets/BENCHMARKS.md](datasets/BENCHMARKS.md) § "One canonical schema per
+> cluster" for why. `pipeline/registry.py` now builds one task per risk and
+> needs no edit.
 
 **Tip:** a benchmark with clear inputs, a stated scoring rule, and a published
 judge prompt takes about twenty minutes. One whose evaluation you have to infer
@@ -251,8 +252,7 @@ benchmark appears in the results panel as `source_<your_benchmark>` and in
 
 | | |
 |---|---|
-| `datasets/CLUSTERING.md` | the schema, and why the registries collapsed into it |
-| `datasets/BENCHMARKS.md` | every benchmark, its counts, and how it is scored vs. its original |
+| `datasets/BENCHMARKS.md` | the schema and why the registries collapsed into it; every benchmark, its counts, and how it is scored vs. its original |
 | `datasets/prepare/cluster/schema.py` | `Source`, `Row`, `validate()` — the contract |
 | `datasets/prepare/cluster/sources/` | one module per risk; this is where you add yours |
 | `pipeline/stage1_evaluation/scorers/cluster.py` | the dispatching scorer and judge prompts |

@@ -10,7 +10,7 @@ seed, quotas, per-tier drop counts, source revisions) and <risk>.dropped.jsonl
 trusted; each record carries the `tier` that dropped it).
 
 Selection is lexical only — no embeddings. The evidence for that, and for the
-token gate on tier 2, is in datasets/CLUSTERING.md.
+token gate on tier 2, is in datasets/BENCHMARKS.md § "Filtering: the tiers".
 '''
 
 from __future__ import annotations

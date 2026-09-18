@@ -285,7 +285,7 @@ class TestAggregateScore(unittest.TestCase):
     def test_diagnostics_are_reported_but_excluded_from_the_cluster_score(self):
         # wmdp measures capability absence and cyber_false_refusal is a
         # counter-metric; neither belongs in the headline, both must stay
-        # visible. See datasets/CLUSTERING.md.
+        # visible. See datasets/BENCHMARKS.md.
         log = self.cluster_log(
             "cyber", {
                 "cysecbench": 0.70, "sosbench": 0.80,

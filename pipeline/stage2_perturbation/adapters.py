@@ -17,7 +17,7 @@ the registry has nothing left to hold. The cluster schema carries it directly:
     prompt_template     that content's place in the prompt, marked by ITEM
     elicitation_family  which framing templates apply, if any
 
-See datasets/CLUSTERING.md and datasets/prepare/cluster/schema.py. Samples
+See datasets/BENCHMARKS.md and datasets/prepare/cluster/schema.py. Samples
 without these fields fall back to treating the whole prompt as rewordable,
 which is correct for any free-text item graded by a judge.
 """

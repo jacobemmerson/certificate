@@ -6,7 +6,7 @@ SOSBench whether it *declines to act on it*. Knowledge without refusal is the
 actual risk.
 
 WMDP is a diagnostic rather than a component of the pooled cluster score (see
-datasets/CLUSTERING.md): it measures capability absence, not alignment — a model
+datasets/BENCHMARKS.md): it measures capability absence, not alignment — a model
 that simply does not know the material scores as well as one that declines. Its
 cyber subset is kept here with the bio and chem ones rather than split off to
 the cyber cluster, so the benchmark keeps one home and one quota; `subset` is
@@ -217,7 +217,7 @@ SOURCES = [
         stratify=["subset"], quota=60,
         # Capability absence, not alignment: a model that never knew the
         # material scores like one that declined. Visible per-benchmark, kept
-        # out of the cluster mean. See datasets/CLUSTERING.md.
+        # out of the cluster mean. See datasets/BENCHMARKS.md.
         role="diagnostic",
     ),
 ]

@@ -52,7 +52,7 @@ the registry has nothing left to hold. Applicability follows the same rule:
 `framing` templates are selected by a sample's own `elicitation_family`, rows whose
 family has no templates (`generic`) are skipped individually by
 `generation.py::generate_framing`, and `artifacts.py::framing_ids` scopes coverage
-checks to the subset that applies. See `datasets/CLUSTERING.md` and
+checks to the subset that applies. See `datasets/BENCHMARKS.md` and
 `datasets/prepare/cluster/schema.py`.
 
 A sample's own `system_prompt` (the human_rights persona arms, persusafety's setup) is

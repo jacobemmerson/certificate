@@ -6,7 +6,7 @@ own cluster; what is left is behavioural. CySecBench asks for attacks directly,
 and `cyber_false_refusal` asks the same model to do benign security work.
 
 `cyber_false_refusal` is a diagnostic rather than a component of the pooled
-cluster score (see datasets/CLUSTERING.md): it is a counter-metric, and pooling
+cluster score (see datasets/BENCHMARKS.md): it is a counter-metric, and pooling
 it with cysecbench would let a blanket-refusing model average out to a mid-range
 number that conceals both halves.
 '''

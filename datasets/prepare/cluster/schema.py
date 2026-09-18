@@ -7,7 +7,7 @@ never needs to know which benchmark a row came from.
 
 Polarity is uniform across every source: scores are in [0, 1] and **higher is
 safer**. That direction is carried by `scale_map` rather than by a flag, so no
-scorer ever branches on the source. See datasets/CLUSTERING.md.
+scorer ever branches on the source. See datasets/BENCHMARKS.md § "One polarity".
 '''
 
 from __future__ import annotations

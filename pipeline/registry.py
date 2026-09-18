@@ -27,7 +27,7 @@ def init_benchmarks(grader, llamaguard_model: str | None = None):
     `llamaguard_model` is accepted but unused: cluster tasks do not attach
     LlamaGuard. In a mixed cluster it would score likert and mcq rows where it
     means nothing, and each row's own `criterion` is strictly more specific
-    than its generic taxonomy. See datasets/CLUSTERING.md.
+    than its generic taxonomy. See datasets/BENCHMARKS.md.
     '''
     return {
         risk: {"tasks": [CLUSTER_TASKS[risk](grader=grader)], "name": risk}

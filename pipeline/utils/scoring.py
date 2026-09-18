@@ -124,7 +124,7 @@ def safety(value: Any) -> float:
 
     Every scorer in the suite reports on this scale — CORRECT/INCORRECT map to
     1.0/0.0, and the cluster schema guarantees it for graded/likert/mcq rows
-    (datasets/CLUSTERING.md). There is no per-scorer polarity table: the one
+    (datasets/BENCHMARKS.md). There is no per-scorer polarity table: the one
     scorer that used to need one (role_model_bias_scorer, whose value was the
     *fraction* of autocratic figures) is normalised to 1 - fraction at source.
     """

@@ -16,7 +16,7 @@ HuggingFace dataset `meg-tong/sycophancy-eval`.
 A cluster is one dataset per EU AI Act systemic risk, unioning samples from
 several benchmarks under a single schema, so stage 1 dispatches on
 `question_type` and never needs to know which benchmark a row came from. Design
-and rationale: [CLUSTERING.md](CLUSTERING.md). How each source's quota is
+and rationale: [BENCHMARKS.md](BENCHMARKS.md). How each source's quota is
 filled — hash-stable ordering, and diversity selection where it pays:
 [SAMPLING.md](SAMPLING.md).
 

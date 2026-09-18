@@ -323,7 +323,7 @@ def _risk(task: EvalLog) -> dict:
     contracts = contract(_sample_scores(task, families, "worst"))
     # Sources that stay visible per-benchmark but are kept out of every layer
     # above: either the source declared itself diagnostic (it does not measure
-    # the same thing as the rest — see datasets/CLUSTERING.md), or it declared
+    # the same thing as the rest — see datasets/BENCHMARKS.md), or it declared
     # a pool, in which case the pool's own entry enters the mean instead.
     diagnostics = {
         source for source, c in contracts.items()
