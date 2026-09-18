@@ -53,7 +53,11 @@ Full guide: **[CONTRIBUTE.md](../CONTRIBUTE.md)**. In short:
 5. **Only if the shape needs it**, write a `transform=`.
 
 Nothing in `pipeline/` changes, and the test suite fails if it would have to:
-`tests/test_source_contract.py` greps `pipeline/` for source names.
+`tests/test_source_contract.py` greps `pipeline/` for source names. The two
+exceptions are additions rather than per-source branches: a *new* summary name
+has to be implemented in `source_metrics.SUMMARIES`, and a new pool's derived
+metric (a figure computed across the pool, like the human-rights persona gap)
+in `source_metrics.POOL_DERIVED`. Reusing an existing name needs neither.
 
 Scores are always in `[0, 1]` and **higher is safer**. That direction lives in
 the row's `scale_map`, never in a flag, so no scorer branches per source. A

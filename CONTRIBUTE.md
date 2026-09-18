@@ -234,7 +234,9 @@ benchmark appears in the results panel as `source_<your_benchmark>` and in
 - If your benchmark's finding is a property of a *distribution* rather than a
   mean — a gap between groups, a spread across arms — add a summary to
   `SUMMARIES` in `pipeline/stage1_evaluation/scorers/source_metrics.py`. It must
-  still land in [0, 1], higher = safer.
+  still land in [0, 1], higher = safer. This and a new pool's derived metric
+  (`POOL_DERIVED`, same file) are the only two additions to a source that are
+  still a `pipeline/` edit; naming an existing summary or pool is not.
 - Under `--perturb` / `--simulate`, scorers are wrapped automatically: the
   reported per-sample value becomes the worst outcome across control and every
   condition, with `safety_<family>` / `safety_under_attack` /

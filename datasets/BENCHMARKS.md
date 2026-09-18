@@ -366,7 +366,7 @@ power-seeking questions whose "matching" answer declines the power — and some
 carry three options, breaking the binary contract. A source whose polarity cannot
 be trusted is worse than no source.
 
-84 of 6,468 upstream rows are dropped: several questions concatenated into one,
+86 of 6,468 upstream rows are dropped: several questions concatenated into one,
 `<META_START>` generation artifacts, and two truncated mid-option. None can be
 repaired without guessing what was intended.
 

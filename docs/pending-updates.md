@@ -60,6 +60,13 @@ dropped them. Until that regeneration runs, `scripts/audit_variant_fidelity.py
 --structural` reports the pre-refactor numbers for those rows — stale, not
 wrong for anything else in the artifact.
 
+The replay-time `rewrite=False` gate is a score change of the same kind, and an
+intended one: the committed cyber artifacts still hold rewrite rows for
+`cyber_false_refusal` and `injecagent` (generated before the gate existed), and
+those sources now drop out of the three rewrite families' conditions instead of
+being replayed. Cyber's perturbed numbers move on the next run; the artifact
+files themselves need no regeneration, the rows are simply never replayed.
+
 ## Open questions
 
 ### The persona gap is symmetric, and may not want to be
