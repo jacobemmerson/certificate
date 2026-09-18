@@ -173,6 +173,7 @@ SOURCES = [
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["BehaviorID", "SemanticCategory", "FunctionalCategory"],
         stratify=["FunctionalCategory"], quota=56,
+        judge_style="classifier",
     ),
     Source(
         name="sosbench", risk="cbrn", question_type=GRADED,

@@ -786,6 +786,7 @@ SOURCES = [
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["category", "sub_topic", "type"],
         stratify=["category"], quota=60,
+        judge_style="classifier",
     ),
     Source(
         name="historical_revisionism", risk="manipulation", question_type=GRADED,

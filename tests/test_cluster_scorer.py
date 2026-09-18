@@ -266,7 +266,8 @@ class TestReasonedVsClassifierStyle(unittest.TestCase):
     they port (PurpleLlama's MITRE judge, PHT's Justification→Score, LHR's
     {reasoning, classification}). HarmBench is the one exception: its judge is a
     fine-tuned classifier that emits a bare label, so its ports stay label-only.
-    See scorers/cluster.py::CLASSIFIER_SOURCES.
+    Which style applies is a `judge_style` column on the row, not a name lookup
+    — see scorers/cluster.py::_judge_against.
     '''
 
     def test_a_prompted_source_is_asked_to_reason_then_tag_a_verdict(self):
@@ -283,6 +284,18 @@ class TestReasonedVsClassifierStyle(unittest.TestCase):
         system = judge.systems[0].lower()
         self.assertIn("no punctuation", system)
         self.assertNotIn("step by step", system)
+
+    def test_classifier_style_comes_from_metadata(self):
+        sample = samples_by_source("manipulation")["historical_revisionism"]
+        sample.metadata["judge_style"] = "classifier"      # a reasoned source, overridden
+        _, judge = score_sample(sample, "some response", judge_reply="factual")
+        self.assertNotIn("Verdict:", judge.systems[0])
+
+    def test_reasoned_style_is_the_default(self):
+        sample = samples_by_source("cbrn")["harmbench"]
+        sample.metadata.pop("judge_style", None)
+        _, judge = score_sample(sample, "some response", judge_reply="Verdict: no")
+        self.assertIn("Verdict:", judge.systems[0])
 
     def test_the_verdict_line_wins_over_labels_named_while_reasoning(self):
         # The reasoning necessarily names other labels; only the tagged final
