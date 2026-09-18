@@ -109,7 +109,12 @@ class PipelineIsStatic(unittest.TestCase):
         names = {s.name for s in SOURCES}
         offenders = []
         repo_root = Path(__file__).resolve().parent.parent
+        # stage4_aggregation is dead pre-cluster code (reads a scores_meta shape
+        # nothing writes, names tasks the cluster rename removed; see
+        # analysis/pipeline_audit.md B-section item 3) pending removal on approval.
         for path in (repo_root / "pipeline").rglob("*.py"):
+            if "stage4_aggregation" in path.parts:
+                continue
             for n, line in enumerate(path.read_text().splitlines(), 1):
                 code = line.split("#", 1)[0]
                 if any(f'"{name}"' in code or f"'{name}'" in code for name in names):

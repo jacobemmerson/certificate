@@ -138,7 +138,8 @@ a reader to check. The single exception is HarmBench, whose judge is a
 *fine-tuned* Llama-2 classifier that emits `yes`/`no` and never reasons; its
 ports (`harmbench`, `social_harm`) stay label-only, because a prompted judge told
 to reason would diverge from that classifier rather than toward it. The split is
-one set of source names in `scorers/cluster.py::CLASSIFIER_SOURCES`.
+declared per source, not centrally: `harmbench` and `social_harm` set
+`Source(judge_style="classifier")`.
 
 **`persusafety` ports the paper's one-turn safety refusal**
 (`scripts/evaluation/get_persuasion_oneturn_response.py`). The model is put in
