@@ -9,73 +9,78 @@
       "loaded": 12662,
       "exact_dropped": 2,
       "near_dropped": 2,
+      "cross_source_dropped": 0,
       "quota": 90,
-      "kept": 90,
-      "strata": 10,
       "stratify_on": [
         "Category"
       ],
       "balanced": false,
       "question_type": "graded",
-      "path": "raw/cyber/CySecBench/Dataset/Full dataset/cysecbench.csv"
+      "path": "raw/cyber/CySecBench/Dataset/Full dataset/cysecbench.csv",
+      "kept": 90,
+      "strata": 10
     },
     "cyberseceval_mitre": {
       "loaded": 1000,
       "exact_dropped": 0,
       "near_dropped": 0,
+      "cross_source_dropped": 0,
       "quota": 80,
-      "kept": 80,
-      "strata": 10,
       "stratify_on": [
         "mitre_category"
       ],
       "balanced": false,
       "question_type": "graded",
-      "path": "raw/cyber/PurpleLlama/CybersecurityBenchmarks/datasets/mitre/mitre_benchmark_100_per_category_with_augmentation.json"
+      "path": "raw/cyber/PurpleLlama/CybersecurityBenchmarks/datasets/mitre/mitre_benchmark_100_per_category_with_augmentation.json",
+      "kept": 80,
+      "strata": 10
     },
     "agentharm": {
       "loaded": 52,
       "exact_dropped": 0,
       "near_dropped": 0,
+      "cross_source_dropped": 0,
       "quota": 40,
-      "kept": 40,
-      "strata": 2,
       "stratify_on": [
         "category"
       ],
       "balanced": false,
       "question_type": "graded",
-      "path": "raw/cyber/AgentHarm/benchmark/harmful_behaviors_*.json"
+      "path": "raw/cyber/AgentHarm/benchmark/harmful_behaviors_*.json",
+      "kept": 40,
+      "strata": 2
     },
     "cyber_false_refusal": {
       "loaded": 750,
       "exact_dropped": 1,
       "near_dropped": 1,
+      "cross_source_dropped": 0,
       "quota": 40,
-      "kept": 40,
-      "strata": 1,
       "stratify_on": [],
       "balanced": false,
       "question_type": "detection",
-      "path": "raw/cyber/PurpleLlama/CybersecurityBenchmarks/datasets/mitre_frr/mitre_frr.json"
+      "path": "raw/cyber/PurpleLlama/CybersecurityBenchmarks/datasets/mitre_frr/mitre_frr.json",
+      "kept": 40,
+      "strata": 1
     },
     "injecagent": {
       "loaded": 1054,
       "exact_dropped": 0,
       "near_dropped": 0,
+      "cross_source_dropped": 0,
       "quota": 50,
-      "kept": 50,
-      "strata": 6,
       "stratify_on": [
         "Attack Type"
       ],
       "balanced": false,
       "question_type": "detection",
-      "path": "raw/cyber/InjecAgent/data/test_cases_*_base.json"
+      "path": "raw/cyber/InjecAgent/data/test_cases_*_base.json",
+      "kept": 50,
+      "strata": 6
     }
   },
   "revisions": {
-    "repo": "eb897eecbc5ea2e16b7cda52fa4a3d236ff3b685",
+    "repo": "34c6cbc7f1d4ab5026d0a4dac38b9ca72549860e",
     "datasets/raw/cbrn/HarmBench": "8e1604d1171fe8a48d8febecd22f600e462bdcdd",
     "datasets/raw/cyber/AgentHarm": "e23b3fe60a0da9037314b88e5ee3a0c054970dad",
     "datasets/raw/cyber/CySecBench": "ea3868f63961833e33d3e81933dd1024505dabe0",

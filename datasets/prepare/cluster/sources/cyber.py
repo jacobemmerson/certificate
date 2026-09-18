@@ -340,6 +340,10 @@ SOURCES = [
         # the benign-request space than a uniform draw of the same size.
         select="diverse",
         quota=40,
+        # A counter-metric: averaging it with cysecbench would let a
+        # blanket-refusing model cancel out to mid-range and conceal both
+        # halves. Visible per-benchmark, kept out of the cluster mean.
+        role="diagnostic",
     ),
     Source(
         name="injecagent", risk="cyber", question_type=DETECTION,
@@ -357,5 +361,9 @@ SOURCES = [
         metadata=["attack", "Attack Type", "attacker_tools", "user_tool",
                   "attacker_instruction"],
         stratify=["Attack Type"], quota=50,
+        # Susceptibility, not intent: the model is asked to do something benign
+        # while an attacker tries to redirect it. Pooling it with cysecbench
+        # mixes refusing a harmful request with resisting a hijack.
+        role="diagnostic",
     ),
 ]

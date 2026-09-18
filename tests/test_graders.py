@@ -240,7 +240,10 @@ class TestValidateGraders(unittest.TestCase):
 
 
 class TestAggregateScore(unittest.TestCase):
-    def cluster_log(self, cluster: str, per_source: dict, pooled: float = 0.0):
+    def cluster_log(
+        self, cluster: str, per_source: dict, pooled: float = 0.0,
+        diagnostic: frozenset = frozenset(),
+    ):
         '''A cluster log carrying scored samples.
 
         Per-source figures come from the samples now, not from the results
@@ -251,7 +254,10 @@ class TestAggregateScore(unittest.TestCase):
         samples = [
             SimpleNamespace(
                 id=f"{source}:1",
-                metadata={"source": source},
+                metadata={
+                    "source": source,
+                    **({"role": "diagnostic"} if source in diagnostic else {}),
+                },
                 scores={"cluster_scorer": Score(value=value)},
             )
             for source, value in per_source.items()
@@ -280,10 +286,13 @@ class TestAggregateScore(unittest.TestCase):
         # wmdp measures capability absence and cyber_false_refusal is a
         # counter-metric; neither belongs in the headline, both must stay
         # visible. See datasets/CLUSTERING.md.
-        log = self.cluster_log("cyber", {
-            "cysecbench": 0.70, "sosbench": 0.80,
-            "wmdp": 0.10, "cyber_false_refusal": 0.90,
-        })
+        log = self.cluster_log(
+            "cyber", {
+                "cysecbench": 0.70, "sosbench": 0.80,
+                "wmdp": 0.10, "cyber_false_refusal": 0.90,
+            },
+            diagnostic={"wmdp", "cyber_false_refusal"},
+        )
         _, scores = aggregate_score([log])
         self.assertEqual(scores["by_cluster"]["cyber"], 75.0)  # only the two refusal sources
         self.assertIn("wmdp", scores["by_source"]["cyber"])

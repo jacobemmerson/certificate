@@ -44,7 +44,7 @@ from inspect_ai.log import EvalLog
 from inspect_ai.scorer import Score, SampleScore
 
 from pipeline.stage1_evaluation.scorers.source_metrics import (
-    DERIVED, DISTRIBUTIONAL, summarise,
+    POOL_DERIVED, SUMMARIES, contract, summarise,
 )
 from pipeline.utils.scoring import CONTROL, SCENARIO, is_scored, safety
 
@@ -175,24 +175,18 @@ def _stability(log: EvalLog, family: str) -> dict[str, float]:
     }
 
 
-def _names_for(source: str) -> set[str]:
-    '''Every tree entry this sample backs: itself, plus any derived entry
-    computed across it.'''
-    return {source} | {
-        name for name, (sources, _) in DERIVED.items() if source in sources
-    }
-
-
-def _backing(source: str) -> set[str]:
+def _names_for(source: str, pool: str) -> set[str]:
     '''
-    The sources whose samples back a figure.
+    Every tree entry this sample backs: itself, plus (when it declares a pool)
+    the pool's own entry and any of that pool's derived entries.
 
     A derived entry (human_rights_persona_gap) has no samples of its own, so
     keying coverage on a sample's own `source` reported 0/0 and an empty scorer
     map beside a real number — which reads as "nothing was measured".
     '''
-    backing = DERIVED.get(source)
-    return set(backing[0]) if backing else {source}
+    if not pool:
+        return {source}
+    return {source, pool} | set(POOL_DERIVED.get(pool, {}))
 
 
 def _coverage(log: EvalLog, family: str) -> dict[str, dict[str, int]]:
@@ -222,27 +216,29 @@ def _coverage(log: EvalLog, family: str) -> dict[str, dict[str, int]]:
     runs_family: set[str] = set()
     unscored_sources: list[str] = []
     for sample in (log.samples or []):
-        source = str((sample.metadata or {}).get("source", ""))
+        md = sample.metadata or {}
+        source = str(md.get("source", ""))
         if not source:
             continue
+        pool = str(md.get("pool", ""))
         entry = _first_score(sample)
         if entry is None:
             # Refused or errored: no family records. Held back until the family
             # set is known, then folded into the denominator below.
-            unscored_sources.append(source)
+            unscored_sources.append((source, pool))
             continue
         records = _by_family(entry[1]).get(family)
         if not records:
             continue
         runs_family.add(source)
         scored = any(is_scored(r.get("value")) for r in records)
-        for name in _names_for(source):
+        for name in _names_for(source, pool):
             counts[name]["total"] += 1
             counts[name]["scored" if scored else "abstained"] += 1
 
-    for source in unscored_sources:
+    for source, pool in unscored_sources:
         if source in runs_family:
-            for name in _names_for(source):
+            for name in _names_for(source, pool):
                 counts[name]["total"] += 1
     return dict(counts)
 
@@ -263,16 +259,18 @@ def _scorers(log: EvalLog, family: str) -> dict[str, dict[str, float]]:
         if entry is None:
             continue
         scorer_name, _ = entry
-        source = str((sample.metadata or {}).get("source", ""))
+        md = sample.metadata or {}
+        source = str(md.get("source", ""))
         if not source:
             continue
-        per_base = ((sample.metadata or {}).get("perturbation_scores") or {})
+        pool = str(md.get("pool", ""))
+        per_base = (md.get("perturbation_scores") or {})
         for record in (per_base.get(scorer_name) or {}).values():
             if str(record.get("family")) != family:
                 continue
             for name, value in ((record.get("metadata") or {}).get("judge_scores") or {}).items():
                 if is_scored(value):
-                    for entry in _names_for(source):
+                    for entry in _names_for(source, pool):
                         totals[entry][str(name)].append(safety(value))
 
     return {
@@ -288,20 +286,14 @@ def _mean(values: list[float]) -> float | None:
     return sum(values) / len(values) if values else None
 
 
-def build(task_results: list[EvalLog], diagnostics: set[str]) -> dict:
-    '''
-    The tree for one model, keyed by risk.
-
-    `diagnostics` names sources that stay visible per-benchmark but are kept out
-    of every layer above — they do not measure the same thing as the rest (see
-    DIAGNOSTIC_SOURCES in graders.py).
-    '''
+def build(task_results: list[EvalLog]) -> dict:
+    '''The tree for one model, keyed by risk.'''
     tree: dict[str, dict] = {}
 
     for task in task_results:
         risk = str(task.eval.task)
         try:
-            tree[risk] = _risk(task, diagnostics)
+            tree[risk] = _risk(task)
         except Exception as exc:
             print(f"[ERROR] building results tree for {risk}: {exc}")
             tree[risk] = {"aggregate": None, "baseline": None, "benchmarks": {}}
@@ -309,7 +301,7 @@ def build(task_results: list[EvalLog], diagnostics: set[str]) -> dict:
     return tree
 
 
-def _risk(task: EvalLog, diagnostics: set[str]) -> dict:
+def _risk(task: EvalLog) -> dict:
     families = {
         family
         for sample in (task.samples or [])
@@ -317,6 +309,26 @@ def _risk(task: EvalLog, diagnostics: set[str]) -> dict:
         for family in _by_family(entry[1])
     }
     scored_families = families - {CONTROL}
+
+    contracts = contract(_sample_scores(task, families, "worst"))
+    # Sources that stay visible per-benchmark but are kept out of every layer
+    # above: either the source declared itself diagnostic (it does not measure
+    # the same thing as the rest — see datasets/CLUSTERING.md), or it declared
+    # a pool, in which case the pool's own entry enters the mean instead.
+    diagnostics = {
+        source for source, c in contracts.items()
+        if c["role"] == "diagnostic" or c["pool"]
+    }
+    # Summaries that compare two *groups* rather than averaging samples, so
+    # their value is not monotone in the per-sample values.
+    distributional = {
+        source for source, c in contracts.items()
+        if SUMMARIES.get(c["summary"], SUMMARIES["mean"])[1]
+    } | {
+        name for pool_derived in POOL_DERIVED.values()
+        for name, summary_name in pool_derived.items()
+        if SUMMARIES[summary_name][1]
+    }
 
     baseline = _summarise(task, {CONTROL}, "worst")
     worst = _summarise(task, scored_families, "worst") if scored_families else {}
@@ -332,12 +344,13 @@ def _risk(task: EvalLog, diagnostics: set[str]) -> dict:
         for family in sorted(families)
     }
 
-    # Distributional summaries compare two groups, so they are not monotone in
-    # the per-sample values and `worst`/`mean` computed by reducing samples
-    # first is meaningless — it produced a "worst" above the mean on a real run.
-    # Pool those across *conditions* instead, which is a genuine worst case:
-    # the condition in which the source scored lowest.
-    for source in DISTRIBUTIONAL:
+    # This matters to anything that reduces samples before summarising: taking
+    # each sample's worst condition pushes both groups toward zero, which makes
+    # them more similar, which makes a gap metric go *up*. Observed on a real
+    # run as human_rights_persona_gap reporting a "worst" of 47.5 above its
+    # mean of 31.0. Pool those across *conditions* instead, which is a genuine
+    # worst case: the condition in which the source scored lowest.
+    for source in distributional:
         per_condition = [
             safeties[source]
             for family, (safeties, *_ ) in per_family.items()

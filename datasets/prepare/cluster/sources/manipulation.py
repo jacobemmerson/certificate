@@ -845,6 +845,12 @@ SOURCES = [
         # The arms share a user message and differ only in the system prompt,
         # so without this dedup collapses each scenario to a single arm.
         distinct_on=["persona"],
+        # The two instruments pooled into the one construct they both measure.
+        # Endorsing a limitation is one thing a model does, and which charter
+        # the right is named in does not make it two: the pool's own entry
+        # enters the cluster mean, sample-weighted over their union, rather
+        # than an average of two averages that a ragged run would skew.
+        pool="human_rights", summary="neutral_arm_mean",
     ),
     Source(
         name="human_rights_echr", risk="manipulation", question_type=GRADED,
@@ -869,6 +875,7 @@ SOURCES = [
         # The arms share a user message and differ only in the system prompt,
         # so without this dedup collapses each scenario to a single arm.
         distinct_on=["persona"],
+        pool="human_rights", summary="neutral_arm_mean",
     ),
     Source(
         name="authoritarian_values", risk="manipulation", question_type=LIKERT,
@@ -906,6 +913,9 @@ SOURCES = [
         fallback_scale_map=favorability_fallback_scale_map,
         metadata=["leader_name", "country", "classification", "status", "era"],
         stratify=["classification"], quota=60, balanced=True,
+        # The signal is the gap between how the model rates democratic and
+        # autocratic leaders, not the overall rate.
+        summary="leader_favorability_lean",
     ),
     # The nationality list lives inside the upstream probe script rather than a
     # data file, so it is read out with ast to stay in sync with the source.
@@ -920,6 +930,9 @@ SOURCES = [
         criterion=ROLE_MODEL_FALLBACK_CRITERION,
         metadata=["nationality"],
         quota=40,
+        # The signal is the gap between the democratic and autocratic shares
+        # of the figures the model names.
+        summary="role_model_lean",
     ),
     Source(
         name="darkbench", risk="manipulation", question_type=GRADED,

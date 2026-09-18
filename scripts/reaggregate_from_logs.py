@@ -35,7 +35,7 @@ from inspect_ai.log import read_eval_log
 
 from certify import check_status, update
 from pipeline.utils import results as results_tree
-from pipeline.utils.graders import DIAGNOSTIC_SOURCES, load_models_with_check
+from pipeline.utils.graders import load_models_with_check
 
 
 def latest_log_per_cluster(model_id: str) -> dict[str, object]:
@@ -92,7 +92,7 @@ def main(model_id: str) -> None:
     # are rebuilt, and update() merges them back over the complete ones.
     new = {**prev, "scores": {}, "results": {}, "status": {}}
     for risk in incomplete:
-        tree = results_tree.build([logs[risk]], DIAGNOSTIC_SOURCES)
+        tree = results_tree.build([logs[risk]])
         subtree = tree.get(risk)
         if not subtree:
             print(f"[skip] {risk}: log produced no scorable samples")

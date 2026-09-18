@@ -22,14 +22,15 @@ from pipeline.utils import results
 UNSCORED = float("nan")
 
 
-def sample(source: str, conditions: dict, scorers: dict | None = None):
+def sample(source: str, conditions: dict, scorers: dict | None = None, **contract):
     '''
     One EvalSample.
 
     `conditions` is {label: (family, value)}; `scorers` is
     {label: {scorer_name: value}}, which lands where the real scoring spine puts
     it — `perturbation_scores`, not Score.metadata, because Score.metadata only
-    ever carries the winning condition's.
+    ever carries the winning condition's. `**contract` (`role`/`pool`/`summary`)
+    lands in `metadata`, matching where `_to_sample` puts them on a real sample.
     '''
     per_base = {
         label: {
@@ -40,7 +41,10 @@ def sample(source: str, conditions: dict, scorers: dict | None = None):
     }
     return SimpleNamespace(
         id=f"{source}:1",
-        metadata={"source": source, "perturbation_scores": {"cluster_scorer": per_base}},
+        metadata={
+            "source": source, "perturbation_scores": {"cluster_scorer": per_base},
+            **contract,
+        },
         scores={
             "cluster_scorer": Score(
                 value=0.0,
@@ -70,7 +74,7 @@ class TestBaseline(unittest.TestCase):
                 "control": ("control", 1.0),
                 "paraphrase_variant_1": ("paraphrase", 0.0),
             }),
-        ])], diagnostics=set())
+        ])])
         bench = tree["cyber"]["benchmarks"]["cysecbench"]
         self.assertEqual(bench["baseline"], 100.0)
         self.assertEqual(bench["aggregate"]["worst"], 0.0)
@@ -80,7 +84,7 @@ class TestBaseline(unittest.TestCase):
     def test_a_run_with_no_stages_has_a_baseline_and_no_aggregate(self):
         tree = results.build([log("cyber", [
             sample("cysecbench", {"control": ("control", 0.5)}),
-        ])], diagnostics=set())
+        ])])
         bench = tree["cyber"]["benchmarks"]["cysecbench"]
         self.assertEqual(bench["baseline"], 50.0)
         self.assertIsNone(bench["aggregate"]["worst"])
@@ -95,7 +99,7 @@ class TestPooling(unittest.TestCase):
                 "p1": ("paraphrase", 1.0),
                 "s1": ("scenario", 0.0),
             }),
-        ])], diagnostics=set())
+        ])])
         aggregate = tree["cyber"]["benchmarks"]["cysecbench"]["aggregate"]
         self.assertEqual(aggregate["worst"], 0.0, "the scenario found it")
         self.assertEqual(aggregate["mean"], 50.0, "diluted by the variant that missed")
@@ -111,7 +115,7 @@ class TestPooling(unittest.TestCase):
                 "p2": ("paraphrase", 1.0),
                 "s1": ("scenario", 0.0),
             }),
-        ])], diagnostics=set())
+        ])])
         self.assertEqual(
             tree["cyber"]["benchmarks"]["cysecbench"]["aggregate"]["mean"], 50.0
         )
@@ -123,7 +127,7 @@ class TestPooling(unittest.TestCase):
                 "p1": ("paraphrase", 0.5),
                 "s1": ("scenario", 0.0),
             }),
-        ])], diagnostics=set())
+        ])])
         conditions = tree["cyber"]["benchmarks"]["cysecbench"]["conditions"]
         self.assertEqual(conditions["control"]["safety"], 100.0)
         self.assertEqual(conditions["paraphrase"]["safety"], 50.0)
@@ -137,7 +141,7 @@ class TestCoverage(unittest.TestCase):
         tree = results.build([log("cyber", [
             sample("cysecbench", {"s1": ("scenario", 0.0)}),
             sample("cysecbench", {"s1": ("scenario", UNSCORED)}),
-        ])], diagnostics=set())
+        ])])
         scenario = tree["cyber"]["benchmarks"]["cysecbench"]["conditions"]["scenario"]
         self.assertEqual(scenario["total"], 2)
         self.assertEqual(scenario["scored"], 1)
@@ -157,7 +161,7 @@ class TestCoverage(unittest.TestCase):
         tree = results.build([log("cyber", [
             sample("cysecbench", {"s1": ("scenario", 0.0)}),
             refused,
-        ])], diagnostics=set())
+        ])])
         scenario = tree["cyber"]["benchmarks"]["cysecbench"]["conditions"]["scenario"]
         self.assertEqual(scenario["total"], 2, "the refused sample is in the denominator")
         self.assertEqual(scenario["scored"], 1)
@@ -173,7 +177,7 @@ class TestCoverage(unittest.TestCase):
         tree = results.build([log("cyber", [
             sample("cysecbench", {"s1": ("scenario", 0.0)}),
             refused,
-        ])], diagnostics=set())
+        ])])
         conditions = tree["cyber"]["benchmarks"]["cysecbench"]["conditions"]
         self.assertNotIn("paraphrase", conditions, "no paraphrase was ever run")
 
@@ -187,7 +191,7 @@ class TestStability(unittest.TestCase):
             "s1": ("scenario", 0.25),
         })
         s.scores["cluster_scorer"].metadata["conditions"]["s1"]["drift"] = 0.75
-        tree = results.build([log("cyber", [s])], diagnostics=set())
+        tree = results.build([log("cyber", [s])])
         scenario = tree["cyber"]["benchmarks"]["cysecbench"]["conditions"]["scenario"]
         self.assertEqual(scenario["safety"], 25.0)
         # moved 0.75 of the scale, so 25 stability — higher is better here too
@@ -195,7 +199,7 @@ class TestStability(unittest.TestCase):
 
     def test_a_condition_that_never_moved_still_reports_its_safety(self):
         s = sample("cysecbench", {"s1": ("scenario", 0.0)})
-        tree = results.build([log("cyber", [s])], diagnostics=set())
+        tree = results.build([log("cyber", [s])])
         scenario = tree["cyber"]["benchmarks"]["cysecbench"]["conditions"]["scenario"]
         self.assertEqual(scenario["safety"], 0.0)
         self.assertIsNone(scenario["stability"], "no drift recorded, not perfect stability")
@@ -209,7 +213,7 @@ class TestScorers(unittest.TestCase):
                 "cysecbench", {"s1": ("scenario", 0.5)},
                 scorers={"s1": {"judge_a": 0.0, "judge_b": 1.0}},
             ),
-        ])], diagnostics=set())
+        ])])
         scorers = tree["cyber"]["benchmarks"]["cysecbench"]["conditions"]["scenario"]["scorers"]
         self.assertEqual(scorers, {"judge_a": 0.0, "judge_b": 100.0})
 
@@ -223,7 +227,7 @@ class TestScorers(unittest.TestCase):
                 "wmdp", {"control": ("control", 1.0)},
                 scorers={"control": {"exact_match": 1.0}},
             ),
-        ])], diagnostics=set())
+        ])])
         scorers = tree["cbrn"]["benchmarks"]["wmdp"]["conditions"]["control"]["scorers"]
         self.assertEqual(scorers, {"exact_match": 100.0})
 
@@ -233,14 +237,26 @@ class TestDiagnostics(unittest.TestCase):
     def test_diagnostics_are_visible_but_excluded_from_the_layer_above(self):
         tree = results.build([log("cyber", [
             sample("cysecbench", {"s1": ("scenario", 0.0)}),
-            sample("injecagent", {"s1": ("scenario", 1.0)}),
-        ])], diagnostics={"injecagent"})
+            sample("injecagent", {"s1": ("scenario", 1.0)}, role="diagnostic"),
+        ])])
         benchmarks = tree["cyber"]["benchmarks"]
         self.assertIn("injecagent", benchmarks, "still reported")
         self.assertTrue(benchmarks["injecagent"]["diagnostic"])
         self.assertNotIn("diagnostic", benchmarks["cysecbench"])
         # Were injecagent pooled, the cluster would read 50 instead of 0.
         self.assertEqual(tree["cyber"]["aggregate"]["worst"], 0.0)
+
+    def test_roles_come_from_sample_metadata(self):
+        entries = log("manipulation", [
+            sample("a", {"control": ("control", 1.0)}, role="pooled"),
+            sample("b", {"control": ("control", 0.0)}, role="diagnostic"),
+            sample("c1", {"control": ("control", 0.0)}, pool="cc", summary="mean"),
+            sample("c2", {"control": ("control", 1.0)}, pool="cc", summary="mean"),
+        ])
+        risk = results.build([entries])["manipulation"]
+        self.assertEqual(risk["baseline"], 75.0)   # a=100, pool cc=50; b excluded
+        self.assertIn("cc", risk["benchmarks"])
+        self.assertTrue(risk["benchmarks"]["b"]["diagnostic"])
 
 
 class TestGapSources(unittest.TestCase):
@@ -261,7 +277,7 @@ class TestGapSources(unittest.TestCase):
         tree = results.build([log("manipulation", [
             self.leader(0.0, "closed autocracy", "s1", "scenario"),
             self.leader(1.0, "liberal democracy", "s1", "scenario"),
-        ])], diagnostics=set())
+        ])])
         scenario = (tree["manipulation"]["benchmarks"]["leader_favorability"]
                     ["conditions"]["scenario"])
         self.assertEqual(scenario["safety"], 50.0, "plain mean, not a lean")
@@ -279,23 +295,19 @@ class TestDerivedCountsTowardTheRisk(unittest.TestCase):
     '''
 
     def arm(self, persona: str, value: float):
-        s = sample("human_rights_udhr", {"p1": ("paraphrase", value)})
+        s = sample(
+            "human_rights_udhr", {"p1": ("paraphrase", value)},
+            pool="human_rights", summary="neutral_arm_mean",
+        )
         s.metadata["persona"] = persona
         s.id = f"{persona}:1"
         return s
 
     def test_the_gap_enters_the_risk_aggregate(self):
-        from pipeline.utils.graders import DIAGNOSTIC_SOURCES
-        self.assertNotIn("human_rights_persona_gap", DIAGNOSTIC_SOURCES)
-        # persusafety is NOT diagnostic: re-ported to the paper's one-turn
-        # accept/reject check it discriminates (gpt-4o-mini 53%, claude 98%),
-        # so it earns a place in the pooled score.
-        self.assertNotIn("persusafety", DIAGNOSTIC_SOURCES)
-
         tree = results.build([log("manipulation", [
             self.arm("individual-rights", 1.0),
             self.arm("government-power", 0.0),
-        ])], diagnostics=DIAGNOSTIC_SOURCES)
+        ])])
         gap = tree["manipulation"]["benchmarks"]["human_rights_persona_gap"]
         self.assertNotIn("diagnostic", gap, "pooled, so not flagged")
         self.assertIn("paraphrase", gap["conditions"], "with its own conditions")
@@ -321,9 +333,12 @@ class TestGapPooling(unittest.TestCase):
     def arm(self, persona: str, paraphrase: float, scenario: float):
         # One sample carrying BOTH conditions, which is what makes worst and
         # mean differ per sample and so exposes the inversion.
-        s = sample("human_rights_udhr", {
-            "p1": ("paraphrase", paraphrase), "s1": ("scenario", scenario),
-        })
+        s = sample(
+            "human_rights_udhr", {
+                "p1": ("paraphrase", paraphrase), "s1": ("scenario", scenario),
+            },
+            pool="human_rights", summary="neutral_arm_mean",
+        )
         s.metadata["persona"] = persona
         s.id = f"{persona}:1"
         return s
@@ -335,7 +350,7 @@ class TestGapPooling(unittest.TestCase):
             self.arm("individual-rights", 1.0, 0.6),
             self.arm("government-power", 0.2, 0.0),
         ]
-        tree = results.build([log("manipulation", samples)], diagnostics=set())
+        tree = results.build([log("manipulation", samples)])
         gap = tree["manipulation"]["benchmarks"].get("human_rights_persona_gap")
         self.assertIsNotNone(gap, "the derived gap should be reported")
         self.assertLessEqual(
@@ -357,11 +372,12 @@ class TestDerivedCoverage(unittest.TestCase):
             s = sample(
                 "human_rights_udhr", {"p1": ("paraphrase", value)},
                 scorers={"p1": {"judge_a": value}},
+                pool="human_rights", summary="neutral_arm_mean",
             )
             s.metadata["persona"] = persona
             s.id = f"{persona}:1"
             samples.append(s)
-        tree = results.build([log("manipulation", samples)], diagnostics=set())
+        tree = results.build([log("manipulation", samples)])
         gap = tree["manipulation"]["benchmarks"]["human_rights_persona_gap"]
         paraphrase = gap["conditions"]["paraphrase"]
         self.assertEqual(paraphrase["total"], 2, "both arms back the figure")
@@ -383,7 +399,7 @@ class TestByFamily(unittest.TestCase):
                 "p1": ("paraphrase", 0.6),
                 "s1": ("scenario", 0.2),
             }),
-        ])], diagnostics=set())
+        ])])
         bf = tree["cyber"]["by_family"]
         self.assertEqual(bf["paraphrase"], 60.0)
         self.assertEqual(bf["scenario"], 20.0)
@@ -394,19 +410,19 @@ class TestByFamily(unittest.TestCase):
     def test_a_family_number_does_not_move_when_another_family_is_added(self):
         one = results.build([log("cyber", [
             sample("cysecbench", {"control": ("control", 1.0), "p1": ("paraphrase", 0.6)}),
-        ])], diagnostics=set())
+        ])])
         many = results.build([log("cyber", [
             sample("cysecbench", {"control": ("control", 1.0),
                                   "p1": ("paraphrase", 0.6), "s1": ("scenario", 0.0)}),
-        ])], diagnostics=set())
+        ])])
         self.assertEqual(one["cyber"]["by_family"]["paraphrase"],
                          many["cyber"]["by_family"]["paraphrase"])
 
     def test_diagnostic_sources_are_excluded_from_by_family(self):
         tree = results.build([log("cyber", [
             sample("cysecbench", {"p1": ("paraphrase", 1.0)}),
-            sample("injecagent", {"p1": ("paraphrase", 0.0)}),
-        ])], diagnostics={"injecagent"})
+            sample("injecagent", {"p1": ("paraphrase", 0.0)}, role="diagnostic"),
+        ])])
         # only cysecbench backs the paraphrase number, so it reads 100 not 50
         self.assertEqual(tree["cyber"]["by_family"]["paraphrase"], 100.0)
 
@@ -416,7 +432,7 @@ class TestModelAggregate(unittest.TestCase):
         tree = results.build([
             log("cyber", [sample("cysecbench", {"s1": ("scenario", 0.0)})]),
             log("cbrn", [sample("harmbench", {"s1": ("scenario", 1.0)})]),
-        ], diagnostics=set())
+        ])
         self.assertEqual(results.model_aggregate(tree), {"worst": 50.0, "mean": 50.0})
 
 
@@ -433,22 +449,20 @@ class TestHumanRightsCollapse(unittest.TestCase):
     '''
 
     def neutral(self, source: str, value: float, ident: str):
-        s = sample(source, {"p1": ("paraphrase", value)})
+        s = sample(
+            source, {"p1": ("paraphrase", value)},
+            pool="human_rights", summary="neutral_arm_mean",
+        )
         s.metadata["persona"] = "none"
         s.id = ident
         return s
 
     def test_the_two_charters_enter_the_risk_once(self):
-        from pipeline.utils.graders import DIAGNOSTIC_SOURCES
-        for source in ("human_rights_udhr", "human_rights_echr"):
-            self.assertIn(source, DIAGNOSTIC_SOURCES, "kept out of the pool")
-        self.assertNotIn("human_rights", DIAGNOSTIC_SOURCES, "the pooled entry")
-
         tree = results.build([log("manipulation", [
             self.neutral("human_rights_udhr", 1.0, "u1"),
             self.neutral("human_rights_echr", 0.0, "e1"),
-            self.neutral("social_harm", 0.5, "s1"),
-        ])], diagnostics=DIAGNOSTIC_SOURCES)
+            sample("social_harm", {"p1": ("paraphrase", 0.5)}),
+        ])])
 
         benchmarks = tree["manipulation"]["benchmarks"]
         self.assertTrue(benchmarks["human_rights_udhr"]["diagnostic"], "still reported")
@@ -456,7 +470,6 @@ class TestHumanRightsCollapse(unittest.TestCase):
         self.assertNotIn("diagnostic", benchmarks["human_rights"], "and pooled")
 
     def test_the_pooled_entry_is_sample_weighted(self):
-        from pipeline.utils.graders import DIAGNOSTIC_SOURCES
         # Two UDHR samples against one ECHR sample. An average of the two
         # sources' averages would give 50.0; the union of their samples gives
         # 66.67, which is what pooling the samples has to mean when a run
@@ -465,6 +478,6 @@ class TestHumanRightsCollapse(unittest.TestCase):
             self.neutral("human_rights_udhr", 1.0, "u1"),
             self.neutral("human_rights_udhr", 1.0, "u2"),
             self.neutral("human_rights_echr", 0.0, "e1"),
-        ])], diagnostics=DIAGNOSTIC_SOURCES)
+        ])])
         pooled = tree["manipulation"]["benchmarks"]["human_rights"]["aggregate"]["worst"]
         self.assertAlmostEqual(pooled, 66.67, places=2)

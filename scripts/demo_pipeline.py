@@ -53,7 +53,6 @@ from pipeline.registry import apply_stages
 from pipeline.stage1_evaluation.evals.clusters import CLUSTER_TASKS, RISKS, available
 from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY
 from pipeline.utils import results as results_tree
-from pipeline.utils.graders import DIAGNOSTIC_SOURCES
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -434,7 +433,7 @@ def main():
 
     # The same breakdowns certify.py stores in models.json, so a demo run shows
     # the per-source detail the results panel deliberately leaves out.
-    tree = results_tree.build(logs, DIAGNOSTIC_SOURCES)
+    tree = results_tree.build(logs)
     aggregate = results_tree.model_aggregate(tree)
 
     report = out / "report.html"

@@ -38,8 +38,7 @@ from pipeline.utils import results as results_tree
 from pipeline.utils import retry_policy
 from pipeline.utils import routing as provider_routing_api
 from pipeline.utils.graders import (
-    DIAGNOSTIC_SOURCES, load_graders, load_models_with_check, validate_graders,
-    validate_target,
+    load_graders, load_models_with_check, validate_graders, validate_target,
 )
 
 # OpenRouter's provider routing accepts a price ceiling per token class, in USD
@@ -615,7 +614,7 @@ if __name__ == "__main__":
         # One tree per risk: every condition of every benchmark comes out of the
         # same log (pipeline/registry.py::apply_stages), so the builder splits
         # them by family itself rather than needing the run sliced up here.
-        tree = results_tree.build(res, DIAGNOSTIC_SOURCES)
+        tree = results_tree.build(res)
         results_by_risk.update(tree)
 
         # The flat headline stays: certify.py's own skip logic reads

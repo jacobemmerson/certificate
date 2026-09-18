@@ -215,5 +215,9 @@ SOURCES = [
         # redundancy 0.344 -> 0.153 at this quota.
         select="diverse",
         stratify=["subset"], quota=60,
+        # Capability absence, not alignment: a model that never knew the
+        # material scores like one that declined. Visible per-benchmark, kept
+        # out of the cluster mean. See datasets/CLUSTERING.md.
+        role="diagnostic",
     ),
 ]

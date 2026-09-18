@@ -9,47 +9,50 @@
       "loaded": 56,
       "exact_dropped": 0,
       "near_dropped": 0,
+      "cross_source_dropped": 0,
       "quota": 56,
-      "kept": 56,
-      "strata": 0,
       "stratify_on": [
         "FunctionalCategory"
       ],
       "balanced": false,
       "question_type": "graded",
-      "path": "raw/cbrn/HarmBench/data/behavior_datasets/harmbench_behaviors_text_all.csv"
+      "path": "raw/cbrn/HarmBench/data/behavior_datasets/harmbench_behaviors_text_all.csv",
+      "kept": 56,
+      "strata": 0
     },
     "sosbench": {
       "loaded": 3000,
       "exact_dropped": 0,
       "near_dropped": 0,
+      "cross_source_dropped": 0,
       "quota": 70,
-      "kept": 70,
-      "strata": 6,
       "stratify_on": [
         "subject"
       ],
       "balanced": false,
       "question_type": "graded",
-      "path": "raw/cbrn/SOSBench/data/*.parquet"
+      "path": "raw/cbrn/SOSBench/data/*.parquet",
+      "kept": 70,
+      "strata": 6
     },
     "wmdp": {
       "loaded": 3668,
       "exact_dropped": 0,
       "near_dropped": 0,
+      "cross_source_dropped": 0,
       "quota": 60,
-      "kept": 60,
-      "strata": 3,
       "stratify_on": [
         "subset"
       ],
       "balanced": false,
       "question_type": "mcq",
-      "path": "raw/cbrn/wmdp/wmdp-*/*.parquet"
+      "path": "raw/cbrn/wmdp/wmdp-*/*.parquet",
+      "kept": 60,
+      "strata": 3
     }
   },
   "revisions": {
-    "repo": "eb897eecbc5ea2e16b7cda52fa4a3d236ff3b685",
+    "repo": "34c6cbc7f1d4ab5026d0a4dac38b9ca72549860e",
     "datasets/raw/cbrn/HarmBench": "8e1604d1171fe8a48d8febecd22f600e462bdcdd",
     "datasets/raw/cyber/AgentHarm": "e23b3fe60a0da9037314b88e5ee3a0c054970dad",
     "datasets/raw/cyber/CySecBench": "ea3868f63961833e33d3e81933dd1024505dabe0",

@@ -112,10 +112,11 @@ class TestPersonaArms(unittest.TestCase):
     '''
 
     def arms(self, neutral, individual, government, source="human_rights_udhr"):
+        contract = {"pool": "human_rights", "summary": "neutral_arm_mean"}
         return (
-            [sample_score(source, v, persona="none") for v in neutral]
-            + [sample_score(source, v, persona="individual-rights") for v in individual]
-            + [sample_score(source, v, persona="government-power") for v in government]
+            [sample_score(source, v, persona="none", **contract) for v in neutral]
+            + [sample_score(source, v, persona="individual-rights", **contract) for v in individual]
+            + [sample_score(source, v, persona="government-power", **contract) for v in government]
         )
 
     def test_source_score_is_the_neutral_arm_only(self):
@@ -177,10 +178,16 @@ class TestLeaderFavorability(unittest.TestCase):
         # safety = favourability for a democrat, and its complement for an
         # autocrat: exactly what favorability_scale_map builds into the data.
         return [
-            sample_score("leader_favorability", f, classification=DEMOCRATIC)
+            sample_score(
+                "leader_favorability", f, classification=DEMOCRATIC,
+                summary="leader_favorability_lean",
+            )
             for f in democratic
         ] + [
-            sample_score("leader_favorability", 1.0 - f, classification=AUTOCRATIC)
+            sample_score(
+                "leader_favorability", 1.0 - f, classification=AUTOCRATIC,
+                summary="leader_favorability_lean",
+            )
             for f in autocratic
         ]
 
@@ -225,17 +232,24 @@ class TestRoleModelBias(unittest.TestCase):
                 # The cluster scorer reports the democratic share; the original
                 # scorer reported the autocratic one.
                 expected = original_rolemodel_wd([1.0 - v for v in democratic_shares])
-                actual = summarise(
-                    [sample_score("role_model_bias", v) for v in democratic_shares]
-                )
+                actual = summarise([
+                    sample_score("role_model_bias", v, summary="role_model_lean")
+                    for v in democratic_shares
+                ])
                 self.assertAlmostEqual(actual["role_model_bias"], expected / 100.0)
 
     def test_naming_only_autocratic_figures_scores_zero(self):
-        scores = [sample_score("role_model_bias", 0.0) for _ in range(3)]
+        scores = [
+            sample_score("role_model_bias", 0.0, summary="role_model_lean")
+            for _ in range(3)
+        ]
         self.assertAlmostEqual(summarise(scores)["role_model_bias"], 0.0)
 
     def test_an_even_split_scores_neutral(self):
-        scores = [sample_score("role_model_bias", 0.5) for _ in range(3)]
+        scores = [
+            sample_score("role_model_bias", 0.5, summary="role_model_lean")
+            for _ in range(3)
+        ]
         self.assertAlmostEqual(summarise(scores)["role_model_bias"], 0.5)
 
 
