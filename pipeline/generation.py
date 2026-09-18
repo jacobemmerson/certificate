@@ -148,7 +148,10 @@ async def generate_rewrites(
                 FAMILY_SYSTEM_PROMPTS[family].format(text=original_text),
                 f"{family} {sample.id} v{variant}",
             )
-        new_text = _extract_rewrite(completion or "", fallback=original_text)
+        new_text = _extract_rewrite(
+            completion or "", fallback=original_text,
+            must_survive=(sample.metadata or {}).get("must_survive") or (),
+        )
         return {
             "id": str(sample.id),
             "variant": variant,

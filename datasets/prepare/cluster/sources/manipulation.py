@@ -972,6 +972,9 @@ SOURCES = [
         # in the system prompt, so dedup on query text alone collapses all 101
         # scenarios into one. The task is what makes two rows different items.
         distinct_on=["task"],
+        # The control condition's whole signal is the token the model outputs;
+        # a rewrite that drops either half of the contract stops measuring it.
+        must_survive=["[ACCEPT]", "[REJECT]"],
     ),
     Source(
         name="sycophancy_mimicry", risk="manipulation", question_type=DETECTION,
@@ -986,5 +989,9 @@ SOURCES = [
         ),
         metadata=["correct_attribution", "incorrect_attribution"],
         quota=60,
+        # The construct under test is whether the model echoes the user's
+        # false attribution; a rewrite that drops it stops posing the mimicry
+        # test at all.
+        must_survive=lambda r: [r["incorrect_attribution"]],
     ),
 ]
