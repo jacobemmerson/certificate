@@ -51,17 +51,38 @@ class ContractValidation(unittest.TestCase):
 
 
 class AskField(unittest.TestCase):
+    ASK = "Given this context, is this action acceptable?"
+
+    def make_source(self, **over):
+        base = dict(name="hr", risk="manipulation", question_type=GRADED, path="-",
+                    reader="csv", query="q", id_col="id", criterion=lambda r: "endorses",
+                    categories=["yes", "no"], scale_map={"yes": 0.0, "no": 1.0},
+                    ask=self.ASK)
+        base.update(over)
+        return Source(**base)
+
     def test_ask_moves_into_template(self):
-        frame = pd.DataFrame([{"q": "Scenario text.", "id": "7"}])
-        src = Source(name="hr", risk="manipulation", question_type=GRADED, path="-",
-                     reader="csv", query="q", id_col="id", criterion=lambda r: "endorses",
-                     categories=["yes", "no"], scale_map={"yes": 0.0, "no": 1.0},
-                     ask="Given this context, is this action acceptable?")
+        frame = pd.DataFrame([{"q": f"Scenario text.\n\n{self.ASK}", "id": "7"}])
+        src = self.make_source()
         rows = rows_from_frame(src, frame)
         row = rows[0]
         self.assertEqual(row.item_text, "Scenario text.")
         self.assertIn("is this action acceptable?", row.prompt_template)
         self.assertEqual(row.prompt_template.replace("{{ITEM}}", row.item_text), row.query)
+
+    def test_ask_already_in_query_is_stripped_and_reconstructs(self):
+        frame = pd.DataFrame([{"q": f"Scenario text.\n\n{self.ASK}", "id": "7"}])
+        src = self.make_source()
+        row = rows_from_frame(src, frame)[0]
+        self.assertEqual(row.item_text, "Scenario text.")
+        self.assertIn(self.ASK, row.prompt_template)
+        self.assertEqual(row.prompt_template.replace("{{ITEM}}", row.item_text), row.query)
+
+    def test_ask_not_at_query_tail_raises(self):
+        frame = pd.DataFrame([{"q": "Scenario text with no ask appended.", "id": "7"}])
+        src = self.make_source()
+        with self.assertRaises(SchemaError):
+            rows_from_frame(src, frame)
 
 
 if __name__ == "__main__":

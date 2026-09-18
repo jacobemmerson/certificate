@@ -27,7 +27,7 @@ import pandas as pd
 
 from . import readers
 from .schema import (
-    COLUMNS, ITEM, MCQ, Row, Source, jaccard, normalised, tokens, validate,
+    COLUMNS, ITEM, MCQ, Row, SchemaError, Source, jaccard, normalised, tokens, validate,
 )
 from .sources import RISKS, for_risk
 
@@ -113,8 +113,15 @@ def rows_from_frame(source: Source, frame) -> list[Row]:
         ask = str(source.resolve(record, source.ask) or "") if source.ask else ""
         if ask:
             # The ask is part of the query the model sees, but never part of
-            # what stage 2 may reword.
-            item_text = str(query)[: -len(ask)].rstrip() if str(query).endswith(ask) else item_text
+            # what stage 2 may reword. A query that doesn't already end with
+            # the declared ask is refused rather than appended to a second
+            # time, which would silently duplicate the instruction.
+            stripped_query = str(query).rstrip()
+            if not stripped_query.endswith(ask):
+                raise SchemaError(
+                    f"{source.name}:{native_id}: query does not end with the declared ask"
+                )
+            item_text = stripped_query[: -len(ask)].rstrip()
             prompt_template = f"{ITEM}\n\n{ask}"
             query = f"{item_text}\n\n{ask}"
 
