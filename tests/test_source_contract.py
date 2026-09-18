@@ -85,5 +85,17 @@ class AskField(unittest.TestCase):
             rows_from_frame(src, frame)
 
 
+class LiftsContract(unittest.TestCase):
+    def test_to_sample_carries_contract(self):
+        from pipeline.stage1_evaluation.evals.clusters import _to_sample
+        row = graded_row(judge_style="classifier", role="diagnostic", pool="p",
+                         summary="mean", rewrite=False).to_csv_row()
+        md = _to_sample(row).metadata
+        self.assertEqual(md["judge_style"], "classifier")
+        self.assertEqual(md["role"], "diagnostic")
+        self.assertEqual(md["pool"], "p")
+        self.assertIs(md["rewrite"], False)
+
+
 if __name__ == "__main__":
     unittest.main()

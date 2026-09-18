@@ -90,6 +90,11 @@ def _to_sample(row: dict) -> Sample:
             "item_text": row["item_text"],
             "prompt_template": row["prompt_template"],
             "elicitation_family": row["elicitation_family"],
+            "judge_style": row.get("judge_style") or "reasoned",
+            "role": row.get("role") or "pooled",
+            "pool": row.get("pool") or "",
+            "summary": row.get("summary") or "mean",
+            "rewrite": (row.get("rewrite") or "true") == "true",
         },
     )
 
