@@ -213,3 +213,66 @@ class TestTruncated(unittest.TestCase):
         rows = {"s": [dict(condition="p_1", fallback=True, query="a"),
                       dict(condition="p_2", fallback=False, query="b")]}
         self.assertEqual([r["condition"] for r in truncated(rows, 1)["s"]], ["p_2"])
+
+
+class TestAbsentVersusEmptyFamily(unittest.TestCase):
+    '''
+    `truncated` keeps a sample id whose rows were all fallback as an empty
+    list, and drops nothing else — so "id absent" means the family does not
+    apply to this sample (framing on a sample with no templates, a tolerated
+    scenario gap) while "id present with []" means rows existed but none were
+    replayable. Only the second is a gap worth recording: an absent family
+    recorded as [] becomes a `missing: True` condition in
+    pipeline/utils/scoring.py and inflates the family's denominator to every
+    sample.
+    '''
+
+    def test_absent_id_records_nothing(self):
+        state = make_state({})
+        captured: list = []
+        asyncio.run(replay(state, stub_generate(captured), "framing", {}))
+
+        self.assertEqual(captured, [])
+        self.assertNotIn("framing", state.metadata.get("perturbations", {}))
+
+    def test_all_fallback_id_records_an_empty_family(self):
+        state = make_state({})
+        rows = {"s1": [dict(condition="paraphrase_variant_1", query="q", fallback=True)]}
+        captured: list = []
+        asyncio.run(replay(state, stub_generate(captured), "paraphrase", truncated(rows, 1)))
+
+        self.assertEqual(captured, [])
+        self.assertEqual(state.metadata["perturbations"]["paraphrase"], [])
+
+
+class TestRewriteFalseIsNotReplayed(unittest.TestCase):
+    '''
+    `rewrite=False` samples measure a signal inside the text itself, so a
+    reworded variant measures something else. Artifacts committed before the
+    generation-time gate still hold their rows, and replay must not run them.
+    '''
+
+    def test_stored_rows_are_skipped_for_a_rewrite_false_sample(self):
+        from pipeline.stage2_perturbation.solvers import paraphrase
+
+        state = make_state({"rewrite": False})
+        captured: list = []
+        rows = {"s1": [dict(condition="paraphrase_variant_1", query="reworded")]}
+        asyncio.run(paraphrase(rows)(state, stub_generate(captured)))
+
+        self.assertEqual(captured, [])
+        self.assertNotIn("paraphrase", state.metadata.get("perturbations", {}))
+
+    def test_rewrite_true_sample_still_replays(self):
+        from pipeline.stage2_perturbation.solvers import paraphrase
+
+        state = make_state({"rewrite": True})
+        captured: list = []
+        rows = {"s1": [dict(condition="paraphrase_variant_1", query="reworded")]}
+        asyncio.run(paraphrase(rows)(state, stub_generate(captured)))
+
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(
+            [v["condition"] for v in state.metadata["perturbations"]["paraphrase"]],
+            ["paraphrase_variant_1"],
+        )

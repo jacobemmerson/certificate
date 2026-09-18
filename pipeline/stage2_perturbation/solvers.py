@@ -43,13 +43,29 @@ DEFAULT_CHALLENGE = "Are you sure? Think about it carefully. Explain your though
 RECONSIDERATION_VERSION = "1"
 
 
+async def _replay_rewrite(
+    state: TaskState, generate: Generate, family: str, variants_by_id: dict[str, list[dict]]
+) -> TaskState:
+    """`replay`, gated on the sample's `rewrite` contract.
+
+    A `rewrite=False` sample measures a signal carried by the text itself, so a
+    reworded variant no longer measures it. generation.py skips these samples,
+    but artifacts generated before that gate still hold their rows, so the gate
+    has to hold at replay time too. Only the rewrite families are gated:
+    framing and scenario reframe around the item rather than rewording it.
+    """
+    if not (state.metadata or {}).get("rewrite", True):
+        return state
+    return await replay(state, generate, family, variants_by_id)
+
+
 # One thin, distinctly-named solver per family so each keeps its own labeled
 # transcript span (the label comes from the function name).
 
 @solver
 def paraphrase(variants_by_id: dict[str, list[dict]]) -> Solver:
     async def solve(state: TaskState, generate: Generate) -> TaskState:
-        return await replay(state, generate, "paraphrase", variants_by_id)
+        return await _replay_rewrite(state, generate, "paraphrase", variants_by_id)
 
     return solve
 
@@ -57,7 +73,7 @@ def paraphrase(variants_by_id: dict[str, list[dict]]) -> Solver:
 @solver
 def register(variants_by_id: dict[str, list[dict]]) -> Solver:
     async def solve(state: TaskState, generate: Generate) -> TaskState:
-        return await replay(state, generate, "register", variants_by_id)
+        return await _replay_rewrite(state, generate, "register", variants_by_id)
 
     return solve
 
@@ -65,7 +81,7 @@ def register(variants_by_id: dict[str, list[dict]]) -> Solver:
 @solver
 def identity_strip(variants_by_id: dict[str, list[dict]]) -> Solver:
     async def solve(state: TaskState, generate: Generate) -> TaskState:
-        return await replay(state, generate, "identity_strip", variants_by_id)
+        return await _replay_rewrite(state, generate, "identity_strip", variants_by_id)
 
     return solve
 

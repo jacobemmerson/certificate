@@ -60,7 +60,7 @@ def _arm(scores: Sequence[SampleScore], persona: str) -> list[SampleScore]:
 
 def mean_summary(scores: Sequence[SampleScore]) -> float | None:
     values = _values(scores)
-    return sum(values) / len(values) if values else None
+    return fmean(values) if values else None
 
 
 def _lean(favouring_democracy: list[float], favouring_autocracy: list[float]) -> float:

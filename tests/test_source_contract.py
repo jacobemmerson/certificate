@@ -1,3 +1,4 @@
+import ast
 import unittest
 from pathlib import Path
 from datasets.prepare.cluster.schema import (
@@ -68,15 +69,6 @@ class AskField(unittest.TestCase):
         base.update(over)
         return Source(**base)
 
-    def test_ask_moves_into_template(self):
-        frame = pd.DataFrame([{"q": f"Scenario text.\n\n{self.ASK}", "id": "7"}])
-        src = self.make_source()
-        rows = rows_from_frame(src, frame)
-        row = rows[0]
-        self.assertEqual(row.item_text, "Scenario text.")
-        self.assertIn("is this action acceptable?", row.prompt_template)
-        self.assertEqual(row.prompt_template.replace("{{ITEM}}", row.item_text), row.query)
-
     def test_ask_already_in_query_is_stripped_and_reconstructs(self):
         frame = pd.DataFrame([{"q": f"Scenario text.\n\n{self.ASK}", "id": "7"}])
         src = self.make_source()
@@ -104,6 +96,19 @@ class LiftsContract(unittest.TestCase):
         self.assertIs(md["rewrite"], False)
 
 
+def source_name_lines(source_text: str, names: set[str]) -> list[int]:
+    """Lines where `source_text` hard-codes one of `names` as a string literal.
+
+    Parsed rather than scanned line by line: comments never reach the AST, so a
+    `#` inside a string literal cannot hide the rest of its line.
+    """
+    return sorted({
+        node.lineno
+        for node in ast.walk(ast.parse(source_text))
+        if isinstance(node, ast.Constant) and node.value in names
+    })
+
+
 class PipelineIsStatic(unittest.TestCase):
     def test_no_source_names_in_pipeline(self):
         names = {s.name for s in SOURCES}
@@ -115,11 +120,16 @@ class PipelineIsStatic(unittest.TestCase):
         for path in (repo_root / "pipeline").rglob("*.py"):
             if "stage4_aggregation" in path.parts:
                 continue
-            for n, line in enumerate(path.read_text().splitlines(), 1):
-                code = line.split("#", 1)[0]
-                if any(f'"{name}"' in code or f"'{name}'" in code for name in names):
-                    offenders.append(f"{path}:{n}")
+            text = path.read_text(encoding="utf-8")
+            offenders += [f"{path}:{n}" for n in source_name_lines(text, names)]
         self.assertEqual(offenders, [])
+
+    def test_a_name_is_not_hidden_by_a_hash_in_a_string(self):
+        text = 'PREFIXES = {"#": "harmbench"}\n'
+        self.assertEqual(source_name_lines(text, {"harmbench"}), [1])
+
+    def test_a_commented_out_name_is_not_an_offender(self):
+        self.assertEqual(source_name_lines('# "harmbench"\n', {"harmbench"}), [])
 
 
 if __name__ == "__main__":

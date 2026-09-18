@@ -211,9 +211,12 @@ def validate(row: Row) -> None:
         fail(f"unknown judge_style {row.judge_style!r}")
     if row.role not in ROLES:
         fail(f"unknown role {row.role!r}")
+    # Checked against item_text, not query: item_text is the part a rewrite
+    # replaces, so a needle that only survives in the fixed template says
+    # nothing about whether the rewrite kept it.
     for needed in row.metadata.get("must_survive") or []:
-        if needed not in row.query:
-            fail(f"must_survive {needed!r} is not in the query")
+        if needed not in row.item_text:
+            fail(f"must_survive {needed!r} is not in the item text")
 
     for option, score in row.scale_map.items():
         if not isinstance(score, (int, float)) or not 0.0 <= score <= 1.0:

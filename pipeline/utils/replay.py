@@ -109,6 +109,17 @@ async def replay(
     system+user pair, deliberately replacing the sample's own system prompt
     with the reframed deployment's.
     """
+    stored = variants_by_id.get(str(state.sample_id))
+    if stored is None:
+        # No rows at all means the family does not apply to this sample
+        # (framing with no template for its elicitation family, a scenario
+        # reframing that never parsed). Recording an empty family here would
+        # make it an abstention in pipeline/utils/scoring.py and put the sample
+        # in the family's denominator; an id kept with all-fallback rows (an
+        # empty list, not an absent key) is the real gap and is recorded below.
+        transcript().info(f"{family}: sample {state.sample_id} has no stored variants")
+        return state
+
     # A fallback row is the *original* text: generation refused, failed, or
     # returned something that was not a rewrite (rewrite.py::rewrite_defect),
     # so the row carries the control prompt under a perturbation's label.
@@ -116,15 +127,7 @@ async def replay(
     # family's score toward the baseline it is supposed to be compared against.
     # Dropped here rather than at scoring time so the target call is not paid
     # for either.
-    rows = [
-        row for row in variants_by_id.get(str(state.sample_id), [])
-        if not row.get("fallback")
-    ]
-    if not rows:
-        # certify.py's pre-run validation guarantees coverage; this guards
-        # tolerated gaps (scenario reframings that never parsed at generation
-        # time) so the sample still runs its other conditions.
-        transcript().info(f"{family}: no stored variants for sample {state.sample_id}")
+    rows = [row for row in stored if not row.get("fallback")]
 
     async def run(row: dict) -> TaskState | None:
         test = copy.deepcopy(state)
