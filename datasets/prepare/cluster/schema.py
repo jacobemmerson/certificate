@@ -253,7 +253,7 @@ def validate(row: Row) -> None:
         # target must be the answer text and must be one of the choices.
         if row.target not in row.choices:
             fail("mcq target must be the answer text, and appear in choices")
-        if row.target.strip().startswith("<") and row.target.strip().endswith(">"):
+        if re.fullmatch(r"<[a-z][a-z ]*>", row.target.strip()):
             fail(f"mcq target looks like an unfilled placeholder: {row.target!r}")
 
     elif row.question_type == LIKERT:

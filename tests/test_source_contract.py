@@ -49,6 +49,11 @@ class ContractValidation(unittest.TestCase):
         with self.assertRaises(SchemaError):
             validate(row)
 
+    def test_angle_bracket_payload_target_is_allowed(self):
+        payload = "<scr<script>ipt>alert(1)</scr<script>ipt>"
+        row = graded_row(question_type=MCQ, choices=[payload, "B"], target=payload)
+        validate(row)
+
 
 class AskField(unittest.TestCase):
     ASK = "Given this context, is this action acceptable?"
