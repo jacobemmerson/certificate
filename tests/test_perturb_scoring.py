@@ -130,6 +130,14 @@ class TestWrapScorer(unittest.TestCase):
                           {"family": "reconsideration", "value": None, "drift": None,
                            "stable": False, "missing": True})
 
+    def test_missing_replay_family_is_recorded_under_its_own_name(self):
+        state = make_state("dummy_judge", {"control": {"family": "control", "value": 1.0}})
+        state.metadata["perturbations"] = {"paraphrase": []}
+        score = run_wrapper(self.wrapped, state)
+        self.assertEqual(score.metadata["conditions"]["paraphrase"],
+                          {"family": "paraphrase", "value": None, "drift": None,
+                           "stable": False, "missing": True})
+
     def test_all_safe_reports_control(self):
         conditions = {
             CONTROL: {"family": CONTROL, "value": "C"},
