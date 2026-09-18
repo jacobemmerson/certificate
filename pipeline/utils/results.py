@@ -189,7 +189,7 @@ def _names_for(source: str, pool: str) -> set[str]:
     return {source, pool} | set(POOL_DERIVED.get(pool, {}))
 
 
-def _coverage(log: EvalLog, family: str) -> dict[str, dict[str, int]]:
+def _coverage(log: EvalLog, family: str, pools: dict[str, str]) -> dict[str, dict[str, int]]:
     '''
     Per source: how many samples this condition scored, out of how many were
     meant to run it.
@@ -205,6 +205,11 @@ def _coverage(log: EvalLog, family: str) -> dict[str, dict[str, int]]:
     never-run samples, which is what makes the coverage bar report a provider's
     content-filter refusals instead of hiding them behind a 100% that was only
     computed over the prompts that got through.
+
+    `pools` is `_risk`'s own `contract()` read, not each sample's raw metadata:
+    a log written before the pool column existed has none of it, and reading
+    the registry-backed fallback here too is what keeps a pooled entry's
+    coverage from reporting 0/0 next to a real safety figure.
     '''
     counts: dict[str, dict[str, int]] = defaultdict(
         lambda: {"scored": 0, "abstained": 0, "total": 0}
@@ -220,7 +225,7 @@ def _coverage(log: EvalLog, family: str) -> dict[str, dict[str, int]]:
         source = str(md.get("source", ""))
         if not source:
             continue
-        pool = str(md.get("pool", ""))
+        pool = pools.get(source, "")
         entry = _first_score(sample)
         if entry is None:
             # Refused or errored: no family records. Held back until the family
@@ -243,7 +248,9 @@ def _coverage(log: EvalLog, family: str) -> dict[str, dict[str, int]]:
     return dict(counts)
 
 
-def _scorers(log: EvalLog, family: str) -> dict[str, dict[str, float]]:
+def _scorers(
+    log: EvalLog, family: str, pools: dict[str, str]
+) -> dict[str, dict[str, float]]:
     '''
     Per source, per scorer, the mean safety that scorer alone reported.
 
@@ -252,6 +259,9 @@ def _scorers(log: EvalLog, family: str) -> dict[str, dict[str, float]]:
     grader model ids where a judge decided and the deterministic scorer's name
     where one did not, so a row scored by exact match shows one entry rather
     than one per configured judge.
+
+    `pools` is `_coverage`'s: `_risk`'s `contract()` read, not raw metadata —
+    see its docstring.
     '''
     totals: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     for sample in (log.samples or []):
@@ -263,7 +273,7 @@ def _scorers(log: EvalLog, family: str) -> dict[str, dict[str, float]]:
         source = str(md.get("source", ""))
         if not source:
             continue
-        pool = str(md.get("pool", ""))
+        pool = pools.get(source, "")
         per_base = (md.get("perturbation_scores") or {})
         for record in (per_base.get(scorer_name) or {}).values():
             if str(record.get("family")) != family:
@@ -330,6 +340,8 @@ def _risk(task: EvalLog) -> dict:
         if SUMMARIES[summary_name][1]
     }
 
+    pools = {source: c["pool"] for source, c in contracts.items()}
+
     baseline = _summarise(task, {CONTROL}, "worst")
     worst = _summarise(task, scored_families, "worst") if scored_families else {}
     mean = _summarise(task, scored_families, "mean") if scored_families else {}
@@ -337,8 +349,8 @@ def _risk(task: EvalLog) -> dict:
     per_family = {
         family: (
             _summarise(task, {family}, "worst"),
-            _coverage(task, family),
-            _scorers(task, family),
+            _coverage(task, family, pools),
+            _scorers(task, family, pools),
             _stability(task, family),
         )
         for family in sorted(families)

@@ -269,6 +269,29 @@ class TestDiagnostics(unittest.TestCase):
         ])])
         self.assertTrue(tree["cbrn"]["benchmarks"]["wmdp"]["diagnostic"])
 
+    def test_a_legacy_log_reports_real_coverage_for_the_pooled_entry(self):
+        # Same fallback, but for _coverage/_scorers rather than the role read:
+        # human_rights_udhr/_echr declare no pool/summary keys either, so the
+        # pooled "human_rights" entry's coverage and scorer breakdown must come
+        # from the same registry fallback _risk uses for diagnostics, not read
+        # off each sample's metadata directly — which reports 0/0 and an empty
+        # scorer map for a pool the log's own metadata never named.
+        samples = []
+        for persona, value in (("individual-rights", 1.0), ("government-power", 0.0)):
+            s = sample(
+                "human_rights_udhr", {"p1": ("paraphrase", value)},
+                scorers={"p1": {"judge_a": value}},
+            )
+            s.metadata["persona"] = persona
+            s.id = f"{persona}:1"
+            samples.append(s)
+        tree = results.build([log("manipulation", samples)])
+        human_rights = tree["manipulation"]["benchmarks"]["human_rights"]
+        paraphrase = human_rights["conditions"]["paraphrase"]
+        self.assertEqual(paraphrase["total"], 2, "real coverage, not 0/0")
+        self.assertEqual(paraphrase["scored"], 2)
+        self.assertTrue(paraphrase["scorers"], "scorer breakdown must not be empty")
+
 
 class TestGapSources(unittest.TestCase):
     '''

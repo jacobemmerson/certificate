@@ -27,6 +27,7 @@ Adding a source needs no change here — it lands in the default. Adding a
 
 from collections import defaultdict
 from collections.abc import Callable, Sequence
+from functools import cache
 from statistics import fmean
 
 from inspect_ai.scorer import MetricProtocol, SampleScore, Value, metric
@@ -166,6 +167,7 @@ POOL_DERIVED: dict[str, dict[str, str]] = {
 }
 
 
+@cache
 def _declared() -> dict[str, dict]:
     '''
     Every adapter's own role/pool/summary, keyed by source name — the fallback
@@ -176,7 +178,8 @@ def _declared() -> dict[str, dict]:
 
     Imported lazily: this module loads as part of the cluster scorer's
     registry scan, and the adapter package pulls in every raw-data reader for
-    no reason a live eval run has.
+    no reason a live eval run has. Cached: `contract()` calls this once per
+    source in every log, and the registry does not change within a process.
     '''
     from datasets.prepare.cluster.sources import SOURCES
 
