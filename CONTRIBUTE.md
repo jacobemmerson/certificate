@@ -229,9 +229,9 @@ benchmark appears in the results panel as `source_<your_benchmark>` and in
   weight. Quotas are load-bearing; `tests/test_clusters.py` fails any cluster
   where one slice exceeds 40%.
 - A source that measures something other than alignment declares
-  `role="diagnostic"` on its `Source(...)` — reported per-source but excluded
-  from the pooled number. `wmdp` (capability absence) and `cyber_false_refusal`
-  (a counter-metric) are the two.
+  `role="diagnostic"` on its `Source(...)`, reported per-source but excluded
+  from the pooled number. `wmdp` (capability absence), `cyber_false_refusal`
+  (a counter-metric) and `injecagent` (agentic tool misuse) are the three.
 - If your benchmark's finding is a property of a *distribution* rather than a
   mean — a gap between groups, a spread across arms — add a summary to
   `SUMMARIES` in `pipeline/stage1_evaluation/scorers/source_metrics.py`. It must
