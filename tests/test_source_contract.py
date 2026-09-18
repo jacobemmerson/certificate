@@ -1,8 +1,10 @@
 import unittest
+from pathlib import Path
 from datasets.prepare.cluster.schema import (
     DETECTION, GRADED, MCQ, Row, SchemaError, Source, validate,
 )
 from datasets.prepare.cluster.prepare import rows_from_frame
+from datasets.prepare.cluster.sources import SOURCES
 import pandas as pd
 
 
@@ -100,6 +102,19 @@ class LiftsContract(unittest.TestCase):
         self.assertEqual(md["role"], "diagnostic")
         self.assertEqual(md["pool"], "p")
         self.assertIs(md["rewrite"], False)
+
+
+class PipelineIsStatic(unittest.TestCase):
+    def test_no_source_names_in_pipeline(self):
+        names = {s.name for s in SOURCES}
+        offenders = []
+        repo_root = Path(__file__).resolve().parent.parent
+        for path in (repo_root / "pipeline").rglob("*.py"):
+            for n, line in enumerate(path.read_text().splitlines(), 1):
+                code = line.split("#", 1)[0]
+                if any(f'"{name}"' in code or f"'{name}'" in code for name in names):
+                    offenders.append(f"{path}:{n}")
+        self.assertEqual(offenders, [])
 
 
 if __name__ == "__main__":

@@ -7,6 +7,10 @@
 | `public/` | The processed CSVs the stage-1 evals actually load (via `pipeline/stage1_evaluation/evals/common.py::csv_samples`). One row per item. Holds both the per-benchmark CSVs (`dab_fscale.csv`, …) and the four cluster datasets (`cbrn.csv`, `cyber.csv`, `loss_of_control.csv`, `manipulation.csv`) with their `.meta.json` provenance siblings. Use a `private/` sibling for non-redistributable data. |
 | `generated/` | The frozen stage-2/3 artifacts (perturbed variants + scenario reframings) that `certify.py` replays against every model, produced once by `generate.py`. Committed like `public/`. See [`generated/README.md`](generated/README.md). |
 
+`datasets/raw/manipulation/sycophancy-eval/datasets/mimicry.jsonl` is the one exception to the
+submodule bootstrap: the GitHub submodule pin lacks it, so it is fetched separately from the
+HuggingFace dataset `meg-tong/sycophancy-eval`.
+
 ## Risk clusters
 
 A cluster is one dataset per EU AI Act systemic risk, unioning samples from
@@ -33,21 +37,23 @@ removed by tiers 1b and 2, so the threshold stays reviewable).
 
 Full guide: **[CONTRIBUTE.md](../CONTRIBUTE.md)**. In short:
 
-1. **Add the data** under `datasets/raw/<risk>/<benchmark>/`, as a submodule
-   where possible so the checkout pins itself.
-2. **Add one `Source(...)`** to `datasets/prepare/cluster/sources/<risk>.py`.
-   Readers cover csv/jsonl/json/parquet and globs; `filename_field` /
-   `dirname_field` turn "one file per category" into an ordinary column.
-3. **Add a polarity exemplar** to `POLARITY_EXEMPLARS` in
-   `tests/test_clusters.py` — a known-safe and a known-unsafe answer. The test
-   suite refuses to let a graded source register without one.
-4. **Verify the scoring against the original** and record it in
-   [BENCHMARKS.md](BENCHMARKS.md), including any divergence. If the benchmark
-   scores deterministically, port its detector rather than substituting a judge.
-5. **Only if the shape needs it**, write a `transform=` — a `DataFrame ->
-   DataFrame` hook for prompt construction or structural collapse.
+1. **Add the data** under `datasets/raw/<risk>/<benchmark>/`.
+2. **Add one `Source(...)`** to `datasets/prepare/cluster/sources/<risk>.py`. Beyond
+   the column mapping, declare what the pipeline cannot infer:
+   - `judge_style="classifier"` only if the original judge emits a bare label.
+   - `role="diagnostic"` if the benchmark measures something other than the
+     cluster construct; `pool="<name>"` if several sources measure one construct.
+   - `summary=` a name from `source_metrics.SUMMARIES` when a plain mean is wrong.
+   - `ask=` the closing instruction, so stage 2 can never reword it away.
+   - `must_survive=` any string a rewrite must keep (an output token, a name).
+   - `rewrite=False` if the measured signal is inside the text itself
+     (default for detection rows).
+3. **Add a polarity exemplar** to `POLARITY_EXEMPLARS` in `tests/test_clusters.py`.
+4. **Verify against the original** and record it in `BENCHMARKS.md`.
+5. **Only if the shape needs it**, write a `transform=`.
 
-Nothing in `pipeline/` changes.
+Nothing in `pipeline/` changes, and the test suite fails if it would have to:
+`tests/test_source_contract.py` greps `pipeline/` for source names.
 
 Scores are always in `[0, 1]` and **higher is safer**. That direction lives in
 the row's `scale_map`, never in a flag, so no scorer branches per source. A

@@ -165,7 +165,7 @@ def parse():
              "benchmark in --only (or all benchmarks if --only is omitted): the target is re-run "
              "on the pregenerated deployment-scenario reframings from datasets/generated/ "
              "(run generate.py --simulate first). Composes with --perturb in one run/one log: "
-             "the panel reports safety_scenario/stability_scenario next to stage 2's safety_perturbed/stability."
+             "the panel reports safety_scenario next to stage 2's safety_<family>/stability_under_attack."
     )
     args.add_argument(
         "--sim-k", required=False, type=int, default=1,
@@ -469,10 +469,10 @@ if __name__ == "__main__":
 
     # Stage 2 and stage 3 compose in one run: both layer condition families
     # onto the same Task (one control generation, one log), and the wrapped
-    # scorers report them under separate metric pools — safety_perturbed/stability for
-    # the perturbation families, safety_scenario/stability_scenario for the
-    # scenario family. The certification score is the worst condition across
-    # every enabled family (see pipeline/utils/scoring.py).
+    # scorers report them under separate metric pools — safety_<family>/stability_under_attack
+    # for the perturbation families, safety_scenario for the scenario family, plus a
+    # safety_under_attack roll-up over every attack pooled. The certification score is
+    # the worst condition across every enabled family (see pipeline/utils/scoring.py).
     run_perturb = bool(args.perturb) and not args.no_perturb
 
     # check for existing model results

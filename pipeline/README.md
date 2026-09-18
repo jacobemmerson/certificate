@@ -29,7 +29,7 @@ uv run python certify.py -m <target> [--perturb …] [--simulate] [--only …]
 `generate.py`: one task run and **one eval log per benchmark**, in which the
 control (bald query) is generated and judged once and both stages' conditions
 are scored. The two stages stay legible inside that log via separate metric
-pools — `harm_propensity`/`stability` for the stage-2 families, `harm_propensity_scenario`/
+pools — `safety_<family>`/`stability_under_attack` for the stage-2 families, `safety_scenario`/
 `safety_under_attack` over all attacks — and land in `models.json`
 sections (`perturbations` / `simulations`). The certification score is the
 worst condition across every enabled family. Use `--no-perturb` for a
@@ -54,7 +54,7 @@ exact `generate.py` command if any are missing (`pipeline/artifacts.py::validate
 | `generation.py` | Offline generators (the attacker-model half of stages 2/3): `generate_rewrites`, `generate_framing`, `generate_scenarios`, and `SampleView` (renders per-benchmark prompts offline via the stage-2 adapters). Driven by `generate.py`. |
 | `artifacts.py` | The `datasets/generated/` store: `write_family`/`load_family`, prompt-version tracking, and `validate_artifacts` (certify.py's fail-fast pre-run check). |
 | `registry.py` | `init_benchmarks()` — the master list mapping benchmark keys to their `@task`s; `apply_stages()` layers the stage-2 perturbation families and/or stage-3 scenario simulation on top in a single pass (its `_build_task` assembles each Task's solver chain from the stages' family solvers). `PREGENERATED_FAMILIES` names the families with artifacts. |
-| `utils/scoring.py` | The condition-family scoring spine both stages share: `scoring_step`/`wrap_scorers`, the `harm_propensity*`/`stability*` metric pools, and the uniform safety scale (`safety`/`drift`). |
+| `utils/scoring.py` | The condition-family scoring spine both stages share: `scoring_step`/`wrap_scorers`, the `safety_*`/`stability_under_attack`/`resilience_under_attack` metric pools, and the uniform safety scale (`safety`/`drift`). |
 | `utils/replay.py` | The shared replay machinery behind both stages' solvers: `replay` (run the target on stored artifact rows, cache-off, on scratch state copies), `generate_variant` retries, `truncated`. |
 | `utils/graders.py` | Grader/model loading (`GRADERS.md`, `models/models.json`) and score aggregation (`aggregate_score` → per-cluster + per-source, `condition_metrics`). |
 | `utils/text.py` | Shared text heuristics (refusal detection). |
