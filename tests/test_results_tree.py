@@ -258,6 +258,17 @@ class TestDiagnostics(unittest.TestCase):
         self.assertIn("cc", risk["benchmarks"])
         self.assertTrue(risk["benchmarks"]["b"]["diagnostic"])
 
+    def test_a_legacy_log_falls_back_to_the_adapters_declared_role(self):
+        # wmdp's own sample carries no role/pool/summary keys at all — a log
+        # written before those columns existed. It must still come out
+        # diagnostic, because source_metrics.py::contract falls back to the
+        # adapters' own current declaration rather than the plain defaults.
+        tree = results.build([log("cbrn", [
+            sample("harmbench", {"s1": ("scenario", 0.0)}),
+            sample("wmdp", {"s1": ("scenario", 1.0)}),
+        ])])
+        self.assertTrue(tree["cbrn"]["benchmarks"]["wmdp"]["diagnostic"])
+
 
 class TestGapSources(unittest.TestCase):
     '''

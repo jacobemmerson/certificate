@@ -166,14 +166,48 @@ POOL_DERIVED: dict[str, dict[str, str]] = {
 }
 
 
+def _declared() -> dict[str, dict]:
+    '''
+    Every adapter's own role/pool/summary, keyed by source name — the fallback
+    for a log whose samples predate these columns existing at all (`role` etc.
+    absent from metadata, not merely defaulted). Read from the adapters
+    themselves rather than duplicated here, so this is a registry lookup for
+    old data, not a second copy of the name set this module deleted.
+
+    Imported lazily: this module loads as part of the cluster scorer's
+    registry scan, and the adapter package pulls in every raw-data reader for
+    no reason a live eval run has.
+    '''
+    from datasets.prepare.cluster.sources import SOURCES
+
+    return {
+        source.name: {"role": source.role, "pool": source.pool, "summary": source.summary}
+        for source in SOURCES
+    }
+
+
 def contract(scores: Sequence[SampleScore]) -> dict[str, dict]:
-    '''What each source declared about itself, read off its own samples.'''
+    '''
+    What each source declared about itself.
+
+    Read off its own samples' metadata first — that is what a freshly prepared
+    CSV carries into a live run. A log written before these columns existed
+    has none of the three keys at all, so it falls back to the adapter's
+    current declaration for that source name, and only then to the plain
+    defaults for a source the registry no longer knows either. Metadata always
+    wins when both exist: replaying an old log under a change to the *current*
+    adapter must not retroactively rewrite what that log already measured.
+    '''
+    declared = _declared()
     out: dict[str, dict] = {}
     for s in scores:
         md = s.sample_metadata or {}
-        out.setdefault(md.get("source"), {
-            "role": md.get("role", "pooled"), "pool": md.get("pool", ""),
-            "summary": md.get("summary", "mean"),
+        source = md.get("source")
+        fallback = declared.get(source, {"role": "pooled", "pool": "", "summary": "mean"})
+        out.setdefault(source, {
+            "role": md.get("role", fallback["role"]),
+            "pool": md.get("pool", fallback["pool"]),
+            "summary": md.get("summary", fallback["summary"]),
         })
     return out
 
