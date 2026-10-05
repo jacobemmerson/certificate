@@ -7,7 +7,7 @@ pipeline/artifacts.py persists and the eval-time replay solvers
 via pipeline/utils/replay.py) later send to each target model.
 They reuse the exact prompt logic the live solvers used to run per-model:
 rewrite.py's FAMILY_SYSTEM_PROMPTS/_extract_rewrite, framing.py's
-FRAMING_TEMPLATES, and stage 3's reframe_prompt/parse_reframing — nothing is
+FRAMING_TEMPLATES, and stage 3's tree_prompt/parse_tree — nothing is
 duplicated, only relocated from eval time to generation time.
 
 The perturbation split only ever reads `state.input_text` and
@@ -34,7 +34,7 @@ from pipeline.stage2_perturbation.adapters import item_text, render, scenario_so
 from pipeline.stage2_perturbation.framing import framing_templates
 from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS, _extract_rewrite
 from pipeline.stage3_simulation.prompts import (
-    REFRAME_SYS_PROMPT, SCENARIO_FAMILY, parse_reframing, reframe_prompt,
+    REFRAME_SYS_PROMPT, SCENARIO_FAMILY, parse_tree, tree_prompt,
 )
 
 
@@ -204,17 +204,16 @@ async def generate_scenarios(
     max_connections: int = 20,
     reasoning: bool = False,
 ) -> tuple[list[dict], list[str], dict[str, str]]:
-    """Rows for stage 3's scenario family: k reframed {context, system,
-    scenario} triples per sample. Unparseable reframings are re-requested up
-    to `parse_attempts` times (an upgrade over the old live path, which
-    silently dropped the variant); a variant that never parses is dropped and
-    its sample id lands in the returned `incomplete_ids` — replay then runs
-    the variants that exist, identically for every model.
+    """Rows for stage 3's scenario family: k scenario trees per sample
+    (prompts.py::TREE_FORMAT), each `{id, variant, condition, system, turns,
+    query}` with `query` = the opening turn for the fidelity audit.
 
-    Also returns `reasons`, the last parse failure per dropped sample id.
-    Without it a systematic attacker/format mismatch is invisible: the
-    completion is discarded, so the only way to learn why coverage collapsed
-    was to re-run the model by hand.
+    Variants of one sample run in order so variant 2 can be told to differ
+    from variant 1's deployment; samples run concurrently. Unparseable trees
+    are re-requested up to `parse_attempts` times; a variant that never
+    parses is dropped and its sample id lands in `incomplete_ids`, with the
+    last parse failure in `reasons` (a systematic attacker/format mismatch
+    shows up as one reason repeated across ids).
     """
     model = get_model(attacker_model)
     semaphore = asyncio.Semaphore(max_connections)
@@ -222,9 +221,8 @@ async def generate_scenarios(
 
     failures: dict[str, str] = {}
 
-    async def one(sample: Sample, variant: int) -> dict | None:
-        view = SampleView.of(sample)
-        prompt = reframe_prompt(scenario_source(view))
+    async def one(sample: Sample, variant: int, previous_system: str | None) -> dict | None:
+        prompt = tree_prompt(scenario_source(SampleView.of(sample)), previous_system)
         label = f"{SCENARIO_FAMILY} {sample.id} v{variant}"
         for _ in range(parse_attempts):
             async with semaphore:
@@ -235,33 +233,40 @@ async def generate_scenarios(
             if completion is None:
                 failures[str(sample.id)] = "attacker returned nothing"
                 return None
-            block, reason = parse_reframing(completion)
+            block, reason = parse_tree(completion)
             if block is not None:
                 return {
                     "id": str(sample.id),
                     "variant": variant,
                     "condition": f"{SCENARIO_FAMILY}_variant_{variant}",
-                    "context": block["context"],
                     "system": block["system"],
-                    "scenario": block["scenario"],
-                    # The composite prompt scoring surfaces as worst_query —
-                    # same shape the live solver recorded.
-                    "query": f"[system] {block['system']}\n\n[user] {block['context']}\n\n{block['scenario']}",
+                    "turns": block["turns"],
+                    "query": block["turns"][""],
                 }
             failures[str(sample.id)] = reason or "unparseable"
             print(f"[WARNING] {label}: {reason} — retrying\n"
                   f"          got: {completion[:200]!r}")
         return None
 
-    jobs = {
-        (str(sample.id), variant): one(sample, variant)
-        for sample in samples
-        for variant in range(1, k + 1)
-        if (str(sample.id), variant) not in existing
-    }
-    results = await asyncio.gather(*jobs.values())
-    rows = [row for row in results if row is not None]
-    incomplete = sorted({key[0] for key, row in zip(jobs, results) if row is None})
+    async def tree_set(sample: Sample) -> list[dict | None]:
+        out: list[dict | None] = []
+        previous_system = None
+        for variant in range(1, k + 1):
+            if (str(sample.id), variant) in existing:
+                continue
+            row = await one(sample, variant, previous_system)
+            out.append(row)
+            if row is not None:
+                previous_system = row["system"]
+        return out
+
+    per_sample = await asyncio.gather(*(tree_set(sample) for sample in samples))
+    rows = [row for results in per_sample for row in results if row is not None]
+    incomplete = sorted({
+        str(sample.id)
+        for sample, results in zip(samples, per_sample)
+        if any(row is None for row in results)
+    })
     reasons = {sample_id: failures[sample_id] for sample_id in incomplete if sample_id in failures}
 
     if reasons:
