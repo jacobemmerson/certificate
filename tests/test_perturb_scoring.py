@@ -21,6 +21,7 @@ from inspect_ai.scorer import Score, SampleScore, Target, accuracy, scorer
 from inspect_ai.solver import TaskState
 
 from pipeline import registry
+from pipeline.stage3_simulation.classify import DEFAULT_CLASSIFIER
 from pipeline.utils.scoring import (
     CONDITION_QUERY,
     ATTACK,
@@ -612,6 +613,13 @@ class TestBuildTaskScenario(unittest.TestCase):
         self.assertEqual(sources[SCENARIO], "simulations")
         metrics = registry_info(built.scorer[0]).metadata["metrics"]
         self.assertIn("safety_scenario", {registry_info(m).name.split("/")[-1] for m in metrics})
+
+    def test_classifier_reaches_scenario_and_defaults_to_the_pinned_model(self):
+        with mock.patch.object(registry, "load_family", return_value={}), \
+                mock.patch.object(registry, "scenario", wraps=registry.scenario) as step:
+            registry._build_task(registry_fixture(), [], 1, sim_k=1, sim_classifier="clf")
+            registry._build_task(registry_fixture(), [], 1, sim_k=1)
+        self.assertEqual([c.args[1] for c in step.call_args_list], ["clf", DEFAULT_CLASSIFIER])
 
 
 if __name__ == "__main__":

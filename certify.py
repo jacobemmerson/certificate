@@ -34,6 +34,7 @@ def display_mode() -> str:
     return os.environ.get("INSPECT_DISPLAY") or ("full" if sys.stdout.isatty() else "log")
 from pipeline.artifacts import validate_artifacts
 from pipeline.registry import init_benchmarks, apply_stages, ALL_PERTURB_FAMILIES
+from pipeline.stage3_simulation.classify import DEFAULT_CLASSIFIER
 from pipeline.utils.scoring import RESULT_FAMILIES
 from pipeline.utils import results as results_tree
 from pipeline.utils import retry_policy
@@ -175,11 +176,11 @@ def parse():
         help="Use up to this many stored scenario trees per item under --simulate; default=2."
     )
     args.add_argument(
-        "--sim-classifier", required=False, default="openrouter/google/gemini-3-flash-preview",
+        "--sim-classifier", required=False, default=DEFAULT_CLASSIFIER,
         help="Model that labels each target reply refuse/hedge/comply to choose the next stored "
              "turn under --simulate (pipeline/stage3_simulation/classify.py). Regex-prefiltered, "
              "disk-cached with no expiry, canaried with the graders. "
-             "Default: openrouter/google/gemini-3-flash-preview."
+             f"Default: {DEFAULT_CLASSIFIER}."
     )
     args.add_argument(
         "--max-connections", required=False, type=int, default=100,

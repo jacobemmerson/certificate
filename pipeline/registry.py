@@ -4,6 +4,7 @@ from inspect_ai import Task
 
 from pipeline.artifacts import framing_applies, load_family, task_name
 from pipeline.stage2_perturbation.solvers import REPLAY_SOLVERS, framing, reconsideration
+from pipeline.stage3_simulation.classify import DEFAULT_CLASSIFIER
 from pipeline.stage3_simulation.solvers import scenario
 from pipeline.utils.replay import truncated
 from pipeline.utils.scoring import SCENARIO, scoring_step, wrap_scorers
@@ -41,7 +42,7 @@ def _build_task(
     families: list[str],
     k: int,
     sim_k: int | None = None,
-    sim_classifier: str | None = None,
+    sim_classifier: str = DEFAULT_CLASSIFIER,
 ) -> Task:
     """Return base_task with one replay solver appended per requested,
     applicable condition family — the stage-2 families from
@@ -94,7 +95,7 @@ def apply_stages(
     families: list[str] | None = None,
     k: int = 1,
     sim_k: int | None = None,
-    sim_classifier: str | None = None,
+    sim_classifier: str = DEFAULT_CLASSIFIER,
 ):
     '''
     Attach stage-2 surface-perturbation auditing (`families`) and/or stage-3

@@ -10,7 +10,10 @@ import asyncio
 import unittest
 from unittest import mock
 
-from inspect_ai.model import CachePolicy
+from inspect_ai.model import CachePolicy, ModelOutput
+from inspect_ai.util import LimitExceededError
+
+from pipeline.stage1_evaluation.scorers import cluster
 
 from pipeline.stage3_simulation import classify as classify_module
 from pipeline.stage3_simulation.classify import (
@@ -20,6 +23,27 @@ from pipeline.stage3_simulation.classify import (
 
 def run(coro):
     return asyncio.run(coro)
+
+
+class TestAskJudgeCache(unittest.TestCase):
+    def _generate_kwargs(self, **cache):
+        calls = []
+
+        class FakeModel:
+            async def generate(self, messages, **kwargs):
+                calls.append(kwargs)
+                return ModelOutput.from_content("m", "x")
+
+        with mock.patch.object(cluster, "get_model", return_value=FakeModel()):
+            run(cluster.ask_judge("m", "sys", "prompt", **cache))
+        return calls[0]
+
+    def test_cache_policy_is_forwarded_to_generate(self):
+        policy = CachePolicy(expiry=None)
+        self.assertIs(self._generate_kwargs(cache=policy)["cache"], policy)
+
+    def test_no_cache_kwarg_without_a_policy(self):
+        self.assertNotIn("cache", self._generate_kwargs())
 
 
 class TestRegexPrePass(unittest.TestCase):
@@ -61,6 +85,7 @@ class TestJudge(unittest.TestCase):
         self.assertEqual(model, "clf-model")
         self.assertIsInstance(kwargs["cache"], CachePolicy)
         self.assertIsNone(kwargs["cache"].expiry)
+        self.assertIs(kwargs["cache"].per_epoch, False)
         self.assertIn("Sure, here is how", prompt)
         self.assertIn("[user] hi", prompt)
 
@@ -77,6 +102,14 @@ class TestJudge(unittest.TestCase):
         with mock.patch.object(classify_module, "ask_judge", boom):
             label, source = run(classify("m", "sys", "t", "c"))
         self.assertEqual((label, source), ("hedge", "fallback"))
+
+    def test_limit_exceeded_propagates(self):
+        async def limit(*args, **kwargs):
+            raise LimitExceededError("working", value=2, limit=1)
+
+        with mock.patch.object(classify_module, "ask_judge", limit):
+            with self.assertRaises(LimitExceededError):
+                run(classify("m", "sys", "t", "c"))
 
     def test_long_transcript_is_tail_truncated(self):
         fake, calls = self._judge("comply")
