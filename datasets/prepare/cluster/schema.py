@@ -422,17 +422,6 @@ class Source:
 _WORD = re.compile(r"[a-z0-9]+")
 
 
-def tokens(text: str) -> frozenset[str]:
-    return frozenset(_WORD.findall(str(text).lower()))
-
-
 def normalised(text: str) -> str:
     '''Key for exact-match dedup: case, punctuation and spacing folded away.'''
     return " ".join(_WORD.findall(str(text).lower()))
-
-
-def jaccard(a: frozenset[str], b: frozenset[str]) -> float:
-    if not a or not b:
-        return 0.0
-    intersection = len(a & b)
-    return intersection / (len(a) + len(b) - intersection)

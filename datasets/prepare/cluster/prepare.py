@@ -20,6 +20,7 @@ import hashlib
 import json
 import subprocess
 from collections import defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
@@ -28,7 +29,7 @@ import pandas as pd
 
 from . import readers
 from .schema import (
-    COLUMNS, ITEM, MCQ, Row, SchemaError, Source, jaccard, normalised, tokens, validate,
+    COLUMNS, ITEM, MCQ, Row, SchemaError, Source, normalised, validate,
 )
 from .sources import RISKS, for_risk
 
@@ -46,6 +47,12 @@ EMBED_COMMAND = (
 
 class CacheMiss(Exception):
     '''A cache prepare.py reads lacks entries. The message says what to run.'''
+
+
+@dataclass
+class Caches:
+    '''What tier 3 reads besides the rows, threaded through as one argument.'''
+    embeddings: dict[str, np.ndarray]
 
 
 def _cache_miss(path: Path, records: list[dict], *commands: str) -> CacheMiss:
@@ -321,7 +328,7 @@ def cross_source_dedup(
     return kept_pools, dropped
 
 
-# ----- tier 2: lexical near-dedup -----
+# ----- tier 2: cosine near-dedup -----
 
 def _distinguishable(left: Row, right: Row, distinct_on: Sequence[str]) -> bool:
     '''
@@ -400,15 +407,15 @@ def near_dedup(
 # ----- tier 3: stratified quota -----
 
 def stratified_sample(
-    rows: list[Row], source: Source, seed: int
+    rows: list[Row], source: Source, seed: int, caches: Caches | None = None
 ) -> tuple[list[Row], dict]:
     if source.group_key:
-        return _grouped_sample(rows, source, seed)
-    return _row_sample(rows, source, seed)
+        return _grouped_sample(rows, source, seed, caches)
+    return _row_sample(rows, source, seed, caches)
 
 
 def _grouped_sample(
-    rows: list[Row], source: Source, seed: int
+    rows: list[Row], source: Source, seed: int, caches: Caches | None = None
 ) -> tuple[list[Row], dict]:
     '''
     Sample whole groups, so rows that are only meaningful together survive
@@ -427,7 +434,7 @@ def _grouped_sample(
     # Select over one representative row per group, so groups are picked by the
     # same stratification the source declares, then expand back to every member.
     leaders = {key: rows[indices[0]] for key, indices in groups.items()}
-    picked, report = _row_sample(list(leaders.values()), source, seed)
+    picked, report = _row_sample(list(leaders.values()), source, seed, caches)
 
     by_id = {id(row): key for key, row in leaders.items()}
     wanted = {by_id[id(row)] for row in picked}
@@ -464,47 +471,36 @@ def _stable_order(rows: list[Row], indices: list[int], seed: int) -> list[int]:
 
 
 def _diverse_order(
-    rows: list[Row], indices: list[int], take: int, source: Source, seed: int
+    rows: list[Row], indices: list[int], take: int, source: Source, seed: int,
+    embeddings: dict[str, np.ndarray],
 ) -> list[int]:
     '''
-    Greedy farthest-point: repeatedly take the item least similar to everything
-    already taken.
+    Greedy farthest-point on embedding cosine: repeatedly take the item least
+    similar to everything already taken.
 
     Near-dedup only removes pairs above tau — it never asks whether the *kept*
-    set spans its stratum. This does, so a quota of 90 drawn from 12,662 buys coverage rather than a lottery
-    ticket.
+    set spans its stratum. This does, so a quota of 90 drawn from 12,662 buys
+    coverage rather than a lottery ticket.
 
     Compares the same payload near_dedup does (`dedup_on` where declared, the
-    query otherwise): PHT's items differ by historical event inside a shared
-    ~100-word instruction, and spreading on the rendered prompt would spread on
-    boilerplate. The first pick comes from `_stable_order` so the whole walk is
-    deterministic without being tied to input order.
+    query otherwise). The first pick comes from `_stable_order` and ties break
+    on `key_bytes`, so the walk is deterministic without being tied to input
+    order.
     '''
-    payload = _payload_fn(source.dedup_on)
-    token_sets = {index: tokens(payload(rows[index])) for index in indices}
-
-    first = _stable_order(rows, indices, seed)[0]
+    vectors = _vectors([rows[i] for i in indices], _payload_fn(source.dedup_on), embeddings)
+    ties = [key_bytes(rows[i], seed) for i in indices]
+    first = indices.index(_stable_order(rows, indices, seed)[0])
     picked = [first]
-    # Each item's similarity to the closest thing already picked; the next pick
-    # is whatever minimises it.
-    nearest = {
-        index: jaccard(token_sets[index], token_sets[first]) for index in indices
-    }
-
-    taken = {first}
+    # Each item's similarity to the closest pick so far, taken items pinned at
+    # +inf; the next pick minimises it.
+    nearest = np.round(vectors @ vectors[first], 6)
+    nearest[first] = np.inf
     while len(picked) < take:
-        candidate = min(
-            (index for index in indices if index not in taken),
-            key=lambda index: (nearest[index], key_bytes(rows[index], seed)),
-        )
+        candidate = min(range(len(indices)), key=lambda p: (nearest[p], ties[p]))
         picked.append(candidate)
-        taken.add(candidate)
-        for index in indices:
-            nearest[index] = max(
-                nearest[index], jaccard(token_sets[index], token_sets[candidate])
-            )
-
-    return picked
+        nearest = np.maximum(nearest, np.round(vectors @ vectors[candidate], 6))
+        nearest[candidate] = np.inf
+    return [indices[p] for p in picked]
 
 
 def key_bytes(row: Row, seed: int) -> bytes:
@@ -522,7 +518,8 @@ def _payload_fn(dedup_on: str | None):
 
 
 def _take(
-    rows: list[Row], indices: list[int], take: int, source: Source, seed: int
+    rows: list[Row], indices: list[int], take: int, source: Source, seed: int,
+    caches: Caches | None = None,
 ) -> list[int]:
     '''Fill one stratum's allotment, by whichever selection the source declares.'''
     if take >= len(indices):
@@ -530,12 +527,14 @@ def _take(
     if source.select == UNIFORM:
         return _stable_order(rows, indices, seed)[:take]
     if source.select == DIVERSE:
-        return _diverse_order(rows, indices, take, source, seed)
+        if caches is None:
+            raise ValueError(f"{source.name}: diverse selection needs the embedding cache")
+        return _diverse_order(rows, indices, take, source, seed, caches.embeddings)
     raise ValueError(f"{source.name}: unknown select mode {source.select!r}")
 
 
 def _row_sample(
-    rows: list[Row], source: Source, seed: int
+    rows: list[Row], source: Source, seed: int, caches: Caches | None = None
 ) -> tuple[list[Row], dict]:
     quota = source.quota
     if quota is None or quota >= len(rows):
@@ -544,7 +543,7 @@ def _row_sample(
         return rows, {"strata": 0, "allocated": len(rows)}
 
     if not source.stratify:
-        chosen = _take(rows, list(range(len(rows))), quota, source, seed)
+        chosen = _take(rows, list(range(len(rows))), quota, source, seed, caches)
         return [rows[i] for i in sorted(chosen)], {"strata": 1, "allocated": quota}
 
     keys = [
@@ -559,7 +558,7 @@ def _row_sample(
 
     chosen: list[int] = []
     for key, take in allocation.items():
-        chosen.extend(_take(rows, buckets[key], take, source, seed))
+        chosen.extend(_take(rows, buckets[key], take, source, seed, caches))
 
     return (
         [rows[i] for i in sorted(chosen)],
@@ -669,10 +668,11 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
     sizes = {source.name: len(rows) for source, rows in pools}
     pools, cross_dropped = cross_source_dedup(pools)
     all_dropped.extend(cross_dropped)
+    caches = Caches(embeddings)
 
     for source, rows in pools:
         report[source.name]["cross_source_dropped"] = sizes[source.name] - len(rows)
-        rows, allocation = stratified_sample(rows, source, seed)
+        rows, allocation = stratified_sample(rows, source, seed, caches)
         report[source.name]["kept"] = len(rows)
         report[source.name]["strata"] = allocation["strata"]
         all_rows.extend(rows)

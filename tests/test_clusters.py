@@ -38,9 +38,7 @@ from datasets.prepare.cluster.schema import (
     REWRITE_FAMILIES,
     Row,
     SchemaError,
-    jaccard,
     normalised,
-    tokens,
     validate,
 )
 from datasets.prepare.cluster.schema import Source
@@ -51,26 +49,6 @@ from datasets.prepare.cluster.sources.manipulation import (
 )
 
 PUBLIC_DIR = Path(__file__).resolve().parent.parent / "datasets" / "public"
-
-# Twelve lexically unrelated topics, for the diversity fixtures.
-SUBJECTS = [
-    "a centrifuge", "a firewall", "a vaccine", "an election", "a submarine",
-    "a compiler", "a pesticide", "a satellite", "a reactor", "a ledger",
-    "a turbine", "a sonnet",
-]
-
-
-def redundancy(rows: list[Row]) -> float:
-    '''
-    Mean nearest-neighbour similarity within a selection — "how much of this
-    sample is a near-duplicate of something else in it". The figure the
-    diversity option exists to lower.
-    '''
-    token_sets = [tokens(row.query) for row in rows]
-    return sum(
-        max(jaccard(a, b) for j, b in enumerate(token_sets) if i != j)
-        for i, a in enumerate(token_sets)
-    ) / len(token_sets)
 
 # source name -> (safest answer, riskiest answer)
 # Named in the source's own vocabulary; both must exist in its scale_map.
@@ -682,11 +660,6 @@ class TestTextHelpers(unittest.TestCase):
             normalised("sino vietnamese war 1979"),
         )
 
-    def test_jaccard_bounds(self):
-        self.assertEqual(jaccard(tokens("a b c"), tokens("a b c")), 1.0)
-        self.assertEqual(jaccard(tokens("a b"), tokens("c d")), 0.0)
-        self.assertEqual(jaccard(frozenset(), tokens("a")), 0.0)
-
 
 class TestEmbeddingCache(unittest.TestCase):
 
@@ -1029,56 +1002,51 @@ class TestSelection(unittest.TestCase):
             [r.sample_id for r in first], [r.sample_id for r in second]
         )
 
-    def test_diverse_selection_beats_a_uniform_draw_on_redundancy(self):
-        '''
-        The measured justification for the option existing at all: on the
-        free-text sources it roughly halves how much of a sample is a
-        near-duplicate of something else in it.
-        '''
-        # Twelve distinct topics, each with ten near-identical restatements.
-        rows = [
-            make_row(sample_id=f"src:{topic}-{copy}",
-                     query=f"Explain how {SUBJECTS[topic]} works in detail, part {copy}")
-            for topic in range(12) for copy in range(10)
-        ]
-        uniform, _ = prepare.stratified_sample(rows, self.source(quota=12), seed=0)
+    def test_diverse_selection_covers_every_topic(self):
+        '''Twelve topics, ten near-identical restatements each: a spread of twelve
+        takes one per topic, where a uniform draw of twelve repeats some.'''
+        rows = [make_row(sample_id=f"src:{topic}-{copy}", query=f"topic {topic} restatement {copy}")
+                for topic in range(12) for copy in range(10)]
+
+        def vector(topic, copy):
+            values = [0.0] * 22
+            values[topic], values[12 + copy] = 1.0, 0.05
+            return values
+
+        caches = prepare.Caches(embedded(rows, [vector(t, c) for t in range(12) for c in range(10)]))
         diverse, _ = prepare.stratified_sample(
-            rows, self.source(quota=12, select="diverse"), seed=0
-        )
-        self.assertLess(redundancy(diverse), redundancy(uniform))
-        # The point of the exercise: one per topic rather than clusters of
-        # restatements of the same few.
-        topics = {row.sample_id.split(":")[1].split("-")[0] for row in diverse}
-        self.assertGreater(len(topics), 9)
+            rows, self.source(quota=12, select="diverse"), seed=0, caches=caches)
+        uniform, _ = prepare.stratified_sample(rows, self.source(quota=12), seed=0)
+        topics = lambda picked: {row.sample_id.split(":")[1].split("-")[0] for row in picked}
+        self.assertEqual(len(topics(diverse)), 12)
+        self.assertLess(len(topics(uniform)), 12)
 
     def test_diverse_selection_is_deterministic(self):
         rows = self.pool(120)
+        caches = prepare.Caches(embedded(rows, np.random.default_rng(0).normal(size=(120, 8))))
         source = self.source(quota=15, select="diverse")
-        first, _ = prepare.stratified_sample(rows, source, seed=0)
-        second, _ = prepare.stratified_sample(rows, source, seed=0)
+        first, _ = prepare.stratified_sample(rows, source, seed=0, caches=caches)
+        second, _ = prepare.stratified_sample(rows, source, seed=0, caches=caches)
         self.assertEqual([r.sample_id for r in first], [r.sample_id for r in second])
 
     def test_diverse_selection_compares_the_payload_not_the_wrapper(self):
-        '''
-        Same rule near_dedup follows. PHT's items differ by historical event
-        inside a shared ~100-word instruction; spreading on the rendered query
-        would spread on boilerplate and pick by template noise.
-        '''
-        wrapper = " ".join(f"boilerplate{i}" for i in range(60))
+        '''Same rule near_dedup follows: PHT's items differ by event, not wrapper.'''
         rows = [
-            make_row(sample_id=f"src:{i}", query=f"{wrapper} concerning {event}",
+            make_row(sample_id=f"src:{i}", query=f"shared wrapper concerning {event} {i}",
                      metadata={"event": event})
-            for i, event in enumerate(
-                ["holodomor", "holodomor", "holodomor", "nanjing", "katyn"]
-            )
+            for i, event in enumerate(["holodomor", "holodomor", "holodomor", "nanjing", "katyn"])
         ]
-        source = self.source(quota=3, select="diverse", dedup_on="event",
-                             metadata=["event"])
-        picked, _ = prepare.stratified_sample(rows, source, seed=0)
-        self.assertEqual(
-            len({row.metadata["event"] for row in picked}), 3,
-            "one per distinct event, not three renderings of one",
-        )
+        caches = prepare.Caches({prepare.embed_key("holodomor"): unit(1, 0, 0),
+                                 prepare.embed_key("nanjing"): unit(0, 1, 0),
+                                 prepare.embed_key("katyn"): unit(0, 0, 1)})
+        source = self.source(quota=3, select="diverse", dedup_on="event", metadata=["event"])
+        picked, _ = prepare.stratified_sample(rows, source, seed=0, caches=caches)
+        self.assertEqual(len({row.metadata["event"] for row in picked}), 3,
+                         "one per distinct event, not three renderings of one")
+
+    def test_diverse_selection_without_embeddings_is_refused(self):
+        with self.assertRaises(ValueError):
+            prepare.stratified_sample(self.pool(50), self.source(quota=5, select="diverse"), seed=0)
 
     def test_an_unknown_selection_mode_is_refused(self):
         with self.assertRaises(ValueError):
