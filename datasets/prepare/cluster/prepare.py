@@ -98,9 +98,12 @@ def load_screen(risk: str) -> dict[str, dict]:
 
 def require_screen(risk: str, caches: Caches) -> None:
     '''Raise CacheMiss, after writing the screen input, if any candidate lacks a verdict.'''
-    if caches.missing:
+    path = CACHE_DIR / f"{risk}.screen_input.jsonl"
+    if not caches.missing:
+        path.unlink(missing_ok=True)
+    else:
         raise _cache_miss(
-            CACHE_DIR / f"{risk}.screen_input.jsonl",
+            path,
             [caches.missing[key] for key in sorted(caches.missing)],
             *(command.format(risk=risk) for command in SCREEN_COMMANDS),
         )
@@ -115,18 +118,19 @@ def _screen(rows: list[Row], pool: list[int], caches: Caches) -> list[int]:
         row = rows[index]
         key = screen_key(row)
         record = caches.verdicts.get(key)
-        if record is None:
-            caches.missing[key] = {
-                "key": key, "sample_id": row.sample_id, "question_type": row.question_type,
-                "system_prompt": row.system_prompt, "query": row.query,
-            }
-            kept.append(index)
-        elif record["verdict"] == "refused":
+        verdict = record and record.get("verdict")
+        if verdict == "refused":
             caches.refused.append({
                 "tier": "screen", "dropped": row.sample_id,
                 "dropped_text": row.query[:300], "model": record["model"],
             })
+        elif verdict == "answered":
+            kept.append(index)
         else:
+            caches.missing[key] = {
+                "key": key, "sample_id": row.sample_id, "question_type": row.question_type,
+                "system_prompt": row.system_prompt, "query": row.query,
+            }
             kept.append(index)
     return kept
 
@@ -158,6 +162,8 @@ def load_embeddings(risk: str) -> dict[str, np.ndarray]:
     if not path.exists():
         return {}
     with np.load(path) as data:
+        if str(data["model"]) != EMBEDDING_MODEL:
+            return {}
         keys = data["keys"].tolist()
         vectors = data["vectors"].astype(np.float32)
     # Stored as float16, so re-normalise rather than trust the rounding.

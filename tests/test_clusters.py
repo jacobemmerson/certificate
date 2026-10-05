@@ -702,9 +702,17 @@ class TestEmbeddingCache(unittest.TestCase):
             self.assertEqual(prepare.load_embeddings("cbrn"), {})
             (Path(tmp) / "embeddings").mkdir()
             np.savez(Path(tmp) / "embeddings" / "cbrn.npz", keys=np.array(["a"]),
-                     vectors=np.array([[3, 4]], dtype=np.float16), model=np.array("m"))
+                     vectors=np.array([[3, 4]], dtype=np.float16),
+                     model=np.array(prepare.EMBEDDING_MODEL))
             loaded = prepare.load_embeddings("cbrn")
         np.testing.assert_allclose(loaded["a"], [0.6, 0.8], atol=1e-3)
+
+    def test_embeddings_from_another_model_are_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            (Path(tmp) / "embeddings").mkdir()
+            np.savez(Path(tmp) / "embeddings" / "cbrn.npz", keys=np.array(["a"]),
+                     vectors=np.array([[3, 4]], dtype=np.float16), model=np.array("other"))
+            self.assertEqual(prepare.load_embeddings("cbrn"), {})
 
     def test_embed_script_encodes_only_missing_keys(self):
         from scripts import embed_items
@@ -1122,6 +1130,22 @@ class TestScreen(unittest.TestCase):
         self.assertEqual(set(records[0]), {"key", "sample_id", "question_type", "system_prompt", "query"})
         self.assertIn("SCREEN_ONLY=1", str(raised.exception))
         self.assertIn("screen_answerability.py --risk cbrn", str(raised.exception))
+
+    def test_an_unrecognised_verdict_counts_as_missing(self):
+        rows = self.pool(1)
+        caches = self.caches(rows)
+        key = prepare.screen_key(rows[0])
+        caches.verdicts[key]["verdict"] = "error"
+        self.assertEqual(prepare._screen(rows, [0], caches), [0])
+        self.assertEqual(set(caches.missing), {key})
+
+    def test_a_complete_screen_removes_a_stale_input_file(self):
+        stale_caches = self.caches(self.pool(2))
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            stale = Path(tmp) / "cbrn.screen_input.jsonl"
+            stale.write_text("{}\n")
+            prepare.require_screen("cbrn", stale_caches)
+            self.assertFalse(stale.exists())
 
     def test_load_screen_skips_a_truncated_last_line(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):

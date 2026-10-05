@@ -87,6 +87,7 @@ uv run python generate.py \
     --attacker "vllm/$MODEL" \
     --model-base-url "http://localhost:$PORT/v1" \
     --max-connections 32 \
+    --missing-only \
     --perturb-k 1 \
     --simulate --sim-k 1 \
     --reasoning
