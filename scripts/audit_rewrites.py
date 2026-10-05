@@ -30,7 +30,7 @@ from pipeline.stage2_perturbation.rewrite import rewrite_defect
 ROOT = Path(__file__).resolve().parent.parent
 # framing is template-built and scenario has its own schema; neither goes
 # through the rewrite model, so neither is in scope for this gate.
-REWRITE_FAMILIES = ("paraphrase", "register", "identity_strip")
+REWRITE_FAMILIES = ("paraphrase", "register", "past_tense")
 
 
 def load_items() -> tuple[dict[str, str], dict[str, list[str]]]:

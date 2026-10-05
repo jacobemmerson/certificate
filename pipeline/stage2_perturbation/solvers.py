@@ -63,14 +63,6 @@ def register(variants_by_id: dict[str, list[dict]]) -> Solver:
 
 
 @solver
-def identity_strip(variants_by_id: dict[str, list[dict]]) -> Solver:
-    async def solve(state: TaskState, generate: Generate) -> TaskState:
-        return await replay(state, generate, "identity_strip", variants_by_id)
-
-    return solve
-
-
-@solver
 def framing(variants_by_id: dict[str, list[dict]]) -> Solver:
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         return await replay(state, generate, "framing", variants_by_id)
@@ -83,7 +75,6 @@ def framing(variants_by_id: dict[str, list[dict]]) -> Solver:
 REPLAY_SOLVERS = {
     "paraphrase": paraphrase,
     "register": register,
-    "identity_strip": identity_strip,
     "framing": framing,
 }
 

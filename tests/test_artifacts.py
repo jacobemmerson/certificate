@@ -248,5 +248,19 @@ class TestGenerateFraming(unittest.TestCase):
         self.assertEqual({r["id"] for r in rows}, {"a"})
 
 
+class TestIdentityStripIsGone(unittest.TestCase):
+    def test_no_code_path_knows_the_family(self):
+        from pipeline.registry import ALL_PERTURB_FAMILIES
+        from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS
+        from pipeline.stage2_perturbation.solvers import REPLAY_SOLVERS
+        import pipeline.utils.scoring as scoring
+        for roster in (ALL_PERTURB_FAMILIES, FAMILY_SYSTEM_PROMPTS, REPLAY_SOLVERS, artifacts.PROMPT_VERSIONS):
+            self.assertNotIn("identity_strip", roster)
+        self.assertFalse(hasattr(scoring, "RESULT_FAMILIES"))
+
+    def test_no_identity_strip_artifacts_on_disk(self):
+        self.assertEqual(sorted(artifacts.GENERATED_DIR.glob("*/identity_strip*")), [])
+
+
 if __name__ == "__main__":
     unittest.main()

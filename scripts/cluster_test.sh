@@ -11,7 +11,7 @@
 #   SIMULATE=1                    GENERATE=1  bash scripts/cluster_test.sh
 #
 # Cost: framing is deterministic templating and reconsideration runs live, so
-# both are free. paraphrase, register, identity_strip and the stage-3 scenarios
+# both are free. paraphrase, register, past_tense, multilingual and the stage-3 scenarios
 # each need one attacker-model pass over every sample of every cluster.
 #
 # Generation is deliberately never --limit'ed: certify --limit shuffles its

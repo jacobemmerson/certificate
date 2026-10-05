@@ -1,6 +1,6 @@
 """The on-disk store for pregenerated perturbation/simulation artifacts.
 
-Stage 2's rewrite families (paraphrase, register, identity_strip), the
+Stage 2's rewrite families (paraphrase, register), the
 deterministic framing family, and stage 3's scenario reframings are generated
 *once* by `generate.py` (running the attacker model) and persisted under
 `datasets/generated/<task_name>/<family>.jsonl` — see
@@ -31,7 +31,7 @@ from pipeline.utils.replay import family_applies
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GENERATED_DIR = REPO_ROOT / "datasets" / "generated"
 
-REWRITE_FAMILIES = tuple(sorted(FAMILY_SYSTEM_PROMPTS))  # identity_strip, paraphrase, register
+REWRITE_FAMILIES = tuple(sorted(FAMILY_SYSTEM_PROMPTS))  # paraphrase, register
 
 # Current prompt/template version per family — compared against each artifact's
 # meta sidecar so a stale artifact set produces a loud warning (never a silent

@@ -3,7 +3,7 @@ Generates the fixed perturbation/simulation artifacts that certify.py replays.
 
 This is the attacker-model half of stages 2 and 3, run ONCE per artifact
 refresh instead of once per evaluated model: every rewrite-family variant
-(paraphrase, register, identity_strip), every deterministic framing wrapper,
+(paraphrase, register, past_tense, multilingual), every deterministic framing/persona wrapper,
 and every stage-3 scenario reframing is generated here and persisted to
 datasets/generated/<task_name>/<family>.jsonl (see pipeline/artifacts.py and
 datasets/generated/README.md). certify.py then evaluates every target model
@@ -102,7 +102,7 @@ def parse():
     )
     args.add_argument(
         "--perturb-k", required=False, type=int, default=1,
-        help="Variants per item for the rewrite families (paraphrase, register, identity_strip); default=1."
+        help="Variants per item for the repeat rewrite families (paraphrase, register, past_tense); default=1."
     )
     args.add_argument(
         "--simulate", required=False, action="store_true",

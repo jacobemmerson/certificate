@@ -114,15 +114,6 @@ CONTROL = "control"
 # single `safety_under_attack` roll-up over all of them.
 SCENARIO = "scenario"
 
-# The families the published safety results pool over. identity_strip is
-# still generated and scored, but a blind fidelity pass
-# (analysis/third_rater.md §3, §5) found its rewrites drop the construct on
-# manipulation's judgment and detection sources, so results.py keeps it
-# per-family only and out of every roll-up. framing stays in: its compliance
-# wrappers hold on cbrn/cyber, and manipulation's failing templates are gated
-# off at the source (framing.py, Source.framing).
-RESULT_FAMILIES = {"paraphrase", "register", "framing", "reconsideration", SCENARIO}
-
 # reconsideration's single condition label — single source, re-exported by
 # pipeline/stage2_perturbation/solvers.py so the recorded condition and the
 # missing-family placeholder below never drift apart.

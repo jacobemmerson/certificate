@@ -125,7 +125,7 @@ async def generate_rewrites(
     existing: set[tuple[str, int]] | None = None,
     max_connections: int = 20,
 ) -> list[dict]:
-    """Rows for one rewrite family (paraphrase/register/identity_strip):
+    """Rows for one rewrite family (paraphrase/register):
     k attacker rewrites per sample, rendered through the benchmark's adapter.
     A failed or refused rewrite falls back to the original text and is
     persisted with fallback=true — the artifact set stays complete, and every

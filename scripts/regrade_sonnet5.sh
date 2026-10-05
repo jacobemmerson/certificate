@@ -22,7 +22,7 @@
 # normal certification batch is followed by the AA mapping step.
 #
 # --simulate plus the default (all-family) perturbation reproduce the conditions
-# the existing entry already carries (control, framing, identity_strip,
+# the existing entry already carries (control, framing,
 # paraphrase, reconsideration, register, scenario), so the regrade differs from
 # the original run only in the judge set, not the elicitation.
 #
