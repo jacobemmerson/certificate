@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from typing import Sequence
 
-from pipeline.utils.text import _is_refusal
+from pipeline.stage1_evaluation.scorers.detectors import liberal_refusal
 
 # Bump on any change to the system prompts below (mirrors stage 3's
 # PROMPT_VERSION): generated artifacts record the version they were produced
@@ -102,7 +102,8 @@ def rewrite_defect(text: str, original: str, must_survive: Sequence[str] = ()) -
     text = text.strip()
     if not text:
         return "empty"
-    if _is_refusal(text):
+    # min_chars=0: a faithful rewrite of a one-line item is legitimately short.
+    if liberal_refusal(text, min_chars=0):
         return "refusal"
     if _META_LEAD.match(text):
         return "answered"
