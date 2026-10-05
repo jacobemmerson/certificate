@@ -171,7 +171,7 @@ def translation_defect(
     text = text.strip()
     if not text:
         return "empty"
-    if _is_refusal(text):
+    if liberal_refusal(text, min_chars=0):
         return "refusal"
     if any(marker in text for marker in _MARKUP):
         return "markup"
