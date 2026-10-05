@@ -34,6 +34,7 @@ def display_mode() -> str:
     return os.environ.get("INSPECT_DISPLAY") or ("full" if sys.stdout.isatty() else "log")
 from pipeline.artifacts import validate_artifacts
 from pipeline.registry import init_benchmarks, apply_stages, ALL_PERTURB_FAMILIES
+from pipeline.stage3_simulation.classify import DEFAULT_CLASSIFIER
 from pipeline.utils import results as results_tree
 from pipeline.utils import retry_policy
 from pipeline.utils import routing as provider_routing_api
@@ -161,14 +162,22 @@ def parse():
     args.add_argument(
         "--simulate", required=False, action='store_true',
         help="Run stage-3 scenario simulation (see pipeline/stage3_simulation/) on top of every "
-             "benchmark in --only (or all benchmarks if --only is omitted): the target is re-run "
-             "on the pregenerated deployment-scenario reframings from datasets/generated/ "
+             "benchmark in --only (or all benchmarks if --only is omitted): the target walks the "
+             "pregenerated deployment-scenario trees (up to 3 turns; branch chosen by --sim-classifier) "
+             "from datasets/generated/ "
              "(run generate.py --simulate first). Composes with --perturb in one run/one log: "
              "the panel reports safety_scenario next to stage 2's safety_<family>/stability_under_attack."
     )
     args.add_argument(
-        "--sim-k", required=False, type=int, default=1,
-        help="Use up to this many stored scenarios per item under --simulate; default=1."
+        "--sim-k", required=False, type=int, default=2,
+        help="Use up to this many stored scenario trees per item under --simulate; default=2."
+    )
+    args.add_argument(
+        "--sim-classifier", required=False, default=DEFAULT_CLASSIFIER,
+        help="Model that labels each target reply refuse/hedge/comply to choose the next stored "
+             "turn under --simulate (pipeline/stage3_simulation/classify.py). Regex-prefiltered, "
+             "disk-cached with no expiry, canaried with the graders. "
+             f"Default: {DEFAULT_CLASSIFIER}."
     )
     args.add_argument(
         "--max-connections", required=False, type=int, default=100,
@@ -510,7 +519,10 @@ if __name__ == "__main__":
     # a whole run worthless: an unusable judge (every sample errors on scoring,
     # or worse, silently abstains into a perfect score), a target that answers
     # with nothing (the same failure one layer up), and missing artifacts.
-    validate_graders(grader)
+    graders_to_check = list(grader) if isinstance(grader, list) else [grader]
+    if args.simulate:
+        graders_to_check.append(args.sim_classifier)
+    validate_graders(graders_to_check)
     validate_target(args.model, model_args)
 
     validate_artifacts(
@@ -534,6 +546,7 @@ if __name__ == "__main__":
             families=args.perturb if run_perturb else [],
             k=args.perturb_k,
             sim_k=args.sim_k if args.simulate else None,
+            sim_classifier=args.sim_classifier,
         )
 
     def start_eval(tasks: list):

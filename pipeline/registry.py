@@ -4,6 +4,7 @@ from inspect_ai import Task
 
 from pipeline.artifacts import REPEAT_FAMILIES, REWRITE_FAMILIES, family_ids, load_family, task_name
 from pipeline.stage2_perturbation.solvers import REPLAY_SOLVERS, reconsideration
+from pipeline.stage3_simulation.classify import DEFAULT_CLASSIFIER
 from pipeline.stage3_simulation.solvers import scenario
 from pipeline.utils.replay import truncated
 from pipeline.utils.scoring import SCENARIO, scoring_step, wrap_scorers
@@ -41,6 +42,7 @@ def _build_task(
     families: list[str],
     k: int,
     sim_k: int | None = None,
+    sim_classifier: str = DEFAULT_CLASSIFIER,
 ) -> Task:
     """Return base_task with one replay solver appended per requested,
     applicable condition family — the stage-2 families from
@@ -67,14 +69,17 @@ def _build_task(
         solver_chain.append(reconsideration())
         applied.append("reconsideration")
     if sim_k is not None:
-        solver_chain.append(scenario(truncated(load_family(name, SCENARIO), sim_k)))
+        solver_chain.append(scenario(truncated(load_family(name, SCENARIO), sim_k), sim_classifier))
         applied.append(SCENARIO)
 
     if not applied:
         return base_task  # no requested family applies to this benchmark
 
     solver_chain.append(scoring_step("generate", base_task.scorer))
-    solver_chain += [scoring_step(family, base_task.scorer) for family in applied]
+    solver_chain += [
+        scoring_step(family, base_task.scorer, source="simulations" if family == SCENARIO else "perturbations")
+        for family in applied
+    ]
 
     return Task(
         dataset=base_task.dataset,
@@ -89,6 +94,7 @@ def apply_stages(
     families: list[str] | None = None,
     k: int = 1,
     sim_k: int | None = None,
+    sim_classifier: str = DEFAULT_CLASSIFIER,
 ):
     '''
     Attach stage-2 surface-perturbation auditing (`families`) and/or stage-3
@@ -121,7 +127,7 @@ def apply_stages(
 
     return {
         key: {
-            'tasks': [_build_task(t, families, k, sim_k=sim_k) for t in entry['tasks']],
+            'tasks': [_build_task(t, families, k, sim_k=sim_k, sim_classifier=sim_classifier) for t in entry['tasks']],
             'name': entry['name'],
         }
         for key, entry in benchmarks.items()

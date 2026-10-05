@@ -25,7 +25,7 @@ from inspect_ai._util.registry import registry_info
 from pipeline.stage2_perturbation.framing import FRAMING_VERSION, PERSONA_VERSION
 from pipeline.stage2_perturbation.rewrite import REPEAT_FAMILIES, REWRITE_FAMILIES, REWRITE_PROMPT_VERSION
 from pipeline.stage3_simulation.prompts import PROMPT_VERSION as SCENARIO_PROMPT_VERSION
-from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY
+from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY, TREE_PATHS
 from pipeline.utils.replay import family_applies
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -98,6 +98,20 @@ def load_family(task: str, family: str) -> dict[str, list[dict]]:
     return by_id
 
 
+def scenario_row_defects(row: dict) -> list[str]:
+    """Why a stored scenario tree is unusable by the solver: no `system`, or a
+    TREE_PATHS key missing/blank. Empty when the row is complete."""
+    defects = []
+    if not str(row.get("system") or "").strip():
+        defects.append("system")
+    turns = row.get("turns") or {}
+    defects += [
+        f"turns[{path or 'opening'!r}]" for path in TREE_PATHS
+        if not str(turns.get(path) or "").strip()
+    ]
+    return defects
+
+
 def family_meta(task: str, family: str) -> dict | None:
     path = meta_path(task, family)
     if not path.exists():
@@ -128,10 +142,10 @@ def validate_artifacts(
     a complete artifact file for every requested pregenerated family.
 
     Per family: every id the family applies to (family_ids) must be covered —
-    rewrite families with at least `perturb_k` variants; scenario must have a file,
-    but ids with fewer than `sim_k` variants only warn — generation drops
-    unparseable reframings, mirroring the old live behavior, and replay just
-    runs what exists (identically for every model). `reconsideration` is
+    rewrite families with at least `perturb_k` variants, the rest with one;
+    scenario with at least `sim_k` complete trees (`system` + every TREE_PATHS
+    turn), strictly: a short or orphaned tree fails preflight. Tree shape and
+    orphan scenario ids are errors even under `limit`. `reconsideration` is
     live-only and never validated. Prompt-version mismatches warn, not fail.
 
     When `limit` is set the run is a non-saved smoke test, so coverage
@@ -151,7 +165,7 @@ def validate_artifacts(
                 for f in requested if family_ids(task, f)
             ]
             if simulate:
-                checks.append((SCENARIO_FAMILY, sim_k, False))
+                checks.append((SCENARIO_FAMILY, sim_k, strict))
             if not checks:
                 continue
             name = task_name(task)
@@ -165,13 +179,25 @@ def validate_artifacts(
                     errors.append(f"Missing artifacts for {name}/{family} ({path}). Run: {cmd}")
                     continue
 
-                expected = ids if family == SCENARIO_FAMILY else family_ids(task, family)
+                expected = family_ids(task, family)
 
                 by_id = load_family(name, family)
-                orphans = set(by_id) - ids
-                if orphans and strict:
-                    errors.append(f"{name}/{family}: {len(orphans)} orphan id(s) not in the dataset. Run: {cmd} --force")
+                orphans = sorted(set(by_id) - ids)
+                if orphans and (strict or family == SCENARIO_FAMILY):
+                    errors.append(
+                        f"{name}/{family}: {len(orphans)} orphan id(s) not in the dataset "
+                        f"(e.g. {orphans[:3]}). Regenerate: {cmd} --force"
+                    )
                 real = {i: [r for r in rows if not r.get("fallback")] for i, rows in by_id.items()}
+                if family == SCENARIO_FAMILY:
+                    for sample_id, rows in real.items():
+                        for row in rows:
+                            defects = scenario_row_defects(row)
+                            if defects:
+                                errors.append(
+                                    f"{name}/{family}: row {sample_id} v{row.get('variant')} "
+                                    f"is missing {', '.join(defects)}. Regenerate: {cmd} --force"
+                                )
                 missing = expected - {i for i, rows in real.items() if rows}
                 short = {i for i in expected & set(real) if 0 < len(real[i]) < min_k}
                 if missing or short:

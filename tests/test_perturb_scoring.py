@@ -10,11 +10,18 @@ Run: uv run python3 -m unittest discover tests
 
 import asyncio
 import unittest
+from unittest import mock
+
+from inspect_ai import Task, task
+from inspect_ai._util.registry import registry_info
+from inspect_ai.dataset import Sample
 
 from inspect_ai.model import ModelOutput
 from inspect_ai.scorer import Score, SampleScore, Target, accuracy, scorer
 from inspect_ai.solver import TaskState
 
+from pipeline import registry
+from pipeline.stage3_simulation.classify import DEFAULT_CLASSIFIER
 from pipeline.utils.scoring import (
     CONDITION_QUERY,
     ATTACK,
@@ -537,6 +544,127 @@ class TestSampleReduce(unittest.TestCase):
         self.assertEqual(_safety_metric("safety_scenario", SCENARIO)(scores), 0.0)  # nothing measured
         # the attack roll-up is still the worst over every condition
         self.assertEqual(_safety_metric("safety_under_attack", ATTACK)(scores), 0.0)
+
+
+class TestScoringStepSource(unittest.TestCase):
+    '''Stage 3 records under `simulations`; the same step judges either dict.'''
+
+    def judge(self, seen):
+        @scorer(metrics=[accuracy()], name="source_judge")
+        def _judge():
+            async def score(state, target):
+                seen.append((state.metadata[CONDITION_QUERY], state.output.completion))
+                return Score(value=state.output.completion)
+
+            return score
+
+        return _judge()
+
+    def state_with(self, perturbations=None, simulations=None):
+        state = TaskState(
+            model="m", sample_id="s1", epoch=0, input="x",
+            messages=[], output=ModelOutput.from_content("m", "control"),
+        )
+        if perturbations is not None:
+            state.metadata["perturbations"] = perturbations
+        if simulations is not None:
+            state.metadata["simulations"] = simulations
+        return state
+
+    def test_simulations_source_reads_scenario_turns(self):
+        seen = []
+        state = self.state_with(simulations={SCENARIO: [
+            {"condition": "scenario_variant_1_t1", "query": "[system] S\n\n[user] U", "completion": "a",
+             "variant": 1, "turn": 1, "path": "", "label": "refuse", "label_source": "regex"},
+            {"condition": "scenario_variant_1_t2", "query": "...longer", "completion": "b",
+             "variant": 1, "turn": 2, "path": "refuse", "label": None, "label_source": None},
+        ]})
+        step = scoring_step(SCENARIO, self.judge(seen), source="simulations")
+        asyncio.run(step(state, None))
+        per_base = state.metadata["perturbation_scores"]["source_judge"]
+        self.assertEqual(per_base["scenario_variant_1_t1"]["value"], "a")
+        self.assertEqual(per_base["scenario_variant_1_t2"]["value"], "b")
+        self.assertEqual(per_base["scenario_variant_1_t1"]["family"], SCENARIO)
+        self.assertEqual(per_base["scenario_variant_1_t1"]["variant"], 1)
+        self.assertEqual(per_base["scenario_variant_1_t1"]["query"], "[system] S\n\n[user] U")
+        self.assertEqual(sorted(seen), [("...longer", "b"), ("[system] S\n\n[user] U", "a")])
+
+    def test_default_source_is_perturbations_and_ignores_simulations(self):
+        seen = []
+        state = self.state_with(
+            perturbations={"paraphrase": [{"condition": "paraphrase_variant_1", "query": "q", "completion": "p"}]},
+            simulations={SCENARIO: [{"condition": "scenario_variant_1_t1", "query": "t", "completion": "s", "variant": 1}]},
+        )
+        asyncio.run(scoring_step("paraphrase", self.judge(seen))(state, None))
+        self.assertEqual([c for _, c in seen], ["p"])
+        self.assertNotIn("variant", state.metadata["perturbation_scores"]["source_judge"]["paraphrase_variant_1"])
+
+    def test_scenario_family_absent_from_simulations_judges_nothing(self):
+        seen = []
+        state = self.state_with(perturbations={}, simulations={})
+        asyncio.run(scoring_step(SCENARIO, self.judge(seen), source="simulations")(state, None))
+        self.assertEqual(seen, [])
+
+
+class TestWrapScorerSimulations(unittest.TestCase):
+    def setUp(self):
+        self.wrapped = wrap_scorers(dummy_judge(), ["paraphrase", SCENARIO])[0]
+
+    def test_scenario_conditions_carry_variant(self):
+        state = make_state("dummy_judge", {
+            CONTROL: {"family": CONTROL, "value": 1.0},
+            "scenario_variant_2_t1": {"family": SCENARIO, "value": 0.0},
+        })
+        state.metadata["perturbation_scores"]["dummy_judge"]["scenario_variant_2_t1"]["variant"] = 2
+        score = run_wrapper(self.wrapped, state)
+        cond = score.metadata["conditions"]["scenario_variant_2_t1"]
+        self.assertEqual(cond["variant"], 2)
+        self.assertEqual(cond["family"], SCENARIO)
+        self.assertNotIn("variant", score.metadata["conditions"][CONTROL])
+
+    def test_empty_simulations_family_is_recorded_missing(self):
+        state = make_state("dummy_judge", {CONTROL: {"family": CONTROL, "value": 1.0}})
+        state.metadata["perturbations"] = {"paraphrase": []}
+        state.metadata["simulations"] = {SCENARIO: []}
+        score = run_wrapper(self.wrapped, state)
+        self.assertEqual(score.metadata["conditions"][SCENARIO],
+                         {"family": SCENARIO, "value": None, "drift": None, "stable": False, "missing": True})
+        self.assertEqual(score.metadata["conditions"]["paraphrase"]["missing"], True)
+
+    def test_scored_scenario_is_not_marked_missing(self):
+        state = make_state("dummy_judge", {
+            CONTROL: {"family": CONTROL, "value": 1.0},
+            "scenario_variant_1_t1": {"family": SCENARIO, "value": 1.0},
+        })
+        state.metadata["simulations"] = {SCENARIO: [{"condition": "scenario_variant_1_t1"}]}
+        score = run_wrapper(self.wrapped, state)
+        self.assertNotIn(SCENARIO, score.metadata["conditions"])
+
+
+@task
+def registry_fixture():
+    return Task(dataset=[Sample(input="x", id="s1")], scorer=dummy_judge())
+
+
+class TestBuildTaskScenario(unittest.TestCase):
+    '''No other test builds the registry chain; this is what catches a
+    stale `scenario(...)` call or a scenario step reading the wrong dict.'''
+
+    def test_simulate_builds_and_scores_scenario_from_simulations(self):
+        with mock.patch.object(registry, "load_family", return_value={}), \
+                mock.patch.object(registry, "scoring_step", wraps=scoring_step) as step:
+            built = registry._build_task(registry_fixture(), [], 1, sim_k=1, sim_classifier="clf")
+        sources = {c.args[0]: c.kwargs.get("source") for c in step.call_args_list}
+        self.assertEqual(sources[SCENARIO], "simulations")
+        metrics = registry_info(built.scorer[0]).metadata["metrics"]
+        self.assertIn("safety_scenario", {registry_info(m).name.split("/")[-1] for m in metrics})
+
+    def test_classifier_reaches_scenario_and_defaults_to_the_pinned_model(self):
+        with mock.patch.object(registry, "load_family", return_value={}), \
+                mock.patch.object(registry, "scenario", wraps=registry.scenario) as step:
+            registry._build_task(registry_fixture(), [], 1, sim_k=1, sim_classifier="clf")
+            registry._build_task(registry_fixture(), [], 1, sim_k=1)
+        self.assertEqual([c.args[1] for c in step.call_args_list], ["clf", DEFAULT_CLASSIFIER])
 
 
 if __name__ == "__main__":

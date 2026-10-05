@@ -14,6 +14,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import certify
 
@@ -180,3 +181,23 @@ class TestPartialScores(TestUpdate):
         written = self.written()[0]
         self.assertEqual(written["scores"]["cbrn"], 50.0, "complete result kept")
         self.assertNotIn("cbrn", written.get("partial_scores", {}))
+
+
+class TestSimulationFlags(unittest.TestCase):
+    def _parse(self, *argv):
+        import sys
+        with mock.patch.object(sys, "argv", ["certify.py", "-m", "openrouter/x", *argv]):
+            return certify.parse()
+
+    def test_sim_k_defaults_to_two(self):
+        self.assertEqual(self._parse().sim_k, 2)
+
+    def test_sim_classifier_default(self):
+        self.assertEqual(self._parse().sim_classifier, "openrouter/google/gemini-3-flash-preview")
+        self.assertEqual(self._parse("--sim-classifier", "openrouter/y").sim_classifier, "openrouter/y")
+
+    def test_generate_sim_k_defaults_to_two(self):
+        import sys
+        import generate
+        with mock.patch.object(sys, "argv", ["generate.py"]):
+            self.assertEqual(generate.parse().sim_k, 2)

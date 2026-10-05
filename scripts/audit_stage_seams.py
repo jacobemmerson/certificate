@@ -30,7 +30,12 @@ def audit_log(path):
     c = Counter()
     for s in log.samples or []:
         md = s.metadata
-        stored = {r["condition"] for rows in (md.get("perturbations") or {}).values() for r in rows}
+        stored = {
+            r["condition"]
+            for key in ("perturbations", "simulations")
+            for rows in (md.get(key) or {}).values()
+            for r in rows
+        }
         scored = (md.get("perturbation_scores") or {}).get("cluster_scorer") or {}
         c["samples"] += 1
         c["B1 stored_not_scored"] += len(stored - set(scored))

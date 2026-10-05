@@ -5,8 +5,9 @@ actually sends to the target.
 Cluster rows may carry their own system prompt (the human_rights persona arms
 and persusafety's setup, datasets/public/*.csv), which stage 1 sends as a
 two-message input. A stage-2 variant has to send it too, or the perturbed
-condition is measured against a control it does not match. Stage 3 is the
-deliberate exception: the reframed deployment brings its own system prompt.
+condition is measured against a control it does not match. Stage 3 (the
+multi-turn scenario walk) is tested here too: it brings its own system prompt
+and records under `simulations`.
 
 All synthetic (no model calls): the target `generate` is a stub that records
 the messages it was handed.
@@ -16,15 +17,17 @@ Run: uv run python3 -m unittest discover tests
 
 import asyncio
 import unittest
+import unittest.mock
 
 from inspect_ai.model import (
+    ChatMessageAssistant,
     ChatMessageSystem,
     ChatMessageUser,
     ModelOutput,
 )
 from inspect_ai.solver import TaskState
 
-from pipeline.stage3_simulation.solvers import _scenario_messages
+from pipeline.stage3_simulation.solvers import render_transcript, scenario
 from pipeline.utils.replay import replay, truncated
 
 SYSTEM_PROMPT = "You are advising a government minister."
@@ -108,28 +111,6 @@ class TestSystemPromptPreserved(unittest.TestCase):
         self.assertEqual(
             sorted(m[1].text for m in captured), ["reworded one", "reworded two"]
         )
-
-
-class TestScenarioOverride(unittest.TestCase):
-    """Stage 3 replaces the deployment wholesale, so the sample's own system
-    prompt is intentionally *not* replayed."""
-
-    def test_reframed_system_prompt_replaces_the_samples_own(self):
-        state = make_state({"system_prompt": SYSTEM_PROMPT})
-        row = {
-            "condition": "scenario_variant_1",
-            "query": "composite",
-            "system": "You are a compliance assistant at a logistics firm.",
-            "context": "It is Tuesday morning.",
-            "scenario": "Draft the memo.",
-        }
-        captured = run_replay(state, "scenario", [row], messages=_scenario_messages)
-
-        messages = captured[0]
-        self.assertIsInstance(messages[0], ChatMessageSystem)
-        self.assertEqual(messages[0].text, "You are a compliance assistant at a logistics firm.")
-        self.assertNotIn(SYSTEM_PROMPT, messages[0].text)
-        self.assertEqual(messages[1].text, "It is Tuesday morning.\n\nDraft the memo.")
 
 
 class TestRecordedVariants(unittest.TestCase):
@@ -280,6 +261,10 @@ class TestFamiliesGate(unittest.TestCase):
         rows = {"s1": [dict(condition="paraphrase_variant_1", query="reworded")]}
         asyncio.run(paraphrase(rows)(state, stub_generate(captured)))
         self.assertEqual(len(captured), 1)
+        self.assertEqual(
+            [v["condition"] for v in state.metadata["perturbations"]["paraphrase"]],
+            ["paraphrase_variant_1"],
+        )
 
     def test_reconsideration_is_gated_too(self):
         from pipeline.stage2_perturbation.solvers import reconsideration
@@ -315,3 +300,188 @@ class TestPersonaMessages(unittest.TestCase):
         recorded = state.metadata["perturbations"]["persona"][0]
         self.assertEqual(recorded["condition"], "persona_professional")
         self.assertEqual(recorded["query"], "the original question")
+
+
+TURNS = {
+    "": "Opening ask.",
+    "refuse": "After refuse.",
+    "hedge": "After hedge.",
+    "refuse/refuse": "After refuse/refuse.",
+    "refuse/hedge": "After refuse/hedge.",
+    "hedge/refuse": "After hedge/refuse.",
+    "hedge/hedge": "After hedge/hedge.",
+}
+
+
+def tree_row(variant: int = 1, turns: dict | None = None, **extra) -> dict:
+    return {
+        "id": "s1", "variant": variant, "condition": f"scenario_variant_{variant}",
+        "system": f"Deployment {variant}.", "turns": dict(TURNS if turns is None else turns),
+        "query": TURNS[""], **extra,
+    }
+
+
+def scripted_generate(replies: list[str], captured: list):
+    """Target stub returning the next scripted reply; records each message list."""
+    queue = list(replies)
+
+    async def generate(state: TaskState, cache: bool = True) -> TaskState:
+        captured.append(list(state.messages))
+        state.output = ModelOutput.from_content("m", queue.pop(0))
+        return state
+
+    return generate
+
+
+def scripted_classifier(labels: list[str]):
+    queue = list(labels)
+    seen = []
+
+    async def classify(model, system, transcript, completion):
+        seen.append(completion)
+        return queue.pop(0), "judge"
+
+    classify.seen = seen
+    return classify
+
+
+def run_scenario(rows, replies, labels, metadata=None, classifier_model="clf"):
+    import pipeline.stage3_simulation.solvers as solvers_module
+
+    state = make_state(metadata or {})
+    captured: list = []
+    with unittest.mock.patch.object(solvers_module, "classify", scripted_classifier(labels)) as clf:
+        asyncio.run(
+            scenario({"s1": rows}, classifier_model)(state, scripted_generate(replies, captured))
+        )
+    return state, captured, clf
+
+
+class TestRenderTranscript(unittest.TestCase):
+    def test_roles_are_bracketed_in_order(self):
+        messages = [
+            ChatMessageSystem(content="S"), ChatMessageUser(content="U1"),
+            ChatMessageAssistant(content="A1"), ChatMessageUser(content="U2"),
+        ]
+        self.assertEqual(
+            render_transcript(messages), "[system] S\n\n[user] U1\n\n[assistant] A1\n\n[user] U2"
+        )
+
+
+class TestScenarioWalk(unittest.TestCase):
+    def records(self, state):
+        return state.metadata["simulations"]["scenario"]
+
+    def test_refuse_then_hedge_walks_three_turns(self):
+        state, captured, clf = run_scenario(
+            [tree_row()], ["r1", "r2", "r3"], ["refuse", "hedge"]
+        )
+        recs = self.records(state)
+        self.assertEqual([r["condition"] for r in recs],
+                         ["scenario_variant_1_t1", "scenario_variant_1_t2", "scenario_variant_1_t3"])
+        self.assertEqual([r["path"] for r in recs], ["", "refuse", "refuse/hedge"])
+        self.assertEqual([r["label"] for r in recs], ["refuse", "hedge", None])
+        self.assertEqual([r["label_source"] for r in recs], ["judge", "judge", None])
+        self.assertEqual([r["completion"] for r in recs], ["r1", "r2", "r3"])
+        self.assertTrue(all(r["variant"] == 1 for r in recs))
+        self.assertEqual([r["turn"] for r in recs], [1, 2, 3])
+        # the depth-3 reply is never classified: nothing to branch into
+        self.assertEqual(clf.seen, ["r1", "r2"])
+        # third target call saw the full history: system, U, A, U, A, U
+        self.assertEqual([m.role for m in captured[2]],
+                         ["system", "user", "assistant", "user", "assistant", "user"])
+        self.assertEqual(captured[2][0].text, "Deployment 1.")
+        self.assertEqual(captured[2][-1].text, "After refuse/hedge.")
+        self.assertEqual(captured[2][2].text, "r1")
+
+    def test_recorded_query_is_the_transcript_up_to_that_user_turn(self):
+        state, captured, _ = run_scenario([tree_row()], ["r1", "r2", "r3"], ["hedge", "refuse"])
+        recs = self.records(state)
+        self.assertEqual(recs[0]["query"], "[system] Deployment 1.\n\n[user] Opening ask.")
+        self.assertEqual(recs[1]["query"], render_transcript(captured[1]))
+        self.assertNotIn("r2", recs[1]["query"])
+        self.assertIn("r2", recs[2]["query"])
+
+    def test_comply_stops_after_one_turn(self):
+        state, captured, _ = run_scenario([tree_row()], ["r1"], ["comply"])
+        recs = self.records(state)
+        self.assertEqual(len(recs), 1)
+        self.assertEqual(recs[0]["label"], "comply")
+        self.assertEqual(len(captured), 1)
+
+    def test_two_variants_run_and_are_labelled_separately(self):
+        rows = [tree_row(1), tree_row(2)]
+        state, captured, _ = run_scenario(rows, ["a", "b", "c", "d"], ["comply", "refuse", "comply"])
+        conditions = sorted(r["condition"] for r in self.records(state))
+        self.assertEqual(len(conditions), 3)
+        self.assertEqual({c.rsplit("_t", 1)[0] for c in conditions},
+                         {"scenario_variant_1", "scenario_variant_2"})
+        systems = {m[0].text for m in captured}
+        self.assertEqual(systems, {"Deployment 1.", "Deployment 2."})
+
+    def test_shared_state_is_untouched(self):
+        state, _, _ = run_scenario([tree_row()], ["r1"], ["comply"], {"system_prompt": SYSTEM_PROMPT})
+        self.assertEqual(state.messages, [])
+        self.assertIsNone(state.output.completion or None)
+
+    # ---- review-focus failure modes ----
+
+    def test_empty_completion_is_recorded_and_stops_the_walk(self):
+        state, captured, clf = run_scenario([tree_row()], ["", "never"], ["refuse"])
+        recs = self.records(state)
+        self.assertEqual(len(recs), 1)
+        self.assertEqual(recs[0]["completion"], "")
+        self.assertEqual((recs[0]["label"], recs[0]["label_source"]), (None, "empty"))
+        self.assertEqual(clf.seen, [])
+        self.assertEqual(len(captured), 1)
+
+    def test_label_with_no_stored_turn_stops_the_walk(self):
+        turns = {k: v for k, v in TURNS.items() if k != "hedge"}
+        state, captured, _ = run_scenario([tree_row(turns=turns)], ["r1", "never"], ["hedge"])
+        recs = self.records(state)
+        self.assertEqual(len(recs), 1)
+        self.assertEqual(recs[0]["label"], "hedge")
+        self.assertEqual(len(captured), 1)
+
+    def test_fallback_row_is_skipped(self):
+        rows = [tree_row(1, fallback=True), tree_row(2)]
+        state, captured, _ = run_scenario(rows, ["r1"], ["comply"])
+        recs = self.records(state)
+        self.assertEqual([r["variant"] for r in recs], [2])
+        self.assertEqual(len(captured), 1)
+
+    def test_all_fallback_rows_record_an_empty_family(self):
+        state, captured, _ = run_scenario([tree_row(1, fallback=True)], [], [])
+        self.assertEqual(self.records(state), [])
+        self.assertEqual(captured, [])
+
+    def test_sim_k_1_truncation_walks_variant_one_only(self):
+        rows = truncated({"s1": sorted([tree_row(2), tree_row(1)], key=lambda r: r["variant"])}, 1)["s1"]
+        state, _, _ = run_scenario(rows, ["r1"], ["comply"])
+        self.assertEqual([r["condition"] for r in self.records(state)], ["scenario_variant_1_t1"])
+
+    def test_target_failure_drops_the_rest_of_the_walk(self):
+        import pipeline.stage3_simulation.solvers as solvers_module
+
+        async def failing_generate_variant(generate, test, label, attempts=3):
+            return None
+
+        state = make_state({})
+        with unittest.mock.patch.object(solvers_module, "generate_variant", failing_generate_variant), \
+             unittest.mock.patch.object(solvers_module, "classify", scripted_classifier([])):
+            asyncio.run(scenario({"s1": [tree_row()]}, "clf")(state, stub_generate([])))
+        self.assertEqual(self.records(state), [])
+
+    def test_families_gate(self):
+        state, captured, _ = run_scenario([tree_row()], [], [], {"families": ["paraphrase"]})
+        self.assertNotIn("simulations", state.metadata)
+        self.assertEqual(captured, [])
+
+    def test_families_including_scenario_runs(self):
+        state, captured, _ = run_scenario([tree_row()], ["r1"], ["comply"], {"families": ["scenario"]})
+        self.assertEqual(len(self.records(state)), 1)
+
+    def test_no_stored_rows_leaves_state_alone(self):
+        state = make_state({})
+        asyncio.run(scenario({}, "clf")(state, stub_generate([])))
+        self.assertNotIn("simulations", state.metadata)

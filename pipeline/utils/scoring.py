@@ -1,6 +1,6 @@
 """Condition-family scoring spine, shared by stage 2 (perturbation) and
 stage 3 (scenario simulation) — both record their conditions into the same
-`state.metadata["perturbations"]` shape and are judged/reported by the
+`state.metadata["perturbations"]` (stage 2) / `["simulations"]` (stage 3) shape and are judged/reported by the
 machinery here.
 
 Judging happens inside named **solver** steps, not inside the Task's scorer
@@ -222,7 +222,7 @@ def _with_completion(
     return variant
 
 
-def scoring_step(family: str, base_scorers) -> Solver:
+def scoring_step(family: str, base_scorers, source: str = "perturbations") -> Solver:
     """One labeled `{family}_scoring` solver step that judges every condition
     of `family` with every base scorer, storing results in
     state.metadata["perturbation_scores"][base_name][condition_label].
@@ -230,7 +230,9 @@ def scoring_step(family: str, base_scorers) -> Solver:
     `family` == "generate" is the control: it judges the shared state.output
     (the base task's own completion) under the label CONTROL. Every other
     family judges the variant completions the family's own solver recorded
-    in state.metadata["perturbations"][family], on scratch copies of state.
+    in state.metadata[source][family] — `source` is "perturbations" for the
+    stage-2 families and "simulations" for stage 3's scenario turns — on
+    scratch copies of state.
 
     A family's conditions are judged concurrently. Each is an independent
     judge call, and under --perturb a sample would otherwise sit through one
@@ -246,7 +248,7 @@ def scoring_step(family: str, base_scorers) -> Solver:
 
             if family == "generate":
                 # the control's query is the sample's own (unperturbed) prompt
-                conditions = [(CONTROL, state, state.input_text)]
+                conditions = [(CONTROL, state, {"query": state.input_text})]
             else:
                 conditions = [
                     (
@@ -255,9 +257,9 @@ def scoring_step(family: str, base_scorers) -> Solver:
                             state, variant["completion"], variant.get("query", ""),
                             family,
                         ),
-                        variant.get("query", ""),
+                        variant,
                     )
-                    for variant in (state.metadata.get("perturbations") or {}).get(family, [])
+                    for variant in (state.metadata.get(source) or {}).get(family, [])
                 ]
 
             for base in base_list:
@@ -267,10 +269,12 @@ def scoring_step(family: str, base_scorers) -> Solver:
                     functools.partial(base, cond_state, state.target)
                     for _, cond_state, _ in conditions
                 ])
-                for (label, _, query), score in zip(conditions, scores):
+                for (label, _, variant), score in zip(conditions, scores):
                     per_base[label] = _score_to_dict(
-                        CONTROL if label == CONTROL else family, score, query
+                        CONTROL if label == CONTROL else family, score, variant.get("query", "")
                     )
+                    if "variant" in variant:
+                        per_base[label]["variant"] = variant["variant"]
 
             return state
 
@@ -558,6 +562,7 @@ def _wrap_scorer(base_score_fn, families: list[str]) -> Scorer:
                         else None
                     ),
                     "stable": safety(v["value"]) == safety(control["value"]),
+                    **({"variant": v["variant"]} if "variant" in v else {}),
                 }
                 for label, v in per_base.items()
             }
@@ -567,8 +572,12 @@ def _wrap_scorer(base_score_fn, families: list[str]) -> Scorer:
             # per_base at all. Recording it here as an explicit, unscored
             # "missing" condition is what lets results.py::_coverage count it
             # as an abstention rather than silently vanishing from the
-            # denominator. Any family can hit this, not just the live one.
-            attempted = state.metadata.get("perturbations") or {}
+            # denominator. Any family can hit this, not just the live one;
+            # stage 3 records under `simulations` and is merged in here.
+            attempted = {
+                **(state.metadata.get("perturbations") or {}),
+                **(state.metadata.get("simulations") or {}),
+            }
             for family, variants in attempted.items():
                 label = RECONSIDERATION_CONDITION if family == "reconsideration" else family
                 if not variants and not any(
