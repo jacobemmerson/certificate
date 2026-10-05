@@ -50,8 +50,7 @@ def _build_task(
     wrapped one-per-base-judge (pipeline/utils/scoring.py::wrap_scorers).
 
     Returns base_task unchanged if nothing applies (e.g. only "framing" was
-    requested against a benchmark whose elicitation_family has no registered
-    framing templates, and sim_k is None).
+    requested and no sample's `families` includes it, and sim_k is None).
     """
     name = task_name(base_task)
 

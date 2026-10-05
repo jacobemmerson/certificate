@@ -1,7 +1,7 @@
 """The on-disk store for pregenerated perturbation/simulation artifacts.
 
-Stage 2's rewrite families (paraphrase, register), the
-deterministic framing family, and stage 3's scenario reframings are generated
+Stage 2's rewrite families (paraphrase, register, past_tense, multilingual), the
+deterministic framing and persona families, and stage 3's scenario reframings are generated
 *once* by `generate.py` (running the attacker model) and persisted under
 `datasets/generated/<task_name>/<family>.jsonl` — see
 datasets/generated/README.md for the schema. At eval time, certify.py replays
