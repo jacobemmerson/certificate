@@ -26,8 +26,11 @@
 # Indices beyond the file's last model exit 0, so --array can stay 0-29 as the
 # roster grows. Append models at the END of models.txt while an array is queued.
 #
-#   sbatch scripts/certify_slurm.sh                 # from the repo root
-#   sbatch --array=5 scripts/certify_slurm.sh       # one model
+# logs/ is gitignored and slurm opens --output before this script runs, so a
+# missing logs/ fails the job silently: create it at submit time.
+#
+#   mkdir -p logs && sbatch scripts/certify_slurm.sh            # from the repo root
+#   mkdir -p logs && sbatch --array=5 scripts/certify_slurm.sh  # one model
 #   MAX_CONN=64 sbatch scripts/certify_slurm.sh
 set -uo pipefail
 cd "$SLURM_SUBMIT_DIR"

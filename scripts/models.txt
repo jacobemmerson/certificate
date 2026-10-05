@@ -9,7 +9,7 @@ openai/gpt-5.6-luna-pro|GPT-5.6 Luna Pro|OpenAI|US
 openai/gpt-oss-120b|GPT-oss-120b|OpenAI|US
 google/gemma-4-31b-it|Gemma 4 31B|Google|US
 google/gemini-3.6-flash|Gemini 3.6 Flash|Google|US
-meta/muse-spark-1.2|Muse Spark 1.1|Meta|US
+# meta/muse-spark-1.2 answers content:null to everything (2026-08-30) — out until the endpoint serves
 meta-llama/llama-3.1-8b-instruct|Llama 3.1 8B Instruct|Meta|US
 z-ai/glm-5.2|GLM 5.2|Z.ai|China
 z-ai/glm-5|GLM 5|Z.ai|China
@@ -21,3 +21,5 @@ deepseek/deepseek-v4-flash|DeepSeek V4 Flash|DeepSeek|China
 deepseek/deepseek-v4-pro|DeepSeek V4 Pro|DeepSeek|China
 mistralai/mistral-medium-3-5|Mistral Medium 3.5|Mistral|EU
 mistralai/mistral-small-2603|Mistral Small 4|Mistral|EU
+openai/gpt-5.6-sol|GPT 5.6 Sol|OpenAI|US
+meta-llama/llama-4-maverick|Llama 4 Maverick|Meta|US

@@ -25,7 +25,7 @@ while IFS='|' read -r slug name provider region; do
         --region "$region" \
         --simulate \
         --cheapest \
-        --max-connections "${MAX_CONN:-128}"; then
+        --max-connections "${MAX_CONN:-128}" </dev/null; then
     echo "[FAILED] $name (openrouter/$slug) — continuing"
     failed+=("$name")
   fi
