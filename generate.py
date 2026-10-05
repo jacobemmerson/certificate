@@ -52,6 +52,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from pipeline.artifacts import (
+    DETERMINISTIC_FAMILIES,
     PROMPT_VERSIONS,
     REPEAT_FAMILIES,
     artifact_path,
@@ -62,7 +63,7 @@ from pipeline.artifacts import (
 )
 from inspect_ai.model import get_model
 
-from pipeline.generation import generate_framing, generate_rewrites, generate_scenarios
+from pipeline.generation import generate_framing, generate_persona, generate_rewrites, generate_scenarios
 from pipeline.registry import PREGENERATED_FAMILIES, init_benchmarks
 from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY
 from pipeline.utils.graders import load_graders
@@ -231,9 +232,9 @@ if __name__ == "__main__":
                 incomplete: list[str] = []
                 reasons: dict[str, str] = {}
 
-                if family == "framing":
-                    # deterministic — cheap to rebuild wholesale every time
-                    rows = generate_framing(samples)
+                if family in DETERMINISTIC_FAMILIES:
+                    # template-built — cheap to rebuild wholesale every time
+                    rows = generate_framing(samples) if family == "framing" else generate_persona(samples)
                     kept = []
                 elif family == SCENARIO_FAMILY:
                     rows, incomplete, reasons = asyncio.run(generate_scenarios(
@@ -254,7 +255,7 @@ if __name__ == "__main__":
                 # complete artifact that --missing-only would then skip.
                 attempted = len(rows) or len(incomplete)
                 usable = sum(1 for r in rows if not r.get("fallback"))
-                if family != "framing" and attempted and not usable:
+                if family not in DETERMINISTIC_FAMILIES and attempted and not usable:
                     summary.append((name, family,
                                     f"FAILED — 0/{attempted} usable attacker outputs; nothing written"))
                     continue
@@ -268,7 +269,7 @@ if __name__ == "__main__":
                 write_family(name, family, all_rows, meta={
                     "task": name,
                     "family": family,
-                    "generator_model": None if family == "framing" else args.attacker,
+                    "generator_model": None if family in DETERMINISTIC_FAMILIES else args.attacker,
                     "reasoning": bool(args.reasoning and family == SCENARIO_FAMILY),
                     "prompt_version": PROMPT_VERSIONS[family],
                     "k": k,

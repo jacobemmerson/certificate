@@ -287,3 +287,22 @@ class TestFamiliesGate(unittest.TestCase):
         self.assertTrue(family_applies({}, "framing"))
         self.assertTrue(family_applies(None, "persona"))
         self.assertFalse(family_applies({"families": []}, "framing"))
+
+
+class TestPersonaMessages(unittest.TestCase):
+    def test_persona_system_prompt_then_original_query(self):
+        from pipeline.stage2_perturbation.solvers import persona
+
+        state = make_state({"families": ["persona"]})
+        captured: list = []
+        rows = {"s1": [{"condition": "persona_professional", "system": "You work at a firm.",
+                        "query": "the original question"}]}
+        asyncio.run(persona(rows)(state, stub_generate(captured)))
+
+        messages = captured[0]
+        self.assertEqual([type(m) for m in messages], [ChatMessageSystem, ChatMessageUser])
+        self.assertEqual(messages[0].text, "You work at a firm.")
+        self.assertEqual(messages[1].text, "the original question")
+        recorded = state.metadata["perturbations"]["persona"][0]
+        self.assertEqual(recorded["condition"], "persona_professional")
+        self.assertEqual(recorded["query"], "the original question")

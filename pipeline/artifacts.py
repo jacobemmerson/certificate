@@ -22,7 +22,7 @@ from pathlib import Path
 from inspect_ai import Task
 from inspect_ai._util.registry import registry_info
 
-from pipeline.stage2_perturbation.framing import FRAMING_VERSION
+from pipeline.stage2_perturbation.framing import FRAMING_VERSION, PERSONA_VERSION
 from pipeline.stage2_perturbation.rewrite import REPEAT_FAMILIES, REWRITE_FAMILIES, REWRITE_PROMPT_VERSION
 from pipeline.stage3_simulation.prompts import PROMPT_VERSION as SCENARIO_PROMPT_VERSION
 from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY
@@ -37,8 +37,12 @@ GENERATED_DIR = REPO_ROOT / "datasets" / "generated"
 PROMPT_VERSIONS = {
     **{family: REWRITE_PROMPT_VERSION for family in REWRITE_FAMILIES},
     "framing": FRAMING_VERSION,
+    "persona": PERSONA_VERSION,
     SCENARIO_FAMILY: SCENARIO_PROMPT_VERSION,
 }
+
+# Template-built families: no attacker, rebuilt wholesale on every generate run.
+DETERMINISTIC_FAMILIES = ("framing", "persona")
 
 
 def task_name(base_task: Task) -> str:

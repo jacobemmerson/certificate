@@ -32,7 +32,7 @@ from inspect_ai.model import (
 )
 
 from pipeline.stage2_perturbation.adapters import item_text, render, scenario_source
-from pipeline.stage2_perturbation.framing import framing_templates
+from pipeline.stage2_perturbation.framing import PERSONA_TEMPLATES, framing_templates
 from pipeline.stage2_perturbation.rewrite import (
     FAMILY_SYSTEM_PROMPTS, LANGUAGES, TRANSLATE_SYSTEM, _extract_rewrite, rewrite_defect,
     translation_defect,
@@ -214,6 +214,25 @@ def generate_framing(samples: list[Sample]) -> list[dict]:
                 "query": render(view, template_fn(original_text)),
             })
     return rows
+
+
+def generate_persona(samples: list[Sample]) -> list[dict]:
+    """Rows for the deterministic persona family: one per template per
+    applicable sample, query unchanged, no model calls. A row with its own
+    system prompt is skipped even if its families list says otherwise: the
+    replay solver would overwrite the steering the row measures."""
+    return [
+        {
+            "id": str(sample.id),
+            "condition": f"persona_{name}",
+            "system": system,
+            "query": SampleView.of(sample).input_text,
+        }
+        for sample in samples
+        if family_applies(sample.metadata, "persona")
+        and not (sample.metadata or {}).get("system_prompt")
+        for name, system in PERSONA_TEMPLATES.items()
+    ]
 
 
 async def generate_scenarios(

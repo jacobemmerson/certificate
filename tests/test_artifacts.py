@@ -311,5 +311,35 @@ class TestMultilingualRows(unittest.TestCase):
         self.assertEqual(artifacts.REPEAT_FAMILIES, ("paraphrase", "register", "past_tense"))
         self.assertEqual(set(FAMILY_SYSTEM_PROMPTS), set(artifacts.REPEAT_FAMILIES))
 
+class TestGeneratePersona(unittest.TestCase):
+    def sample(self, **metadata):
+        return Sample(input="How is bread leavened?", id="a",
+                      metadata={"families": ["persona"], **metadata})
+
+    def test_two_rows_per_sample_query_unchanged(self):
+        from pipeline.generation import generate_persona
+        from pipeline.stage2_perturbation.framing import PERSONA_TEMPLATES
+        rows = generate_persona([self.sample()])
+        self.assertEqual([r["condition"] for r in rows], ["persona_professional", "persona_researcher"])
+        self.assertEqual({r["query"] for r in rows}, {"How is bread leavened?"})
+        self.assertEqual([r["system"] for r in rows], list(PERSONA_TEMPLATES.values()))
+        self.assertEqual(set(rows[0]), {"id", "condition", "system", "query"})
+
+    def test_templates_are_benign_context_without_conduct_rules(self):
+        from pipeline.stage2_perturbation.framing import PERSONA_TEMPLATES, PERSONA_VERSION
+        self.assertEqual(PERSONA_VERSION, "1")
+        for text in PERSONA_TEMPLATES.values():
+            for forbidden in ("always comply", "never refuse", "no restrictions", "ignore"):
+                self.assertNotIn(forbidden, text.lower())
+
+    def test_row_with_its_own_system_prompt_gets_no_persona(self):
+        '''Review focus 3: the persona solver replaces the system turn.'''
+        from pipeline.generation import generate_persona
+        self.assertEqual(generate_persona([self.sample(system_prompt="You advise a minister.")]), [])
+
+    def test_families_gate(self):
+        from pipeline.generation import generate_persona
+        self.assertEqual(generate_persona([self.sample(families=["paraphrase"])]), [])
+
 if __name__ == "__main__":
     unittest.main()

@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import copy
 
-from inspect_ai.model import ChatMessageAssistant, ChatMessageUser
+from inspect_ai.model import ChatMessageAssistant, ChatMessageSystem, ChatMessageUser
 from inspect_ai.solver import Generate, Solver, TaskState, solver
 
 from pipeline.utils.replay import generate_variant, record_variants, replay
@@ -86,6 +86,20 @@ def multilingual(variants_by_id: dict[str, list[dict]]) -> Solver:
     return solve
 
 
+def _persona_messages(row: dict, state: TaskState) -> list:
+    """The persona's system prompt in place of the sample's (which generation
+    guarantees is empty for persona rows), then the original query."""
+    return [ChatMessageSystem(content=row["system"]), ChatMessageUser(content=row["query"])]
+
+
+@solver
+def persona(variants_by_id: dict[str, list[dict]]) -> Solver:
+    async def solve(state: TaskState, generate: Generate) -> TaskState:
+        return await replay(state, generate, "persona", variants_by_id, messages=_persona_messages)
+
+    return solve
+
+
 # Replay families keyed the way registry.py builds them. framing's rows are
 # per template, not per k, so registry.py truncates only REPEAT_FAMILIES.
 REPLAY_SOLVERS = {
@@ -94,6 +108,7 @@ REPLAY_SOLVERS = {
     "framing": framing,
     "past_tense": past_tense,
     "multilingual": multilingual,
+    "persona": persona,
 }
 
 
