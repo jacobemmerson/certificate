@@ -276,7 +276,7 @@ def refusal_record(evaluations) -> dict:
     }
 
 
-def check_status(evaluations):
+def check_status(evaluations, run_id: str | None = None):
     '''
     Summarise a benchmark's EvalLogs into a status record:
     success (every task log succeeded), partial (some did), or failed —
@@ -291,6 +291,10 @@ def check_status(evaluations):
     empty assistant message for all 562 manipulation samples and the run was
     recorded as `success 562/562`, so the empty count is tallied here and
     demotes the status exactly as errors do.
+
+    Also sums each log's stats.model_usage into "usage" (per model name,
+    tokens and total_cost — null when the provider reports no price) and
+    records the run_id the logs came from.
     '''
     ok = sum(1 for log in evaluations if log.status == "success")
     # log.results is None on an errored task, so counting only from it
@@ -334,12 +338,24 @@ def check_status(evaluations):
         print(f"[WARNING] provider refused {refusals['provider_refused']} sample(s) "
               f"on content policy ({sources})")
 
+    usage: dict[str, dict] = {}
+    for log in evaluations:
+        model_usage = getattr(getattr(log, "stats", None), "model_usage", None) or {}
+        for model, used in model_usage.items():
+            tally = usage.setdefault(model, {"input_tokens": 0, "output_tokens": 0, "total_cost": None})
+            tally["input_tokens"] += used.input_tokens
+            tally["output_tokens"] += used.output_tokens
+            if used.total_cost is not None:
+                tally["total_cost"] = (tally["total_cost"] or 0.0) + used.total_cost
+
     return {
         "status": status,
         "completed_samples": completed,
         "total_samples": total,
         "empty_completions": empty,
         "refusals": refusals,
+        "usage": usage,
+        "run_id": run_id,
     }
 
 
@@ -588,7 +604,7 @@ if __name__ == "__main__":
             print(f"[ERROR] {benchmark}: no log produced")
             continue
 
-        statuses[benchmark] = check_status(res)
+        statuses[benchmark] = check_status(res, run_id=None)
         if statuses[benchmark]['status'] != 'success':
             print(f"[WARNING] {benchmark}: run was {statuses[benchmark]['status']} "
                   f"({statuses[benchmark]['completed_samples']}/{statuses[benchmark]['total_samples']} samples)")

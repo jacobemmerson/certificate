@@ -15,6 +15,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import certify
@@ -156,6 +157,35 @@ class TestParse(unittest.TestCase):
     def test_epochs_is_an_int(self):
         self.assertEqual(self.parse("--epochs", "2").epochs, 2)
         self.assertEqual(self.parse().epochs, 1)
+
+
+def usage_log(usage: dict, status="success"):
+    model_usage = {
+        name: SimpleNamespace(input_tokens=i, output_tokens=o, total_cost=c)
+        for name, (i, o, c) in usage.items()
+    }
+    return SimpleNamespace(
+        status=status, samples=[], results=None,
+        stats=SimpleNamespace(model_usage=model_usage),
+    )
+
+
+class TestUsage(unittest.TestCase):
+
+    def test_usage_is_summed_per_model_across_logs(self):
+        record = certify.check_status(
+            [usage_log({"m": (10, 2, None), "judge": (5, 1, 0.5)}),
+             usage_log({"m": (1, 1, None), "judge": (5, 1, 0.25)})],
+            run_id="current",
+        )
+        self.assertEqual(record["usage"]["m"], {"input_tokens": 11, "output_tokens": 3, "total_cost": None})
+        self.assertEqual(record["usage"]["judge"], {"input_tokens": 10, "output_tokens": 2, "total_cost": 0.75})
+        self.assertEqual(record["run_id"], "current")
+
+    def test_a_log_without_stats_yields_empty_usage(self):
+        record = certify.check_status([SimpleNamespace(status="success", samples=[], results=None)])
+        self.assertEqual(record["usage"], {})
+        self.assertIsNone(record["run_id"])
 
 
 if __name__ == "__main__":
