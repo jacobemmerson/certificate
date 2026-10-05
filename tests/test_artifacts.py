@@ -341,5 +341,16 @@ class TestGeneratePersona(unittest.TestCase):
         from pipeline.generation import generate_persona
         self.assertEqual(generate_persona([self.sample(families=["paraphrase"])]), [])
 
+class TestFidelityAuditRoster(unittest.TestCase):
+    def test_families_follow_the_rewrite_roster(self):
+        import importlib
+        audit = importlib.import_module("scripts.audit_variant_fidelity")
+        self.assertEqual(audit.FAMILIES, (*artifacts.REWRITE_FAMILIES, "scenario"))
+        system, prompt = audit.blind_prompt({"family": "multilingual", "lang": "zh", "original": "o", "text": "t"})
+        self.assertIn("translation into Chinese (Simplified)", prompt)
+        _, prompt = audit.blind_prompt({"family": "scenario", "original": "o", "system": "s",
+                                        "turns": {"": "opening"}})
+        self.assertIn("opening", prompt)
+
 if __name__ == "__main__":
     unittest.main()
