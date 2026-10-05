@@ -116,6 +116,31 @@ class TestMissingOnly(ArtifactStoreTestCase):
         self.assertEqual(generate.existing_rows(self.name, "paraphrase"), [rows[0]])
 
 
+class TestRegistryTruncation(ArtifactStoreTestCase):
+    def test_k_truncates_repeat_families_only(self):
+        """multilingual's variants are languages, not repeats: k=1 must keep all three."""
+        import pipeline.registry as registry
+        write_family(self.name, "multilingual", rewrite_rows(self.ids[:1], "multilingual", k=3), meta={})
+        write_family(self.name, "paraphrase", rewrite_rows(self.ids[:1], "paraphrase", k=3), meta={})
+        replayed = {}
+
+        def recording(family):
+            real = registry.REPLAY_SOLVERS[family]
+
+            def build(rows):
+                replayed[family] = rows
+                return real(rows)
+            return build
+
+        # the fixture has no registered scorer to wrap; only the solver chain matters here
+        with mock.patch.object(registry, "wrap_scorers", return_value=None), \
+                mock.patch.object(registry, "family_ids", return_value=set(self.ids[:1])), \
+                mock.patch.dict(registry.REPLAY_SOLVERS, {f: recording(f) for f in ("multilingual", "paraphrase")}):
+            registry._build_task(self.task, ["multilingual", "paraphrase"], k=1)
+        self.assertEqual(len(replayed["multilingual"][self.ids[0]]), 3)
+        self.assertEqual(len(replayed["paraphrase"][self.ids[0]]), 1)
+
+
 class TestValidateArtifacts(ArtifactStoreTestCase):
     def test_complete_rewrite_family_passes(self):
         write_family(self.name, "paraphrase", rewrite_rows(self.ids), meta={"prompt_version": "1"})
