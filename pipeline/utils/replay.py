@@ -113,9 +113,9 @@ async def replay(
     """Run the target on every stored variant of this sample and record the
     results — the shared implementation behind every replay family. `messages`
     maps a stored artifact row (and the sample's state) to the message list
-    sent to the target; stage 3 overrides it to rebuild the scenario's
-    system+user pair, deliberately replacing the sample's own system prompt
-    with the reframed deployment's.
+    sent to the target; families whose rows carry their own system turn
+    (persona) override it, deliberately replacing the sample's own system
+    prompt.
     """
     if not family_applies(state.metadata, family):
         return state

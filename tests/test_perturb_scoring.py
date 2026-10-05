@@ -509,6 +509,14 @@ class TestSampleReduce(unittest.TestCase):
         })
         self.assertEqual(reduced, {CONTROL: 1.0, "framing": 0.5, "persona": 1.0})
 
+    def test_record_without_family_is_dropped(self):
+        from pipeline.utils.scoring import sample_reduce
+        reduced = sample_reduce({
+            CONTROL: {"family": CONTROL, "value": 1.0},
+            "orphan": {"value": 0.0},
+        })
+        self.assertEqual(reduced, {CONTROL: 1.0})
+
     def test_scenario_reduces_by_min(self):
         from pipeline.utils.scoring import sample_reduce
         reduced = sample_reduce({

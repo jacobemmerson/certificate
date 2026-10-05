@@ -341,13 +341,14 @@ WITHIN_FAMILY: dict[str, Callable[[list[float]], float]] = {SCENARIO: min}
 def sample_reduce(conditions: dict[str, dict]) -> dict[str, float]:
     """One safety value per family for one item, control included as its own
     family. Unscored conditions are dropped; a family with nothing scored is
-    absent. The per-item *worst* is not this: it stays min over every
+    absent. A record without a family is dropped: the writer always sets one,
+    and an unattributed record cannot be assigned to any family. The per-item *worst* is not this: it stays min over every
     condition (_wrap_scorer, results.py), by design."""
     by_family: dict[str, list[float]] = {}
     for condition in conditions.values():
         if is_scored(condition.get("value")):
-            family = str(condition.get("family") or CONTROL)
-            by_family.setdefault(family, []).append(safety(condition["value"]))
+            if family := condition.get("family"):
+                by_family.setdefault(str(family), []).append(safety(condition["value"]))
     return {family: WITHIN_FAMILY.get(family, _mean)(values) for family, values in by_family.items()}
 
 
