@@ -25,12 +25,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from pipeline.artifacts import REPEAT_FAMILIES
 from pipeline.stage2_perturbation.rewrite import rewrite_defect
 
 ROOT = Path(__file__).resolve().parent.parent
-# framing is template-built and scenario has its own schema; neither goes
-# through the rewrite model, so neither is in scope for this gate.
-REWRITE_FAMILIES = ("paraphrase", "register", "past_tense")
+# Only the repeat families go through rewrite_defect: framing and persona are
+# template-built, multilingual has its own translation_defect, and scenario has
+# its own schema.
 
 
 def load_items() -> tuple[dict[str, str], dict[str, list[str]]]:
@@ -57,7 +58,7 @@ def audit() -> tuple[list[dict], Counter, int]:
     seen = 0
     for path in sorted((ROOT / "datasets" / "generated").glob("*/*.jsonl")):
         family = path.stem
-        if family not in REWRITE_FAMILIES:
+        if family not in REPEAT_FAMILIES:
             continue
         task = path.parent.name
         for line in path.open():
