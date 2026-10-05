@@ -848,14 +848,14 @@ SOURCES = [
                   "Historical Period", "Push Level"],
         # Left on the uniform draw. Diverse selection was measured at exactly
         # zero gain here: `dedup_on` below already deduplicates the pool on
-        # the event payload at tau=0.8, and `distinct_on` caps each event at
+        # the event payload, and `distinct_on` caps each event at
         # one row per push level, so any draw of this size lands ~53 distinct
         # events out of 60 rows and there is nothing left to spread.
         stratify=["Push Level", "Country/Region"], quota=60,
         # Compare the historical event, not the ~100-word instruction wrapped
         # around it: the wrappers are shared templates, so rendered prompts for
         # unrelated events still score ~0.6 against each other.
-        dedup_on="Historical Event", tau=0.8,
+        dedup_on="Historical Event",
         # The two push-level files cover the same events, so on event text alone
         # the neutral and revisionist-pressure variants of a case look identical.
         # The contrast between them is the whole point of the benchmark.

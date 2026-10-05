@@ -770,55 +770,34 @@ class TestTiers(unittest.TestCase):
         self.assertEqual(len(kept), 2)
 
     def test_near_dedup_drops_above_tau_and_keeps_below(self):
-        # 8 shared tokens plus one unique each: 8/10 = 0.8, above tau.
-        shared = "alpha beta gamma delta epsilon zeta eta theta"
-        kept, pairs = prepare.near_dedup(
-            self.rows(f"{shared} first", f"{shared} second"), tau=0.7
-        )
-        self.assertEqual(len(kept), 1)
+        rows = self.rows("first", "second", "third")
+        embeddings = embedded(rows, [(1, 0, 0), (0.95, 0.31, 0), (0, 1, 0)])
+        kept, pairs = prepare.near_dedup(rows, embeddings, tau=0.92)
+        self.assertEqual([row.sample_id for row in kept], ["src:0", "src:2"])
+        self.assertEqual((pairs[0]["kept"], pairs[0]["dropped"]), ("src:0", "src:1"))
+        self.assertGreaterEqual(pairs[0]["similarity"], 0.92)
         self.assertEqual(len(pairs), 1)
-        self.assertGreaterEqual(pairs[0]["similarity"], 0.7)
 
-        # Two shared tokens out of fourteen: well below tau.
-        kept, pairs = prepare.near_dedup(
-            self.rows(f"{shared} first", "alpha beta something wholly unrelated here now"),
-            tau=0.7,
-        )
-        self.assertEqual(len(kept), 2)
-        self.assertEqual(pairs, [])
-
-    def test_token_gate_is_per_pair_not_per_source(self):
-        '''
-        A source mixing short and long texts must not have its long items
-        compared just because the median is short. This is the WMDP bug: packet
-        questions carrying a hex dump collided at 0.98 while differing only in
-        the field asked about.
-        '''
-        # Long pair: near-identical (40 shared tokens, one differing) but both
-        # sit above TOKEN_GATE, so they must never be candidates.
-        long_shared = " ".join(f"word{i}" for i in range(40))
-        long_pair = self.rows(f"{long_shared} alpha", f"{long_shared} beta")
-        # Short pair: 8 shared tokens plus one unique each = 0.8.
-        short_shared = "tiny little phrase here about some other thing"
-        short_pair = self.rows(f"{short_shared} first", f"{short_shared} second")
-
-        kept, _ = prepare.near_dedup(long_pair + short_pair, tau=0.7)
-        long_survivors = [row for row in kept if long_shared in row.query]
-        self.assertEqual(len(long_survivors), 2, "long texts must not be compared")
-        self.assertEqual(len(kept), 3, "the short near-duplicate should still go")
+    def test_pairs_across_a_block_boundary_are_found(self):
+        rows = self.rows("a", "b", "c", "d", "e")
+        embeddings = embedded(rows, [(1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0),
+                                     (0, 0, 0, 1), (1, 0, 0, 0.01)])
+        with mock.patch.object(prepare, "_BLOCK", 2):
+            _, pairs = prepare.near_dedup(rows, embeddings)
+        self.assertEqual([pair["dropped"] for pair in pairs], ["src:4"])
 
     def test_distinct_on_blocks_merging_different_items(self):
-        '''Templated benchmarks vary one term Jaccard weights at 1/N.'''
+        '''Templated benchmarks vary one term; embeddings barely see it either.'''
         rows = [
             make_row(sample_id="src:1", query="Write a pitch for developing X in a community",
                      metadata={"term": "Dichloroethylene"}),
             make_row(sample_id="src:2", query="Write a pitch for developing Y in a community",
                      metadata={"term": "Tetrachloroethane"}),
         ]
-        kept, _ = prepare.near_dedup(rows, tau=0.7)
-        self.assertEqual(len(kept), 1, "identical apart from one token, so merged")
-
-        kept, _ = prepare.near_dedup(rows, tau=0.7, distinct_on=["term"])
+        embeddings = embedded(rows, [(1, 0), (0.99, 0.14)])
+        kept, _ = prepare.near_dedup(rows, embeddings)
+        self.assertEqual(len(kept), 1, "near-identical vectors, so merged")
+        kept, _ = prepare.near_dedup(rows, embeddings, distinct_on=["term"])
         self.assertEqual(len(kept), 2, "different hazards are different items")
 
     def test_mcq_rows_with_different_targets_never_merge(self):
@@ -830,28 +809,32 @@ class TestTiers(unittest.TestCase):
                      query="What is the value of the field beta of the packet",
                      choices=["one", "two"], target="two"),
         ]
-        kept, _ = prepare.near_dedup(rows, tau=0.7)
+        kept, _ = prepare.near_dedup(rows, embedded(rows, [(1, 0), (1, 0)]))
         self.assertEqual(len(kept), 2)
 
     def test_dedup_on_compares_the_payload_not_the_wrapper(self):
         '''PHT's rule: filter the case pool, never the rendered prompt.'''
-        wrapper = (
-            "Write a textbook chapter of about nine hundred words suitable for a high "
-            "school history curriculum, detailing the background, the sequence of "
-            "events, the principal actors involved, and the lasting consequences of "
-        )
         rows = [
-            make_row(sample_id="src:1", query=wrapper + "the first event",
+            make_row(sample_id="src:1", query="Write a chapter on the first event",
                      metadata={"event": "Sino-Vietnamese War (1979)"}),
-            make_row(sample_id="src:2", query=wrapper + "the second event",
+            make_row(sample_id="src:2", query="Write a chapter on the second event",
                      metadata={"event": "1979 Sino-Vietnamese War"}),
         ]
-        kept, _ = prepare.near_dedup(rows, tau=0.8)
-        self.assertEqual(len(kept), 2, "wrappers are long, so nothing is compared")
-
-        kept, pairs = prepare.near_dedup(rows, tau=0.8, dedup_on="event")
+        embeddings = {
+            **embedded(rows, [(1, 0, 0), (0, 1, 0)]),
+            **embedded(rows, [(0, 0, 1), (0.05, 0, 1)], payload=lambda row: row.metadata["event"]),
+        }
+        kept, _ = prepare.near_dedup(rows, embeddings)
+        self.assertEqual(len(kept), 2, "the rendered prompts are far apart")
+        kept, pairs = prepare.near_dedup(rows, embeddings, dedup_on="event")
         self.assertEqual(len(kept), 1)
         self.assertEqual(pairs[0]["kept_text"], "Sino-Vietnamese War (1979)")
+
+    def test_rows_with_an_empty_payload_are_never_duplicates(self):
+        rows = [make_row(sample_id=f"src:{i}", query=f"q{i}", metadata={"event": ""})
+                for i in range(3)]
+        kept, pairs = prepare.near_dedup(rows, {}, dedup_on="event")
+        self.assertEqual((len(kept), pairs), (3, []))
 
 
 class TestCrossSourceDedup(unittest.TestCase):
@@ -1300,7 +1283,10 @@ class TestDeterminism(unittest.TestCase):
 
     def test_same_seed_gives_identical_rows(self):
         risk = next((r for r in RISKS if for_risk(r)), None)
-        first, _, _ = prepare.build_risk(risk, seed=0)
+        try:
+            first, _, _ = prepare.build_risk(risk, seed=0)
+        except prepare.CacheMiss:
+            self.skipTest(f"{risk} caches not built; run prepare.py (it prints the commands)")
         second, _, _ = prepare.build_risk(risk, seed=0)
         self.assertEqual(
             [row.sample_id for row in first], [row.sample_id for row in second]

@@ -382,7 +382,7 @@ class Source:
     dedup: bool = True
     dedup_on: str | None = None      # metadata field to compare instead of `query`
     distinct_on: Sequence[str] = ()  # differing values here => never duplicates
-    tau: float | None = None         # per-source Jaccard threshold
+    tau: float | None = None         # per-source cosine threshold (default COSINE_TAU)
 
     def families_for(self, system_prompt: str | None) -> list[str]:
         '''

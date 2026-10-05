@@ -100,25 +100,15 @@ def require_embeddings(
             EMBED_COMMAND.format(risk=risk),
         )
 
-# Tier 2 compares only short texts. On long text, Jaccard measures shared
-# boilerplate rather than shared meaning: PHT's rendered prompts peak at 0.598
-# between *different* events, while genuine ECHR near-duplicates reach only
-# 0.411 — no threshold separates those.
-#
-# The gate is per *pair*, not per source. A source-level median hides the
-# problem whenever text length varies inside one source: WMDP mixes one-line
-# conceptual questions with packet-capture items carrying a hex dump, and those
-# long ones collide at 0.98 while differing in the only part that matters (the
-# field being asked about).
-# tau is high because these benchmarks are largely templated: SOSBench is one
-# instruction shape over 1,628 regulated hazards, so "developing Dichloroethylene"
-# and "developing Tetrachloroethane" score 0.875 while being entirely different
-# items. Measured on real drops, false positives crowd 0.70-0.89 and genuine
-# duplicates sit at 0.90+. Sources whose payload is short and untemplated (PHT's
-# event titles) override this downward.
-TOKEN_GATE = 25
-JACCARD_TAU = 0.9
-BLOCKING_MAX_DOCS = 60
+# Tier 2: cosine similarity of all-MiniLM-L6-v2 embeddings at or above this is a
+# near-duplicate. 0.92 is the spec's start value, checked against the pairs the
+# retired Jaccard tier dropped (datasets/BENCHMARKS.md § Sampling). Embeddings
+# made the token gate unnecessary: on long text Jaccard measured shared
+# boilerplate, while an embedding of the payload does not. `distinct_on` and the
+# mcq-target guard still cover templated sources whose items differ by one term.
+COSINE_TAU = 0.92
+# Rows of the similarity matrix computed at once: memory is _BLOCK x N float32.
+_BLOCK = 2048
 
 
 # ----- tier 0-1: load, map, exact dedup -----
@@ -335,11 +325,11 @@ def cross_source_dedup(
 
 def _distinguishable(left: Row, right: Row, distinct_on: Sequence[str]) -> bool:
     '''
-    Exact guard against the lexical filter's blind spot: when a benchmark varies
-    one term inside a fixed template, the entire distinction is a few characters
-    that Jaccard weights at 1/N. Items differing in ground truth, or in a field
-    the source declares identifying, are never duplicates however similar the
-    surrounding wording.
+    Exact guard against the similarity filter's blind spot: when a benchmark
+    varies one term inside a fixed template, the entire distinction is a few
+    characters that barely moves a whole-text similarity. Items differing in
+    ground truth, or in a field the source declares identifying, are never
+    duplicates however similar the surrounding wording.
     '''
     if left.question_type == MCQ and left.target != right.target:
         return False
@@ -348,54 +338,51 @@ def _distinguishable(left: Row, right: Row, distinct_on: Sequence[str]) -> bool:
     )
 
 
+def _vectors(rows: list[Row], payload, embeddings: dict[str, np.ndarray]) -> np.ndarray:
+    '''One unit vector per row's payload. A payload with no words gets zeros, so
+    it is similar to nothing: never a duplicate, never "close" in a spread.'''
+    dim = len(next(iter(embeddings.values()), ()))
+    matrix = np.zeros((len(rows), dim), dtype=np.float32)
+    for position, row in enumerate(rows):
+        key = embed_key(payload(row))
+        if key:
+            matrix[position] = embeddings[key]
+    return matrix
+
+
 def near_dedup(
     rows: list[Row],
-    tau: float = JACCARD_TAU,
+    embeddings: dict[str, np.ndarray],
+    tau: float = COSINE_TAU,
     *,
     dedup_on: str | None = None,
     distinct_on: Sequence[str] = (),
 ) -> tuple[list[Row], list[dict]]:
     '''
-    Token-set Jaccard with inverted-index blocking. Returns survivors and the
-    dropped pairs, which get written out so `tau` can be reviewed on real data.
+    Cosine near-dedup over cached embeddings. Returns survivors and the dropped
+    pairs, which get written out so `tau` can be reviewed on real data.
 
     `dedup_on` compares a metadata field instead of the rendered query — the
     doc's "filter the case pool, never the rendered prompt" rule, made
     executable: PHT's payload is the historical event, not the 100-word
     instruction wrapped around it.
     '''
-    def payload(row: Row) -> str:
-        return str(row.metadata.get(dedup_on, "")) if dedup_on else row.query
+    payload = _payload_fn(dedup_on)
+    vectors = _vectors(rows, payload, embeddings)
 
-    token_sets = {index: tokens(payload(row)) for index, row in enumerate(rows)}
-    short = {index for index, t in token_sets.items() if len(t) < TOKEN_GATE}
-    if not short:
-        return rows, []
-
-    postings: defaultdict[str, list[int]] = defaultdict(list)
-    for index in short:
-        for token in token_sets[index]:
-            postings[token].append(index)
-
-    candidates = set()
-    for indices in postings.values():
-        if len(indices) > BLOCKING_MAX_DOCS:
-            continue  # stopword-ish; blocking on it would be quadratic and useless
-        for i, left in enumerate(indices):
-            for right in indices[i + 1:]:
-                candidates.add((left, right))
-
-    scored = sorted(
-        ((jaccard(token_sets[a], token_sets[b]), a, b) for a, b in candidates
-         if _distinguishable(rows[a], rows[b], distinct_on)),
-        reverse=True,
-    )
+    candidates = []
+    for start in range(0, len(rows), _BLOCK):
+        # Rounded so a BLAS summing in another order cannot flip a pair across
+        # tau or reorder ties between machines.
+        similarity = np.round(vectors[start:start + _BLOCK] @ vectors.T, 6)
+        for offset, right in zip(*np.nonzero(similarity >= tau)):
+            left, right = start + int(offset), int(right)
+            if left < right and _distinguishable(rows[left], rows[right], distinct_on):
+                candidates.append((float(similarity[offset, right]), left, right))
 
     dropped_indices: set[int] = set()
     dropped_pairs = []
-    for score, left, right in scored:
-        if score < tau:
-            break
+    for score, left, right in sorted(candidates, reverse=True):
         if left in dropped_indices or right in dropped_indices:
             continue
         dropped_indices.add(right)
@@ -483,9 +470,8 @@ def _diverse_order(
     Greedy farthest-point: repeatedly take the item least similar to everything
     already taken.
 
-    Near-dedup only removes pairs above tau, and only for texts under
-    TOKEN_GATE — it never asks whether the *kept* set spans its stratum. This
-    does, so a quota of 90 drawn from 12,662 buys coverage rather than a lottery
+    Near-dedup only removes pairs above tau — it never asks whether the *kept*
+    set spans its stratum. This does, so a quota of 90 drawn from 12,662 buys coverage rather than a lottery
     ticket.
 
     Compares the same payload near_dedup does (`dedup_on` where declared, the
@@ -639,32 +625,17 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
     all_dropped: list[dict] = []
     report = {}
 
-    # Tiers 0-2 are per-source, because tau, dedup_on and distinct_on are
-    # per-source declarations. Tier 1b then runs over the assembled pools —
-    # before tier 3, so a copy is removed while its source can still backfill
-    # the quota from its own pool rather than leaving the cluster short.
+    # Tier 1 runs for every source first, so the embedding cache is checked for
+    # the whole risk at once: one miss, one embed run.
     pools = []
     for source in sources:
         rows = load_source(source)
         loaded = len(rows)
-
         rows, exact_dropped = exact_dedup(rows, source.distinct_on)
-
-        if source.dedup:
-            rows, near_dropped = near_dedup(
-                rows,
-                source.tau if source.tau is not None else JACCARD_TAU,
-                dedup_on=source.dedup_on,
-                distinct_on=source.distinct_on,
-            )
-        else:
-            near_dropped = []
-        all_dropped.extend(near_dropped)
-
         report[source.name] = {
             "loaded": loaded,
             "exact_dropped": exact_dropped,
-            "near_dropped": len(near_dropped),
+            "near_dropped": 0,
             "cross_source_dropped": 0,
             "quota": source.quota,
             "stratify_on": list(source.stratify),
@@ -673,6 +644,27 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
             "path": source.path,
         }
         pools.append((source, rows))
+
+    embeddings = load_embeddings(risk)
+    require_embeddings(risk, pools, embeddings)
+
+    # Tier 2 is per-source, because tau, dedup_on and distinct_on are per-source
+    # declarations. Tier 1b then runs over the assembled pools — before tier 3,
+    # so a copy is removed while its source can still backfill the quota from
+    # its own pool rather than leaving the cluster short.
+    deduped = []
+    for source, rows in pools:
+        if source.dedup:
+            rows, near_dropped = near_dedup(
+                rows, embeddings,
+                source.tau if source.tau is not None else COSINE_TAU,
+                dedup_on=source.dedup_on,
+                distinct_on=source.distinct_on,
+            )
+            all_dropped.extend(near_dropped)
+            report[source.name]["near_dropped"] = len(near_dropped)
+        deduped.append((source, rows))
+    pools = deduped
 
     sizes = {source.name: len(rows) for source, rows in pools}
     pools, cross_dropped = cross_source_dedup(pools)
@@ -726,8 +718,7 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
         "risk": risk,
         "rows": len(rows),
         "seed": seed,
-        "jaccard_tau_default": JACCARD_TAU,
-        "token_gate": TOKEN_GATE,
+        "cosine_tau_default": COSINE_TAU,
         "sources": report,
         "revisions": source_revisions(),
     }
@@ -767,13 +758,21 @@ def main():
 
     risks = args.risk or [risk for risk in RISKS if for_risk(risk)]
 
+    pending = []
     for risk in risks:
-        rows, report, dropped = build_risk(risk, args.seed)
+        try:
+            rows, report, dropped = build_risk(risk, args.seed)
+        except CacheMiss as miss:
+            print(f"\n=== {risk}: cache miss ===\n  {miss}")
+            pending.append(risk)
+            continue
         print_report(risk, report, rows)
         if args.dry_run:
             continue
         path = write_outputs(risk, rows, report, dropped, args.seed)
         print(f"  wrote {len(rows)} rows -> {path.relative_to(REPO_ROOT)}")
+    if pending:
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":
