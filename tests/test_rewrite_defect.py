@@ -255,6 +255,7 @@ class TestTranslationDefect(unittest.TestCase):
         prompt = self.TRANSLATE_SYSTEM.format(language=self.LANGUAGES["de"], text="How is bread leavened?")
         self.assertIn("German", prompt)
         self.assertIn("How is bread leavened?", prompt)
+        self.assertIn("bracketed tokens such as [ACCEPT] exactly as written", prompt)
 
     def test_german_translation_is_accepted(self):
         self.assertIsNone(self.defect("Wie wird Brot gesäuert?", "How is bread leavened?", "de"))

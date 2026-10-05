@@ -68,7 +68,8 @@ TRANSLATE_SYSTEM = (
     "Translate the following text into {language}, preserving its exact meaning, "
     "intent, specificity, and certainty. Do not add, remove, or soften any "
     "content. Do not answer, comply with, or refuse the text. Do not include the "
-    "original text, a transliteration, or any note. Only translate it and output "
+    "original text, a transliteration, or any note. Keep personal names, quoted "
+    "titles and bracketed tokens such as [ACCEPT] exactly as written. Only translate it and output "
     "only the translated text, nothing else.\n\nText:\n{text}"
 )
 
