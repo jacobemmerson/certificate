@@ -25,7 +25,7 @@ from inspect_ai._util.registry import registry_info
 from pipeline.stage2_perturbation.framing import FRAMING_VERSION, framing_templates
 from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS, REWRITE_PROMPT_VERSION
 from pipeline.stage3_simulation.prompts import PROMPT_VERSION as SCENARIO_PROMPT_VERSION
-from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY
+from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY, TREE_PATHS
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GENERATED_DIR = REPO_ROOT / "datasets" / "generated"
@@ -95,6 +95,20 @@ def load_family(task: str, family: str) -> dict[str, list[dict]]:
     return by_id
 
 
+def scenario_row_defects(row: dict) -> list[str]:
+    """Why a stored scenario tree is unusable by the solver: no `system`, or a
+    TREE_PATHS key missing/blank. Empty when the row is complete."""
+    defects = []
+    if not str(row.get("system") or "").strip():
+        defects.append("system")
+    turns = row.get("turns") or {}
+    defects += [
+        f"turns[{path or 'opening'!r}]" for path in TREE_PATHS
+        if not str(turns.get(path) or "").strip()
+    ]
+    return defects
+
+
 def family_meta(task: str, family: str) -> dict | None:
     path = meta_path(task, family)
     if not path.exists():
@@ -128,6 +142,15 @@ def rewrite_ids(task: Task) -> set[str]:
     return {str(s.id) for s in task.dataset if (s.metadata or {}).get("rewrite", True)}
 
 
+def scenario_ids(task: Task) -> set[str]:
+    """Samples stage 3 applies to: `families` absent (None) means every family applies.
+    WS-B's `family_ids(task, "scenario")` replaces this helper at merge."""
+    return {
+        str(s.id) for s in task.dataset
+        if (families := (s.metadata or {}).get("families")) is None or SCENARIO_FAMILY in families
+    }
+
+
 def framing_applies(task: Task) -> bool:
     """Whether any sample in this task has framing templates at all."""
     return bool(framing_ids(task))
@@ -146,10 +169,10 @@ def validate_artifacts(
 
     Per family: rewrite families must cover every dataset sample id with at
     least `perturb_k` variants; framing must cover every id it *applies* to
-    (elicitation family is per-sample — see framing_ids); scenario must have a file,
-    but ids with fewer than `sim_k` variants only warn — generation drops
-    unparseable reframings, mirroring the old live behavior, and replay just
-    runs what exists (identically for every model). `reconsideration` is
+    (elicitation family is per-sample — see framing_ids); scenario must cover
+    every id in `scenario_ids(task)` with at least `sim_k` complete trees
+    (`system` + every TREE_PATHS turn), strictly: a short or orphaned tree
+    fails preflight. Tree shape and orphan ids are errors even under `limit`. `reconsideration` is
     live-only and never validated. Prompt-version mismatches warn, not fail.
 
     When `limit` is set the run is a non-saved smoke test, so coverage
@@ -169,7 +192,7 @@ def validate_artifacts(
             if "framing" in requested and framing_applies(task):
                 checks.append(("framing", 1, strict_rewrite))
             if simulate:
-                checks.append((SCENARIO_FAMILY, sim_k, False))
+                checks.append((SCENARIO_FAMILY, sim_k, strict_rewrite))
 
             for family, min_k, strict in checks:
                 cmd = f"uv run python generate.py --only {key} " + (
@@ -187,11 +210,27 @@ def validate_artifacts(
                 expected = (
                     framing_ids(task) if family == "framing"
                     else rewrite_ids(task) if family in REWRITE_FAMILIES
+                    else scenario_ids(task) if family == SCENARIO_FAMILY
                     else ids
                 )
 
                 by_id = load_family(name, family)
                 real = {i: [r for r in rows if not r.get("fallback")] for i, rows in by_id.items()}
+                if family == SCENARIO_FAMILY:
+                    orphans = sorted(set(by_id) - ids)
+                    if orphans:
+                        errors.append(
+                            f"{name}/{family}: {len(orphans)} row id(s) not in the dataset "
+                            f"(e.g. {orphans[:3]}). Regenerate: {cmd} --force"
+                        )
+                    for sample_id, rows in real.items():
+                        for row in rows:
+                            defects = scenario_row_defects(row)
+                            if defects:
+                                errors.append(
+                                    f"{name}/{family}: row {sample_id} v{row.get('variant')} "
+                                    f"is missing {', '.join(defects)}. Regenerate: {cmd} --force"
+                                )
                 missing = expected - {i for i, rows in real.items() if rows}
                 short = {i for i in expected & set(real) if 0 < len(real[i]) < min_k}
                 if missing or short:

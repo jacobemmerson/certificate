@@ -27,6 +27,7 @@ from pipeline.artifacts import (
 from pipeline.generation import SampleView, generate_framing
 from pipeline.stage2_perturbation.adapters import ITEM, elicitation_family, item_text, render
 from pipeline.stage2_perturbation.framing import FRAMING_TEMPLATES
+from pipeline.stage3_simulation.prompts import TREE_PATHS
 
 
 def rewrite_rows(ids, family: str = "paraphrase", k: int = 1) -> list[dict]:
@@ -148,12 +149,6 @@ class TestValidateArtifacts(ArtifactStoreTestCase):
     def test_reconsideration_is_live_only_and_never_validated(self):
         validate_artifacts(self.benchmarks, families=["reconsideration"], simulate=False)
 
-    def test_incomplete_scenario_warns_but_passes(self):
-        # scenario coverage gaps mirror dropped reframings: warn, don't fail
-        rows = rewrite_rows(self.ids[1:], "scenario")
-        write_family(self.name, "scenario", rows, meta={"prompt_version": "1"})
-        validate_artifacts(self.benchmarks, families=None, simulate=True)
-
     def test_rewrite_ids_skip_rows_that_declare_no_rewrite(self):
         task = fixture_task()
         ids = [str(s.id) for s in task.dataset]
@@ -178,6 +173,82 @@ class TestValidateArtifacts(ArtifactStoreTestCase):
             name="all_generic",
         )
         self.assertFalse(artifacts.framing_applies(generic))
+
+
+def tree_rows(ids, k: int = 1, drop_path: str | None = None, blank_path: str | None = None) -> list[dict]:
+    turns = {p: f"turn {p or 'opening'}" for p in TREE_PATHS}
+    if drop_path is not None:
+        turns.pop(drop_path)
+    if blank_path is not None:
+        turns[blank_path] = "  "
+    return [
+        {"id": i, "variant": v, "condition": f"scenario_variant_{v}", "system": "S",
+         "turns": dict(turns), "query": turns.get("", "")}
+        for i in ids for v in range(1, k + 1)
+    ]
+
+
+class TestValidateScenario(ArtifactStoreTestCase):
+    def setUp(self):
+        super().setUp()
+        for sample in self.task.dataset:
+            sample.metadata["families"] = ["paraphrase", "scenario"]
+
+    def test_complete_tree_passes(self):
+        write_family(self.name, "scenario", tree_rows(self.ids, k=2), meta={"prompt_version": "4"})
+        validate_artifacts(self.benchmarks, families=None, simulate=True, sim_k=2)
+
+    def test_missing_id_fails_strictly(self):
+        write_family(self.name, "scenario", tree_rows(self.ids[1:]), meta={})
+        with self.assertRaises(FileNotFoundError) as ctx:
+            validate_artifacts(self.benchmarks, families=None, simulate=True, sim_k=1)
+        self.assertIn("1 sample(s) missing", str(ctx.exception))
+        self.assertIn("--simulate", str(ctx.exception))
+
+    def test_fewer_than_sim_k_variants_fails(self):
+        write_family(self.name, "scenario", tree_rows(self.ids, k=1), meta={})
+        with self.assertRaises(FileNotFoundError) as ctx:
+            validate_artifacts(self.benchmarks, families=None, simulate=True, sim_k=2)
+        self.assertIn("fewer than 2", str(ctx.exception))
+
+    def test_missing_turn_path_fails_naming_it(self):
+        write_family(self.name, "scenario", tree_rows(self.ids, drop_path="hedge/refuse"), meta={})
+        with self.assertRaises(FileNotFoundError) as ctx:
+            validate_artifacts(self.benchmarks, families=None, simulate=True, sim_k=1)
+        self.assertIn("hedge/refuse", str(ctx.exception))
+
+    def test_blank_turn_fails(self):
+        write_family(self.name, "scenario", tree_rows(self.ids, blank_path="refuse"), meta={})
+        with self.assertRaises(FileNotFoundError):
+            validate_artifacts(self.benchmarks, families=None, simulate=True, sim_k=1)
+
+    def test_missing_system_fails(self):
+        rows = tree_rows(self.ids)
+        del rows[0]["system"]
+        write_family(self.name, "scenario", rows, meta={})
+        with self.assertRaises(FileNotFoundError) as ctx:
+            validate_artifacts(self.benchmarks, families=None, simulate=True, sim_k=1)
+        self.assertIn("system", str(ctx.exception))
+
+    def test_only_scenario_applicable_ids_are_expected(self):
+        self.task.dataset[0].metadata["families"] = ["paraphrase"]
+        write_family(self.name, "scenario", tree_rows(self.ids[1:]), meta={})
+        validate_artifacts(self.benchmarks, families=None, simulate=True, sim_k=1)  # must not raise
+
+    def test_orphan_ids_fail(self):
+        # the 51-orphan bug: rows for ids not in the dataset must fail preflight
+        write_family(self.name, "scenario", tree_rows(self.ids + ["ghost"]), meta={})
+        with self.assertRaises(FileNotFoundError) as ctx:
+            validate_artifacts(self.benchmarks, families=None, simulate=True, sim_k=1)
+        self.assertIn("ghost", str(ctx.exception))
+
+    def test_limit_relaxes_coverage_but_not_shape(self):
+        write_family(self.name, "scenario", tree_rows(self.ids[1:], drop_path="hedge"), meta={})
+        with self.assertRaises(FileNotFoundError) as ctx:
+            validate_artifacts(self.benchmarks, families=None, simulate=True, sim_k=1, limit=2)
+        self.assertIn("hedge", str(ctx.exception))
+        write_family(self.name, "scenario", tree_rows(self.ids[1:]), meta={})
+        validate_artifacts(self.benchmarks, families=None, simulate=True, sim_k=1, limit=2)  # warns only
 
 
 class TestPerturbationSplit(unittest.TestCase):
