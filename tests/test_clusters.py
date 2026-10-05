@@ -13,9 +13,12 @@ Run: uv run python3 -m unittest discover tests
 
 import csv
 import json
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+import numpy as np
 import pandas as pd
 
 from datasets.prepare.cluster import prepare
@@ -104,6 +107,16 @@ def make_row(**overrides) -> Row:
     if "item_text" not in overrides and not row.item_text:
         row.item_text = row.query
     return row
+
+
+def unit(*values) -> np.ndarray:
+    vector = np.array(values, dtype=np.float32)
+    return vector / np.linalg.norm(vector)
+
+
+def embedded(rows: list[Row], vectors, payload=lambda row: row.query) -> dict:
+    '''A fake embedding cache: one given vector per row, keyed as prepare keys it.'''
+    return {prepare.embed_key(payload(row)): unit(*vector) for row, vector in zip(rows, vectors)}
 
 
 class TestPolarity(unittest.TestCase):
@@ -673,6 +686,72 @@ class TestTextHelpers(unittest.TestCase):
         self.assertEqual(jaccard(tokens("a b c"), tokens("a b c")), 1.0)
         self.assertEqual(jaccard(tokens("a b"), tokens("c d")), 0.0)
         self.assertEqual(jaccard(frozenset(), tokens("a")), 0.0)
+
+
+class TestEmbeddingCache(unittest.TestCase):
+
+    def source(self, **overrides) -> Source:
+        return Source(**{"name": "src", "risk": "cbrn", "question_type": GRADED,
+                         "path": "unused", **overrides})
+
+    def test_texts_that_normalise_identically_share_one_key(self):
+        self.assertEqual(prepare.embed_key("Sino-Vietnamese War (1979)"),
+                         prepare.embed_key("sino vietnamese war 1979"))
+        self.assertIsNone(prepare.embed_key(" -- "))
+
+    def test_cache_miss_writes_input_and_names_the_command(self):
+        rows = [make_row(sample_id="src:1", query="Alpha, beta?"),
+                make_row(sample_id="src:2", query="alpha beta"),
+                make_row(sample_id="src:3", query="gamma")]
+        known = {prepare.embed_key("gamma"): unit(1, 0)}
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            with self.assertRaises(prepare.CacheMiss) as raised:
+                prepare.require_embeddings("cbrn", [(self.source(), rows)], known)
+            lines = (Path(tmp) / "cbrn.embed_input.jsonl").read_text().splitlines()
+        self.assertEqual([json.loads(line) for line in lines],
+                         [{"key": prepare.embed_key("alpha beta"), "text": "alpha beta"}])
+        self.assertIn("--no-project", str(raised.exception))
+        self.assertIn("scripts/embed_items.py --risk cbrn", str(raised.exception))
+
+    def test_nothing_missing_writes_nothing(self):
+        rows = [make_row(query="gamma")]
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            prepare.require_embeddings("cbrn", [(self.source(), rows)], embedded(rows, [(1, 0)]))
+            self.assertEqual(list(Path(tmp).iterdir()), [])
+
+    def test_an_empty_payload_needs_no_embedding(self):
+        rows = [make_row(query="anything", metadata={"event": ""})]
+        prepare.require_embeddings("cbrn", [(self.source(dedup_on="event"), rows)], {})
+
+    def test_load_embeddings_renormalises_and_tolerates_absence(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            self.assertEqual(prepare.load_embeddings("cbrn"), {})
+            (Path(tmp) / "embeddings").mkdir()
+            np.savez(Path(tmp) / "embeddings" / "cbrn.npz", keys=np.array(["a"]),
+                     vectors=np.array([[3, 4]], dtype=np.float16), model=np.array("m"))
+            loaded = prepare.load_embeddings("cbrn")
+        np.testing.assert_allclose(loaded["a"], [0.6, 0.8], atol=1e-3)
+
+    def test_embed_script_encodes_only_missing_keys(self):
+        from scripts import embed_items
+        self.assertEqual(embed_items.MODEL, prepare.EMBEDDING_MODEL)
+        calls = []
+
+        def encode(texts):
+            calls.append(list(texts))
+            return [[3.0, 4.0]] * len(texts)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = Path(tmp)
+            (cache / "cbrn.embed_input.jsonl").write_text(
+                '{"key": "a", "text": "alpha"}\n{"key": "b", "text": "beta"}\n'
+            )
+            self.assertEqual(embed_items.embed("cbrn", encode, cache), 2)
+            self.assertEqual(embed_items.embed("cbrn", encode, cache), 0)
+            with mock.patch.object(prepare, "CACHE_DIR", cache):
+                loaded = prepare.load_embeddings("cbrn")
+        self.assertEqual(calls, [["alpha", "beta"]])
+        self.assertEqual(sorted(loaded), ["a", "b"])
 
 
 class TestTiers(unittest.TestCase):

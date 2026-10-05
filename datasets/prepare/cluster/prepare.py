@@ -23,6 +23,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Sequence
 
+import numpy as np
 import pandas as pd
 
 from . import readers
@@ -33,6 +34,71 @@ from .sources import RISKS, for_risk
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 OUT_DIR = REPO_ROOT / "datasets" / "public"
+CACHE_DIR = REPO_ROOT / "datasets" / "cache"
+
+# Kept equal to scripts/embed_items.py::MODEL (tests/test_clusters.py checks).
+EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+EMBED_COMMAND = (
+    "uv run --no-project --with sentence-transformers --with numpy "
+    "python scripts/embed_items.py --risk {risk}"
+)
+
+
+class CacheMiss(Exception):
+    '''A cache prepare.py reads lacks entries. The message says what to run.'''
+
+
+def _cache_miss(path: Path, records: list[dict], *commands: str) -> CacheMiss:
+    '''Write what the cache lacks to `path` and build the error naming the fix.'''
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        for record in records:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return CacheMiss(f"{len(records)} missing -> {path}\n  run: " + "\n   or: ".join(commands))
+
+
+def embed_key(text: str) -> str | None:
+    '''
+    Cache key of a payload's embedding: blake2b-16 of its normalised text, which
+    is also the text embedded (all-MiniLM-L6-v2 is uncased, so folding case and
+    punctuation loses nothing). Payloads that normalise identically therefore
+    share one vector by construction. None for a payload with no words: there
+    is nothing to embed, and it is never anyone's duplicate.
+    '''
+    text = normalised(text)
+    return hashlib.blake2b(text.encode(), digest_size=16).hexdigest() if text else None
+
+
+def load_embeddings(risk: str) -> dict[str, np.ndarray]:
+    '''key -> unit float32 vector from datasets/cache/embeddings/<risk>.npz; {} if absent.'''
+    path = CACHE_DIR / "embeddings" / f"{risk}.npz"
+    if not path.exists():
+        return {}
+    with np.load(path) as data:
+        keys = data["keys"].tolist()
+        vectors = data["vectors"].astype(np.float32)
+    # Stored as float16, so re-normalise rather than trust the rounding.
+    vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+    return dict(zip(keys, vectors))
+
+
+def require_embeddings(
+    risk: str, pools: list[tuple[Source, list[Row]]], embeddings: dict
+) -> None:
+    '''Raise CacheMiss, after writing the embed input, if any payload lacks a vector.'''
+    missing = {}
+    for source, rows in pools:
+        payload = _payload_fn(source.dedup_on)
+        for row in rows:
+            key = embed_key(payload(row))
+            if key and key not in embeddings:
+                missing[key] = normalised(payload(row))
+    if missing:
+        raise _cache_miss(
+            CACHE_DIR / f"{risk}.embed_input.jsonl",
+            [{"key": key, "text": text} for key, text in sorted(missing.items())],
+            EMBED_COMMAND.format(risk=risk),
+        )
 
 # Tier 2 compares only short texts. On long text, Jaccard measures shared
 # boilerplate rather than shared meaning: PHT's rendered prompts peak at 0.598
@@ -428,7 +494,7 @@ def _diverse_order(
     boilerplate. The first pick comes from `_stable_order` so the whole walk is
     deterministic without being tied to input order.
     '''
-    payload = _payload_fn(source)
+    payload = _payload_fn(source.dedup_on)
     token_sets = {index: tokens(payload(rows[index])) for index in indices}
 
     first = _stable_order(rows, indices, seed)[0]
@@ -462,10 +528,10 @@ def key_bytes(row: Row, seed: int) -> bytes:
     ).digest()
 
 
-def _payload_fn(source: Source):
+def _payload_fn(dedup_on: str | None):
     '''The text that identifies an item — near_dedup's rule, reused.'''
-    if source.dedup_on:
-        return lambda row: str(row.metadata.get(source.dedup_on, ""))
+    if dedup_on:
+        return lambda row: str(row.metadata.get(dedup_on, ""))
     return lambda row: row.query
 
 
