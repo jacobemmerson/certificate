@@ -143,11 +143,9 @@ def parse():
     args.add_argument(
         "--perturb", required=False, nargs="+", default=sorted(ALL_PERTURB_FAMILIES), choices=sorted(ALL_PERTURB_FAMILIES),
         metavar="FAMILY",
-        help="Run surface-perturbation reliability auditing (see pipeline/stage2_perturbation/) for these families "
-             "(e.g. --perturb paraphrase reconsideration) on top of every benchmark in --only "
-             "(or all benchmarks if --only is omitted). Default: every family. "
-             "Replays the pregenerated "
-             "variants from datasets/generated/ (run generate.py first); reconsideration runs live."
+        help="Run surface-perturbation auditing for these families (paraphrase register past_tense "
+             "multilingual framing persona reconsideration; default: all). Replays datasets/generated/ "
+             "(run generate.py first); reconsideration runs live."
     )
     args.add_argument(
         "--no-perturb", required=False, action='store_true',

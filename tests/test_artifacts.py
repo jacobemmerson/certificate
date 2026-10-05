@@ -352,5 +352,21 @@ class TestFidelityAuditRoster(unittest.TestCase):
                                         "turns": {"": "opening"}})
         self.assertIn("opening", prompt)
 
+class TestPromptVersionsAndCli(unittest.TestCase):
+    def test_prompt_versions_contract(self):
+        from pipeline.stage3_simulation.prompts import PROMPT_VERSION as SCENARIO_VERSION
+        self.assertEqual(artifacts.PROMPT_VERSIONS, {
+            "paraphrase": "3", "register": "3", "past_tense": "3", "multilingual": "3",
+            "framing": "3", "persona": "1", "scenario": SCENARIO_VERSION,
+        })
+
+    def test_perturb_choices(self):
+        from pipeline.registry import ALL_PERTURB_FAMILIES, PREGENERATED_FAMILIES
+        self.assertEqual(ALL_PERTURB_FAMILIES, {
+            "paraphrase", "register", "past_tense", "multilingual", "framing", "persona", "reconsideration",
+        })
+        self.assertEqual(PREGENERATED_FAMILIES, ALL_PERTURB_FAMILIES - {"reconsideration"})
+
+
 if __name__ == "__main__":
     unittest.main()
