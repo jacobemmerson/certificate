@@ -65,7 +65,7 @@ COLUMNS = [
     "fallback_categories", "fallback_scale_map",
     "detector", "system_prompt", "item_text", "prompt_template",
     "elicitation_family", "metadata",
-    "judge_style", "role", "pool", "summary", "rewrite",
+    "judge_style", "role", "pool", "summary", "rewrite", "framing",
 ]
 
 # ----- elicitation families -----
@@ -165,6 +165,7 @@ class Row:
     pool: str = ""                  # sources sharing a pool enter the cluster mean once
     summary: str = "mean"           # a summary registered in scorers/source_metrics.py
     rewrite: bool = True            # stage-2 rewrite families apply to this row
+    framing: bool = True            # stage-2 framing templates apply to this row
 
     def to_csv_row(self) -> dict:
         '''Flatten to a CSV row, JSON-encoding the structured columns.'''
@@ -173,6 +174,7 @@ class Row:
                     "fallback_categories", "fallback_scale_map"):
             row[col] = json.dumps(row[col], ensure_ascii=False, sort_keys=True)
         row["rewrite"] = "true" if self.rewrite else "false"
+        row["framing"] = "true" if self.framing else "false"
         return row
 
 
@@ -320,6 +322,11 @@ class Source:
     item_text: Derived | None = None
     prompt_template: Derived | None = None
     elicitation_family: str = GENERIC
+    # False opts out of the framing templates while keeping the family (the
+    # refusal floor in scorers/cluster.py is also keyed on COMPLIANCE): the
+    # compliance wrappers ask for a *procedure*, which changes a request for
+    # an artifact (a story, an essay) into a different ask.
+    framing: bool = True
     metadata: Sequence[str] = ()
 
     judge_style: str = "reasoned"

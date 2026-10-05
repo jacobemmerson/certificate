@@ -751,6 +751,43 @@ def persusafety_prompt(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+# A sneaking item is an editing instruction wrapped around a quoted opinion
+# ("Rephrase and check for grammar errors, 'Capital punishment is necessary…'").
+# The instruction is elicitation, not content: the criterion asks whether the
+# model changed the user's meaning *while rephrasing*, so a perturbation that
+# rewords the instruction away leaves the judge scoring a task nobody posed.
+# Splitting it out puts the instruction in prompt_template, beyond a
+# perturbation's reach (adapters.py), and leaves only the opinion rewordable.
+#
+# Matches 109 of the 110 sneaking rows and none of the other 550 darkbench
+# rows; the one that does not match keeps the whole prompt as its item, which
+# is the pre-split behaviour.
+SNEAKING_INSTRUCTION = re.compile(
+    r'^\s*((?:[^"\']*?\b(?:rephrase|rewrite|paraphrase|correct|edit|revise|summari[sz]e)'
+    r'\b[^"\']*?)[:,]\s*)(["“\'].*)$',
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def darkbench_rows(df: pd.DataFrame) -> pd.DataFrame:
+    '''Lift `dark_pattern` out of metadata, and split sneaking's instruction
+    from the statement it wraps.'''
+
+    def split(query: str) -> tuple[str, str]:
+        match = SNEAKING_INSTRUCTION.match(query)
+        if not match:
+            return query, ITEM
+        instruction, statement = match.group(1), match.group(2)
+        return statement.strip(), f"{instruction}{ITEM}"
+
+    parts = df["input"].apply(split)
+    return df.assign(
+        dark_pattern=df["metadata"].apply(lambda m: m["dark_pattern"]),
+        item_text=parts.apply(lambda p: p[0]),
+        prompt_template=parts.apply(lambda p: p[1]),
+    )
+
+
 def mimicry_prompt(df: pd.DataFrame) -> pd.DataFrame:
     '''
     sycophancy-eval stores `prompt` as a message list. Every mimicry row is a
@@ -773,7 +810,7 @@ def mimicry_prompt(df: pd.DataFrame) -> pd.DataFrame:
 SOURCES = [
     Source(
         name="social_harm", risk="manipulation", question_type=GRADED,
-        elicitation_family=COMPLIANCE,
+        elicitation_family=COMPLIANCE, framing=False,
         path="raw/manipulation/SocialHarmBench/socialharmbench.csv",
         reader="csv",
         transform=social_harm_rows,
@@ -789,7 +826,7 @@ SOURCES = [
     ),
     Source(
         name="historical_revisionism", risk="manipulation", question_type=GRADED,
-        elicitation_family=COMPLIANCE,
+        elicitation_family=COMPLIANCE, framing=False,
         path="raw/manipulation/PreservingHistoricalTruth/data/*_prompt*.csv",
         reader="csv",
         transform=revisionism_cases,
@@ -935,10 +972,11 @@ SOURCES = [
     ),
     Source(
         name="darkbench", risk="manipulation", question_type=GRADED,
-        elicitation_family=COMPLIANCE,
+        elicitation_family=COMPLIANCE, framing=False,
         path="raw/manipulation/darkbench/darkbench.jsonl",
         reader="jsonl",
         query="input", id_col="id",
+        item_text="item_text", prompt_template="prompt_template",
         criterion=lambda r: DARK_PATTERN_CRITERIA[r["metadata"]["dark_pattern"]],
         rubric=DARK_PATTERN_RUBRIC,
         categories=YES_NO, scale_map=YES_NO_MAP,
@@ -947,9 +985,7 @@ SOURCES = [
         # redundancy 0.215 -> 0.114 at this quota.
         select="diverse",
         stratify=["dark_pattern"], quota=72,
-        transform=lambda df: df.assign(
-            dark_pattern=df["metadata"].apply(lambda m: m["dark_pattern"])
-        ),
+        transform=darkbench_rows,
     ),
     Source(
         name="persusafety", risk="manipulation", question_type=DETECTION,

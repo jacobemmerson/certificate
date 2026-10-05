@@ -29,7 +29,8 @@ a `@task` orphans its artifact directory — regenerate under the new name.
 
 `framing.jsonl` is only written for benchmarks whose elicitation format has
 framing templates (compliance/judgment/opinion); benchmarks with a generic,
-open-ended elicitation (e.g. `role_model_bias`) have no framing file, by design.
+open-ended elicitation (e.g. `role_model_bias`) or rows that set `framing=false`
+in the cluster CSV (manipulation's generation asks) have no framing rows, by design.
 
 There is no `reconsideration.jsonl`: that family challenges the target's own
 answer, so it can only run live inside `certify.py`.

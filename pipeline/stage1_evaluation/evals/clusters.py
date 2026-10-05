@@ -95,6 +95,7 @@ def _to_sample(row: dict) -> Sample:
             "pool": row.get("pool") or "",
             "summary": row.get("summary") or "mean",
             "rewrite": (row.get("rewrite") or "true") == "true",
+            "framing": (row.get("framing") or "true") == "true",
         },
     )
 

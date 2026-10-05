@@ -30,10 +30,8 @@ from inspect_ai.model import (
     ChatMessageSystem, ChatMessageUser, GenerateConfig, Model, get_model,
 )
 
-from pipeline.stage2_perturbation.adapters import (
-    elicitation_family, item_text, render, scenario_source,
-)
-from pipeline.stage2_perturbation.framing import FRAMING_TEMPLATES
+from pipeline.stage2_perturbation.adapters import item_text, render, scenario_source
+from pipeline.stage2_perturbation.framing import framing_templates
 from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS, _extract_rewrite
 from pipeline.stage3_simulation.prompts import (
     REFRAME_SYS_PROMPT, SCENARIO_FAMILY, parse_reframing, reframe_prompt,
@@ -177,13 +175,13 @@ def generate_framing(samples: list[Sample]) -> list[dict]:
     Elicitation family is a property of the *sample*, not the task — a risk
     cluster mixes all four in one dataset — so samples whose family has no
     templates (elicitation_family="generic", e.g. role_model_bias's open-ended
-    "list role models") are skipped individually rather than disqualifying the
-    whole task.
+    "list role models") or whose row opted out (`framing=false`) are skipped
+    individually rather than disqualifying the whole task.
     """
     rows = []
     for sample in samples:
         view = SampleView.of(sample)
-        templates = FRAMING_TEMPLATES.get(elicitation_family(view))
+        templates = framing_templates(view)
         if not templates:
             continue
         original_text = item_text(view)

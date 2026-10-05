@@ -26,6 +26,7 @@ from pipeline.artifacts import (
 )
 from pipeline.generation import SampleView, generate_framing
 from pipeline.stage2_perturbation.adapters import ITEM, elicitation_family, item_text, render
+from pipeline.stage2_perturbation.framing import FRAMING_TEMPLATES
 
 
 def rewrite_rows(ids, family: str = "paraphrase", k: int = 1) -> list[dict]:
@@ -55,7 +56,7 @@ def fixture_task():
                 metadata={
                     "item_text": f"item {i}",
                     "prompt_template": f"Statement: {ITEM}\nAnswer on the scale:",
-                    "elicitation_family": "opinion",
+                    "elicitation_family": "compliance",
                 },
             )
             for i in range(3)
@@ -168,7 +169,7 @@ class TestValidateArtifacts(ArtifactStoreTestCase):
         validate_artifacts(benchmarks, ["paraphrase"], simulate=False)   # must not raise
 
     def test_framing_not_required_when_no_sample_qualifies(self):
-        # the fixture task's samples are "opinion", so framing IS required...
+        # the fixture task's samples are "compliance", so framing IS required...
         with self.assertRaises(FileNotFoundError):
             validate_artifacts(self.benchmarks, families=["framing"], simulate=False)
         # ...but a task whose every sample is generic is skipped entirely
@@ -216,6 +217,16 @@ class TestGenerateFraming(unittest.TestCase):
         self.assertEqual({r["id"] for r in rows}, {"a"})
         self.assertTrue(all(r["condition"].startswith("framing_") for r in rows))
         self.assertTrue(any("do the thing" in r["query"] for r in rows))
+
+    def test_framing_is_compliance_only(self):
+        # judgment/opinion wrappers changed the ask on acceptability and Likert items
+        self.assertEqual(list(FRAMING_TEMPLATES), ["compliance"])
+
+    def test_a_row_that_opts_out_yields_no_rows_and_no_ids(self):
+        opted_out = Sample(input="write a story", id="a",
+                           metadata={"elicitation_family": "compliance", "framing": False})
+        self.assertEqual(generate_framing([opted_out]), [])
+        self.assertFalse(artifacts.framing_applies(Task(dataset=[opted_out], name="opted_out")))
 
     def test_generic_elicitation_yields_no_rows(self):
         self.assertEqual(generate_framing([Sample(input="x", id="a")]), [])

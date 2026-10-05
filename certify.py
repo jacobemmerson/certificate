@@ -34,6 +34,7 @@ def display_mode() -> str:
     return os.environ.get("INSPECT_DISPLAY") or ("full" if sys.stdout.isatty() else "log")
 from pipeline.artifacts import validate_artifacts
 from pipeline.registry import init_benchmarks, apply_stages, ALL_PERTURB_FAMILIES
+from pipeline.utils.scoring import RESULT_FAMILIES
 from pipeline.utils import results as results_tree
 from pipeline.utils import retry_policy
 from pipeline.utils import routing as provider_routing_api
@@ -141,11 +142,12 @@ def parse():
              "Other existing results are preserved."
     )
     args.add_argument(
-        "--perturb", required=False, nargs="+", default=ALL_PERTURB_FAMILIES, choices=sorted(ALL_PERTURB_FAMILIES),
+        "--perturb", required=False, nargs="+", default=sorted(RESULT_FAMILIES & ALL_PERTURB_FAMILIES), choices=sorted(ALL_PERTURB_FAMILIES),
         metavar="FAMILY",
         help="Run surface-perturbation reliability auditing (see pipeline/stage2_perturbation/) for these families "
              "(e.g. --perturb paraphrase reconsideration) on top of every benchmark in --only "
-             "(or all benchmarks if --only is omitted). All by default. Replays the pregenerated "
+             "(or all benchmarks if --only is omitted). Default: the families the results pool over "
+             "(scoring.RESULT_FAMILIES). Replays the pregenerated "
              "variants from datasets/generated/ (run generate.py first); reconsideration runs live."
     )
     args.add_argument(

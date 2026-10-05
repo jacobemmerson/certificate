@@ -106,3 +106,77 @@ class TestUpdate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPartialScores(TestUpdate):
+    '''
+    A benchmark whose logs errored past fail_on_error is not scored into
+    `scores`, but the samples that did complete still carry judgments. Those
+    land in `partial_scores` so the final scoring step can decide what a
+    provider-blocked sample is worth, instead of the figure being discarded.
+
+    The merge rules that matter: a partial figure must never survive alongside
+    the complete one that replaces it, and a --only rerun must leave other
+    risks' partial figures alone.
+    '''
+
+    def test_a_partial_figure_is_stored_and_kept_out_of_scores(self):
+        rerun = entry("m", {})
+        rerun["partial_scores"] = {"cyber": {"worst": 55.32, "mean": 77.45}}
+        rerun["status"] = {"cyber": {"status": "failed"}}
+
+        certify.update(rerun, [], idx=-1)
+
+        stored = self.written()[0]
+        self.assertEqual(stored["partial_scores"]["cyber"]["worst"], 55.32)
+        self.assertNotIn("cyber", stored["scores"])
+
+    def test_a_rerun_of_one_risk_preserves_other_partial_figures(self):
+        stored = [entry("m", {"manipulation": 70.0})]
+        stored[0]["partial_scores"] = {
+            "cbrn": {"worst": 85.98, "mean": 95.26},
+            "cyber": {"worst": 55.32, "mean": 77.45},
+        }
+        rerun = entry("m", {})
+        rerun["partial_scores"] = {"cbrn": {"worst": 81.0, "mean": 90.0}}
+        rerun["status"] = {"cbrn": {"status": "partial"}}
+
+        certify.update(rerun, stored, idx=0)
+
+        partial = self.written()[0]["partial_scores"]
+        self.assertEqual(partial["cbrn"]["worst"], 81.0, "rerun wins")
+        self.assertEqual(partial["cyber"]["worst"], 55.32, "untouched")
+
+    def test_a_complete_rerun_clears_the_partial_figure_it_replaces(self):
+        '''
+        Otherwise models.json carries two numbers for one benchmark and the
+        stale one — computed over fewer samples — reads as equally current.
+        '''
+        stored = [entry("m", {})]
+        stored[0]["partial_scores"] = {"cbrn": {"worst": 85.98, "mean": 95.26}}
+        rerun = entry("m", {"cbrn": 42.0})
+
+        certify.update(rerun, stored, idx=0)
+
+        written = self.written()[0]
+        self.assertEqual(written["scores"]["cbrn"], 42.0)
+        # The key itself is dropped when nothing partial is left, so that a
+        # rerun does not add an empty one to every model in the file.
+        self.assertNotIn("cbrn", written.get("partial_scores", {}))
+
+    def test_a_demoted_rerun_drops_its_partial_figure_too(self):
+        '''
+        update() already discards a partial rerun over a previously complete
+        result. The partial figure must go with it, or the discarded run
+        reappears under another key.
+        '''
+        stored = [entry("m", {"cbrn": 50.0})]
+        rerun = entry("m", {})
+        rerun["partial_scores"] = {"cbrn": {"worst": 12.0, "mean": 20.0}}
+        rerun["status"] = {"cbrn": {"status": "failed"}}
+
+        certify.update(rerun, stored, idx=0)
+
+        written = self.written()[0]
+        self.assertEqual(written["scores"]["cbrn"], 50.0, "complete result kept")
+        self.assertNotIn("cbrn", written.get("partial_scores", {}))

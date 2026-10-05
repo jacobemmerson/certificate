@@ -50,7 +50,7 @@ benchmark. A risk cluster mixes compliance, judgment, opinion and generic elicit
 a single dataset, so the split has to be per *sample* — and once it is per-sample data,
 the registry has nothing left to hold. Applicability follows the same rule:
 `framing` templates are selected by a sample's own `elicitation_family`, rows whose
-family has no templates (`generic`) are skipped individually by
+family has no templates (`generic`) or that set `framing=false` are skipped individually by
 `generation.py::generate_framing`, and `artifacts.py::framing_ids` scopes coverage
 checks to the subset that applies. See `datasets/BENCHMARKS.md` and
 `datasets/prepare/cluster/schema.py`.

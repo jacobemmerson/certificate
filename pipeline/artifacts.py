@@ -22,8 +22,7 @@ from pathlib import Path
 from inspect_ai import Task
 from inspect_ai._util.registry import registry_info
 
-from pipeline.stage2_perturbation.adapters import elicitation_family
-from pipeline.stage2_perturbation.framing import FRAMING_TEMPLATES, FRAMING_VERSION
+from pipeline.stage2_perturbation.framing import FRAMING_VERSION, framing_templates
 from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS, REWRITE_PROMPT_VERSION
 from pipeline.stage3_simulation.prompts import PROMPT_VERSION as SCENARIO_PROMPT_VERSION
 from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY
@@ -111,14 +110,14 @@ def sample_ids(task: Task) -> list[str]:
 def framing_ids(task: Task) -> set[str]:
     """Sample ids in this task that framing templates actually apply to.
 
-    Elicitation family is per-sample (a cluster mixes several), so framing
-    covers a subset — generate_framing skips the rest, and coverage checks
+    Elicitation family and the `framing` opt-out are per-sample (a cluster
+    mixes several), so framing covers a subset — generate_framing skips the rest, and coverage checks
     must expect the same subset rather than the whole dataset.
     """
     return {
         str(sample.id)
         for sample in task.dataset
-        if FRAMING_TEMPLATES.get(elicitation_family(sample))
+        if framing_templates(sample)
     }
 
 

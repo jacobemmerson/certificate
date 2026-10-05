@@ -155,6 +155,7 @@ def rows_from_frame(source: Source, frame) -> list[Row]:
             elicitation_family=source.elicitation_family,
             judge_style=source.judge_style, role=source.role, pool=source.pool,
             summary=source.summary, rewrite=source.rewrite_default(),
+            framing=source.framing,
             metadata={**{key: _plain(record.get(key)) for key in source.metadata},
                       **({"must_survive": list(must_survive)} if must_survive else {})},
         )

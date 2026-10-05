@@ -487,21 +487,13 @@
         ]
       },
       {
-        "score": 0.8,
-        "base_name": "Gemini 3.7 Flash",
-        "creator": "Google",
+        "score": 0.838,
+        "base_name": "Qwen3.8-Flash-Next",
+        "creator": "Alibaba",
         "variants": [
           {
-            "name": "Gemini 3.7 Flash (high)",
-            "intelligence_index": 56
-          },
-          {
-            "name": "Gemini 3.7 Flash (medium)",
-            "intelligence_index": 53.4
-          },
-          {
-            "name": "Gemini 3.7 Flash (low)",
-            "intelligence_index": 50.9
+            "name": "Qwen3.8-Flash-Next",
+            "intelligence_index": 55.8
           }
         ]
       }
@@ -535,6 +527,18 @@
           {
             "name": "Grok 4.6 (high)",
             "intelligence_index": 60.9
+          },
+          {
+            "name": "Grok 4.6 (xhigh)",
+            "intelligence_index": 60
+          },
+          {
+            "name": "Grok 4.6 (medium)",
+            "intelligence_index": 59
+          },
+          {
+            "name": "Grok 4.6 (low)",
+            "intelligence_index": 51.7
           }
         ]
       },
@@ -647,21 +651,13 @@
         ]
       },
       {
-        "score": 0.9,
-        "base_name": "DeepSeek V4 Pro",
+        "score": 0.979,
+        "base_name": "DeepSeek V4 Flash Vision",
         "creator": "DeepSeek",
         "variants": [
           {
-            "name": "DeepSeek V4 Pro (Reasoning, Max Effort)",
-            "intelligence_index": 45.3
-          },
-          {
-            "name": "DeepSeek V4 Pro (Reasoning, High Effort)",
-            "intelligence_index": 43.7
-          },
-          {
-            "name": "DeepSeek V4 Pro (Non-reasoning)",
-            "intelligence_index": 31.9
+            "name": "DeepSeek V4 Flash Vision (Reasoning, Max Effort)",
+            "intelligence_index": 51.5
           }
         ]
       }
@@ -867,45 +863,129 @@
       }
     ]
   },
-  "muse-spark-1.2": {
-    "name": "Muse Spark 1.1",
-    "company": "Meta",
+  "gpt-5.6-sol": {
+    "name": "GPT 5.6 Sol",
+    "company": "OpenAI",
     "policy": "default",
     "resolved": {
-      "name": "Muse Spark 1.2 (xhigh)",
-      "intelligence_index": 56.8
+      "name": "GPT-5.6 Sol (xhigh)",
+      "intelligence_index": 59
     },
     "candidates": [
       {
         "score": 1.15,
-        "base_name": "Muse Spark 1.2",
-        "creator": "Meta",
+        "base_name": "GPT-5.6 Sol",
+        "creator": "OpenAI",
         "variants": [
           {
-            "name": "Muse Spark 1.2 (xhigh)",
-            "intelligence_index": 56.8
+            "name": "GPT-5.6 Sol (max)",
+            "intelligence_index": 60.9
+          },
+          {
+            "name": "GPT-5.6 Sol (xhigh)",
+            "intelligence_index": 59
+          },
+          {
+            "name": "GPT-5.6 Sol (high)",
+            "intelligence_index": 57.3
+          },
+          {
+            "name": "GPT-5.6 Sol (medium)",
+            "intelligence_index": 55.6
+          },
+          {
+            "name": "GPT-5.6 Sol (low)",
+            "intelligence_index": 50.7
+          },
+          {
+            "name": "GPT-5.6 Sol (Non-reasoning)",
+            "intelligence_index": 41.9
           }
         ]
       },
       {
-        "score": 1.079,
-        "base_name": "Muse Spark 1.1",
-        "creator": "Meta",
+        "score": 0.933,
+        "base_name": "GPT-5.6 Luna",
+        "creator": "OpenAI",
         "variants": [
           {
-            "name": "Muse Spark 1.1 (xhigh)",
-            "intelligence_index": 53.2
+            "name": "GPT-5.6 Luna (max)",
+            "intelligence_index": 52.3
+          },
+          {
+            "name": "GPT-5.6 Luna (xhigh)",
+            "intelligence_index": 50.1
+          },
+          {
+            "name": "GPT-5.6 Luna (high)",
+            "intelligence_index": 47
+          },
+          {
+            "name": "GPT-5.6 Luna (medium)",
+            "intelligence_index": 38.9
+          },
+          {
+            "name": "GPT-5.6 Luna (low)",
+            "intelligence_index": 33.9
+          },
+          {
+            "name": "GPT-5.6 Luna (Non-reasoning)",
+            "intelligence_index": 26.8
           }
         ]
       },
       {
-        "score": 0.983,
-        "base_name": "Muse Spark",
+        "score": 0.877,
+        "base_name": "GPT-5.5 Pro",
+        "creator": "OpenAI",
+        "variants": [
+          {
+            "name": "GPT-5.5 Pro (xhigh)",
+            "intelligence_index": null
+          }
+        ]
+      }
+    ]
+  },
+  "llama-4-maverick": {
+    "name": "Llama 4 Maverick",
+    "company": "Meta",
+    "policy": "default",
+    "resolved": {
+      "name": "Llama 4 Maverick",
+      "intelligence_index": 14.5
+    },
+    "candidates": [
+      {
+        "score": 1.15,
+        "base_name": "Llama 4 Maverick",
         "creator": "Meta",
         "variants": [
           {
-            "name": "Muse Spark",
-            "intelligence_index": 44.3
+            "name": "Llama 4 Maverick",
+            "intelligence_index": 14.5
+          }
+        ]
+      },
+      {
+        "score": 0.771,
+        "base_name": "Llama 4 Scout",
+        "creator": "Meta",
+        "variants": [
+          {
+            "name": "Llama 4 Scout",
+            "intelligence_index": 10.3
+          }
+        ]
+      },
+      {
+        "score": 0.63,
+        "base_name": "Llama 65B",
+        "creator": "Meta",
+        "variants": [
+          {
+            "name": "Llama 65B",
+            "intelligence_index": 1.7
           }
         ]
       }

@@ -91,15 +91,18 @@ which benchmarks it came from. The columns are `Row` in
 | `system_prompt` | optional | sent as a system turn; some benchmarks steer the model deliberately |
 | `item_text` | yes | the part a stage-2 rewrite may reword (defaults to the whole query) |
 | `prompt_template` | yes | that content's place in the prompt, marked `{{ITEM}}` |
-| `elicitation_family` | yes | `compliance` \| `judgment` \| `opinion` \| `generic`; selects framing templates |
+| `elicitation_family` | yes | `compliance` \| `judgment` \| `opinion` \| `generic`; only `compliance` has framing templates (v3), and a source can still opt out with `framing` |
 | `metadata` | yes | JSON blob of native fields, for `grouped()` metrics and stratification |
-| `judge_style`, `role`, `pool`, `summary`, `rewrite` | yes | the per-benchmark facts the pipeline used to hold as name sets |
+| `judge_style`, `role`, `pool`, `summary`, `rewrite`, `framing` | yes | the per-benchmark facts the pipeline used to hold as name sets |
 
 The last row is the source contract proper. `judge_style` says whether the
 original judge reasons or emits a bare label; `role` marks a diagnostic; `pool`
 lets several sources measuring one construct enter the cluster mean once;
 `summary` names an aggregate in `source_metrics.SUMMARIES` when a plain mean is
-wrong; `rewrite=False` says the measured signal is inside the text itself. The
+wrong; `rewrite=False` says the measured signal is inside the text itself;
+`framing=False` keeps a row's `elicitation_family` (the refusal floor is keyed
+on it) but skips the framing templates, for compliance rows that ask for an
+artifact rather than a procedure (see `analysis/third_rater.md` §3). The
 point is that **no source name appears anywhere in `pipeline/`**, which
 `tests/test_source_contract.py` enforces by grepping for them.
 
@@ -626,7 +629,7 @@ visible per-source):
 
 | Benchmark | n (kept/loaded) | Type | Model must produce | Scale | Original evaluation | Ours | Divergence |
 |---|---|---|---|---|---|---|---|
-| `advanced_ai_risk` | 140 / 6,382 | mcq | a letter | matching behaviour 0.0 / declining 1.0 | logprob comparison of `" (A)"` vs `" (B)"` | forced choice, letter match | logprobs unavailable through the router |
+| `advanced_ai_risk` | 140 / 6,299 | mcq | a letter | matching behaviour 0.0 / declining 1.0 | logprob comparison of `" (A)"` vs `" (B)"` | forced choice, letter match | logprobs unavailable through the router |
 
 Seven behaviours x 20, balanced: `power-seeking-inclination`,
 `wealth-seeking-inclination`, `survival-instinct`, `coordinate-itself`,
@@ -746,7 +749,7 @@ of our prompt against that artifact:
 | cyberseceval_mitre | `raw/cyber/PurpleLlama/CybersecurityBenchmarks/benchmark/mitre_benchmark.py` (`PROMPT_JUDGE_RESPONSE_LAYER1`, `LAYER2`); arXiv 2404.13161 | condensed |
 | agentharm | arXiv 2410.09024; `raw/cyber/AgentHarm/benchmark/harmful_behaviors_*.json` grading functions | prompts verbatim; metric adapted |
 | injecagent | `raw/cyber/InjecAgent/src/output_parsing.py::evaluate_output_prompted`; prompts read live from `src/prompts/agent_prompts.py`; arXiv 2403.02691 | verbatim |
-| advanced_ai_risk | `raw/loss_of_control/evals/advanced-ai-risk/README.md`; arXiv 2212.09251 | items verbatim; scoring adapted |
+| advanced_ai_risk | `raw/loss_of_control/evals/advanced-ai-risk/README.md`; arXiv 2212.09251 | items verbatim; unfilled templates and rows a judge found unintelligible are dropped (`sources/loss_of_control_coherence.json`, `scripts/coherence_check.py`); scoring adapted |
 
 ### Drift found by the audit, and fixed
 

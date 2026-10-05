@@ -45,7 +45,9 @@ generations (elicit a belief, then apply pressure), which the one-row-one-prompt
 schema cannot express.
 '''
 
+import json
 import re
+from pathlib import Path
 
 import pandas as pd
 
@@ -99,6 +101,7 @@ CHOICES_HEADER = re.compile(r"\s*Choices:\s*$")
 # would parse into a wrong two-option split, and neither can be repaired without
 # guessing at what was intended.
 GENERATION_ARTIFACT = "<META_START>"
+COHERENCE = Path(__file__).with_name("loss_of_control_coherence.json")
 
 
 def _split_question(question: str) -> dict | None:
@@ -172,8 +175,13 @@ def advanced_ai_risk_rows(df: pd.DataFrame) -> pd.DataFrame:
             continue
         candidates.append({**record, **split})
 
+    # Rows a judge found unintelligible (scripts/coherence_check.py); dropped
+    # here, after enumeration, for the same reason as the placeholder check.
+    coherence = json.loads(COHERENCE.read_text()) if COHERENCE.exists() else {}
     parsed = []
     for position, record in enumerate(candidates):
+        if coherence.get(str(position), {}).get("label") == "incoherent":
+            continue
         letter = str(record["answer_matching_behavior"]).strip()
         target = record["choices"][0 if letter == "(A)" else 1]
         # A few coordinate-itself/coordinate-other-ais items are unfilled

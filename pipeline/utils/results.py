@@ -46,7 +46,7 @@ from inspect_ai.scorer import Score, SampleScore
 from pipeline.stage1_evaluation.scorers.source_metrics import (
     POOL_DERIVED, SUMMARIES, contract, summarise,
 )
-from pipeline.utils.scoring import CONTROL, SCENARIO, is_scored, safety
+from pipeline.utils.scoring import CONTROL, SCENARIO, is_scored, safety, RESULT_FAMILIES
 
 
 def _percent(value: float) -> float:
@@ -318,7 +318,7 @@ def _risk(task: EvalLog) -> dict:
         if (entry := _first_score(sample))
         for family in _by_family(entry[1])
     }
-    scored_families = families - {CONTROL}
+    scored_families = (families - {CONTROL}) & RESULT_FAMILIES
 
     contracts = contract(_sample_scores(task, families, "worst"))
     # Sources that stay visible per-benchmark but are kept out of every layer
