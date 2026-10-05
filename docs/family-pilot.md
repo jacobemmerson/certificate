@@ -20,26 +20,30 @@ Never open `datasets/public/{cbrn,cyber}.csv`, `datasets/generated/{cbrn,cyber}/
 
 1. Red baseline; note the number:
    `uv run python3 -m unittest tests.test_artifacts_current 2>&1 | grep -cE "^(FAIL|ERROR)"`
-2. Deterministic families, locally (attacker is instantiated but never called):
+2. Deterministic families, locally. The attacker is never called but the default one is
+   still constructed, so this may need `OPENROUTER_API_KEY`:
    `uv run python generate.py --perturb framing persona --force`
-   `uv run python3 -m unittest tests.test_artifacts_current -k framing -k persona`
+   (Verified together with everything else in step 6; the artifact test is an expectedFailure until then.)
 3. Slurm smoke run. Reason: on Jul 16 an overnight run wrote 100% fallbacks because vLLM's
    optional deps were missing, and `--missing-only` then skipped those files as complete.
-   Append to the `generate.py` call in `scripts/generate_hermes_slurm.sh`:
+   In `scripts/generate_hermes_slurm.sh`, replace the flags after `--max-connections 32` with
    `--perturb paraphrase register past_tense multilingual --simulate --sim-k 2 --reasoning --only manipulation --limit 5 --force`
-   (WS-A removes the old smoke flags at lines 73-75; check the script.) Then `sbatch scripts/generate_hermes_slurm.sh`.
-   When done read only `tail -n 12 logs/perturbation-gen-hermes-<job>.out` (counts per family)
-   and the `*.meta.json` sidecars: every family needs `usable > 0` and `fallback` well below 100%
-   (`generate.py` exits 1 on a 0%-usable batch). If the server rejects `--reasoning`, drop it and resubmit.
-4. Full run. Drop `--only manipulation --limit 5`; keep `--force` (prompt versions moved, so
-   `--missing-only` would keep stale v1/v2 files):
+   (always pass `--perturb`, or framing/persona are regenerated too, partially). Then `sbatch scripts/generate_hermes_slurm.sh`.
+   Human operator only: `tail -n 12 logs/perturbation-gen-hermes-<job>.out`. Each family line gives
+   total rows and `F fallback(s)`; usable = total - F. Every family needs usable > 0 and F well below
+   the total (`generate.py` exits 1 on a 0%-usable batch). The `*.meta.json` sidecars have no
+   usable/fallback fields. If the server rejects `--reasoning`, drop it and resubmit.
+4. Full run. Drop `--only manipulation --limit 5`; keep `--force` (`--missing-only` never checks
+   prompt_version, so it would keep stale v1/v2 files):
    `--perturb paraphrase register past_tense multilingual --simulate --sim-k 2 --reasoning --force`
    `sbatch scripts/generate_hermes_slurm.sh`. Budget: ~8.3k calls at 32 connections, a few hours.
-   The job requeues on preemption/timeout; after the first complete write of a family, switch
-   `--force` to `--missing-only` so a requeue fills gaps instead of restarting (see script header).
+   Keep `--force`. A requeue reruns sbatch's spooled copy of the script, so edits do not reach it
+   and it restarts from scratch; on interruption, cancel and resubmit with `--only <remaining risks>`.
+   Switch to `--missing-only` only once every file's meta shows the new prompt_version.
 5. Verify:
    - `uv run python3 scripts/audit_variant_fidelity.py --structural` (no `<--` flags above 20%)
-   - `uv run python3 scripts/audit_variant_fidelity.py <scratch-dir> --per 10`, rated by Gemini
+   - `mkdir -p <scratch-dir>` (outside the repo, never opened in a Claude session: it holds row text), then
+     `uv run python3 scripts/audit_variant_fidelity.py <scratch-dir> --per 10`, rated by Gemini
      (anything with completions goes to Gemini, never a Claude agent): same-ask >= 90% per family
    - `cat datasets/generated/*/multilingual.meta.json`: `num_variants == 3 x num_samples`,
      `prompt_version "3"`, `partial false`
@@ -55,7 +59,10 @@ For two models already in `models.json`, per risk cluster, per family:
 
     uv run python certify.py -m MODEL --only RISK --perturb FAMILY --limit 40
     uv run python3 scripts/pilot_family.py FAMILY logs/<model>/*.eval ...
-    uv run python3 scripts/audit_variant_fidelity.py <scratch-dir> --per 10
+    uv run python3 scripts/audit_variant_fidelity.py <scratch-dir> --per 10             # rewrite families
+    uv run python3 scripts/audit_variant_fidelity.py <scratch-dir> --from-logs --per 10  # framing, persona
+
+The pilot over cbrn/cyber logs is human operator only (`logs/**` is off-limits to Claude sessions).
 
 Rule:
 1. Fidelity: same-ask >= 90% on prompt-only pairs. Failing removes the family.
