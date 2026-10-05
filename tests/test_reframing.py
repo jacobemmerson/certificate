@@ -226,6 +226,18 @@ class TestTreeRows(unittest.TestCase):
         self.assertEqual([r["variant"] for r in rows], [2])
         self.assertEqual(len(fake.calls), 1)
 
+    def test_variant_two_differs_from_a_kept_variant_one(self):
+        fake = _FakeAttacker()
+        with mock.patch.object(generation, "get_model", lambda m: fake):
+            asyncio.run(generation.generate_scenarios(
+                [SAMPLE], "attacker", 2, existing={("x:1", 1)},
+                previous_systems={"x:1": "You are Kept Assistant."},
+            ))
+        [call] = fake.calls
+        prompt = _user_turn_of(call)
+        self.assertIn("different deployment", prompt.lower())
+        self.assertIn("You are Kept Assistant.", prompt)
+
 
 class TestTheGuardIsActuallySent(unittest.TestCase):
     def test_scenario_generation_sends_it_as_a_system_turn(self):

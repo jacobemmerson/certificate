@@ -200,6 +200,7 @@ async def generate_scenarios(
     k: int,
     *,
     existing: set[tuple[str, int]] | None = None,
+    previous_systems: dict[str, str] | None = None,
     parse_attempts: int = 3,
     max_connections: int = 20,
     reasoning: bool = False,
@@ -209,9 +210,10 @@ async def generate_scenarios(
     query}` with `query` = the opening turn for the fidelity audit.
 
     Variants of one sample run in order so variant 2 can be told to differ
-    from variant 1's deployment; samples run concurrently. Unparseable trees
-    are re-requested up to `parse_attempts` times; a variant that never
-    parses is dropped and its sample id lands in `incomplete_ids`, with the
+    from variant 1's deployment (`previous_systems`, id → stored variant-1
+    `system`, covers a variant 1 already on disk); samples run concurrently.
+    Unparseable trees are re-requested up to `parse_attempts` times; a variant
+    that never parses is dropped and its sample id lands in `incomplete_ids`, with the
     last parse failure in `reasons` (a systematic attacker/format mismatch
     shows up as one reason repeated across ids).
     """
@@ -250,7 +252,7 @@ async def generate_scenarios(
 
     async def tree_set(sample: Sample) -> list[dict | None]:
         out: list[dict | None] = []
-        previous_system = None
+        previous_system = (previous_systems or {}).get(str(sample.id))
         for variant in range(1, k + 1):
             if (str(sample.id), variant) in existing:
                 continue

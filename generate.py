@@ -238,6 +238,10 @@ if __name__ == "__main__":
                 elif family == SCENARIO_FAMILY:
                     rows, incomplete, reasons = asyncio.run(generate_scenarios(
                         samples, attacker, k, existing=existing,
+                        previous_systems={
+                            r["id"]: r["system"] for r in kept
+                            if r.get("variant") == 1 and not r.get("fallback")
+                        },
                         max_connections=args.max_connections,
                         reasoning=args.reasoning,
                     ))
