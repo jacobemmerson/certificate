@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import subprocess
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -43,6 +44,15 @@ EMBED_COMMAND = (
     "uv run --no-project --with sentence-transformers --with numpy "
     "python scripts/embed_items.py --risk {risk}"
 )
+# Tier 3b: candidates per allotted row sent to the answerability screen. 3.5
+# fills an allotment while Hermes refuses up to ~70% of its candidates; past
+# that the build stops and names the gap (raise this, never shrink the quota).
+SCREEN_FACTOR = 3.5
+SCREEN_COMMANDS = (
+    "sbatch --export=ALL,SCREEN_ONLY=1 scripts/generate_hermes_slurm.sh",
+    "uv run python3 scripts/screen_answerability.py --risk {risk} "
+    "--model openrouter/nousresearch/hermes-4-70b",
+)
 
 
 class CacheMiss(Exception):
@@ -53,6 +63,63 @@ class CacheMiss(Exception):
 class Caches:
     '''What tier 3 reads besides the rows, threaded through as one argument.'''
     embeddings: dict[str, np.ndarray]
+    # screen key -> cache record. None turns the screen off, which only unit
+    # tests do: build_risk always loads it, so no CSV is built unscreened.
+    verdicts: dict[str, dict] | None = None
+    missing: dict[str, dict] = field(default_factory=dict)  # screen inputs still needed
+    refused: list[dict] = field(default_factory=list)       # "screen" tier drop records
+    candidates: int = 0                                      # rows sent through the screen
+
+
+def screen_key(row: Row) -> str:
+    '''The prompt as delivered (system + user), so a verdict survives an id change.'''
+    return hashlib.blake2b(
+        f"{row.system_prompt}\x00{row.query}".encode(), digest_size=16
+    ).hexdigest()
+
+
+def load_screen(risk: str) -> dict[str, dict]:
+    '''key -> record from datasets/cache/screen/<risk>.jsonl (append-only; last wins).'''
+    path = CACHE_DIR / "screen" / f"{risk}.jsonl"
+    if not path.exists():
+        return {}
+    with open(path, encoding="utf-8") as f:
+        return {record["key"]: record for record in map(json.loads, f)}
+
+
+def require_screen(risk: str, caches: Caches) -> None:
+    '''Raise CacheMiss, after writing the screen input, if any candidate lacks a verdict.'''
+    if caches.missing:
+        raise _cache_miss(
+            CACHE_DIR / f"{risk}.screen_input.jsonl",
+            [caches.missing[key] for key in sorted(caches.missing)],
+            *(command.format(risk=risk) for command in SCREEN_COMMANDS),
+        )
+
+
+def _screen(rows: list[Row], pool: list[int], caches: Caches) -> list[int]:
+    '''Drop candidates Hermes refused. One with no verdict yet is kept
+    provisionally and queued; build_risk raises CacheMiss before writing.'''
+    caches.candidates += len(pool)
+    kept = []
+    for index in pool:
+        row = rows[index]
+        key = screen_key(row)
+        record = caches.verdicts.get(key)
+        if record is None:
+            caches.missing[key] = {
+                "key": key, "sample_id": row.sample_id, "question_type": row.question_type,
+                "system_prompt": row.system_prompt, "query": row.query,
+            }
+            kept.append(index)
+        elif record["verdict"] == "refused":
+            caches.refused.append({
+                "tier": "screen", "dropped": row.sample_id,
+                "dropped_text": row.query[:300], "model": record["model"],
+            })
+        else:
+            kept.append(index)
+    return kept
 
 
 def _cache_miss(path: Path, records: list[dict], *commands: str) -> CacheMiss:
@@ -521,6 +588,30 @@ def _take(
     rows: list[Row], indices: list[int], take: int, source: Source, seed: int,
     caches: Caches | None = None,
 ) -> list[int]:
+    '''
+    Fill one stratum's allotment. With the screen on: pre-select SCREEN_FACTOR x
+    the allotment by the source's own selection, drop what Hermes refused, and
+    fill the allotment from the survivors by the same selection. A shortfall is
+    an error while a wider pre-selection could still fill it, and accepted once
+    the pre-selection already covers the whole stratum.
+    '''
+    if caches is None or caches.verdicts is None or not source.screened():
+        return _select(rows, indices, take, source, seed, caches)
+    pool = _select(rows, indices, math.ceil(SCREEN_FACTOR * take), source, seed, caches)
+    kept = _screen(rows, pool, caches)
+    if len(kept) < take and len(pool) < len(indices):
+        raise ValueError(
+            f"{source.name}: the screen kept {len(kept)} of {len(pool)} candidates for an "
+            f"allotment of {take}; short by {take - len(kept)}. Raise SCREEN_FACTOR "
+            f"({SCREEN_FACTOR}) rather than shrink the quota."
+        )
+    return _select(rows, kept, take, source, seed, caches)
+
+
+def _select(
+    rows: list[Row], indices: list[int], take: int, source: Source, seed: int,
+    caches: Caches | None = None,
+) -> list[int]:
     '''Fill one stratum's allotment, by whichever selection the source declares.'''
     if take >= len(indices):
         return list(indices)
@@ -540,11 +631,12 @@ def _row_sample(
     if quota is None or quota >= len(rows):
         if source.select not in (UNIFORM, DIVERSE):
             raise ValueError(f"{source.name}: unknown select mode {source.select!r}")
-        return rows, {"strata": 0, "allocated": len(rows)}
+        chosen = _take(rows, list(range(len(rows))), len(rows), source, seed, caches)
+        return [rows[i] for i in sorted(chosen)], {"strata": 0, "allocated": len(chosen)}
 
     if not source.stratify:
         chosen = _take(rows, list(range(len(rows))), quota, source, seed, caches)
-        return [rows[i] for i in sorted(chosen)], {"strata": 1, "allocated": quota}
+        return [rows[i] for i in sorted(chosen)], {"strata": 1, "allocated": len(chosen)}
 
     keys = [
         tuple(str(row.metadata.get(column, "")) for column in source.stratify)
@@ -668,15 +760,20 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
     sizes = {source.name: len(rows) for source, rows in pools}
     pools, cross_dropped = cross_source_dedup(pools)
     all_dropped.extend(cross_dropped)
-    caches = Caches(embeddings)
-
+    caches = Caches(embeddings, verdicts=load_screen(risk))
     for source, rows in pools:
         report[source.name]["cross_source_dropped"] = sizes[source.name] - len(rows)
+        refused, candidates = len(caches.refused), caches.candidates
         rows, allocation = stratified_sample(rows, source, seed, caches)
         report[source.name]["kept"] = len(rows)
         report[source.name]["strata"] = allocation["strata"]
+        if source.screened():
+            report[source.name]["screen_candidates"] = caches.candidates - candidates
+            report[source.name]["screen_refused"] = len(caches.refused) - refused
         all_rows.extend(rows)
 
+    require_screen(risk, caches)
+    all_dropped.extend(caches.refused)
     return all_rows, report, all_dropped
 
 

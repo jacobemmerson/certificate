@@ -31,6 +31,7 @@ from datasets.prepare.cluster.schema import (
     FAMILIES,
     GRADED,
     ITEM,
+    JUDGMENT,
     LIKERT,
     MCQ,
     OPINION,
@@ -1053,6 +1054,126 @@ class TestSelection(unittest.TestCase):
             prepare.stratified_sample(
                 self.pool(50), self.source(quota=5, select="nonsense"), seed=0
             )
+
+
+class TestScreen(unittest.TestCase):
+    '''Tier 3b: candidates Hermes refuses are dropped and the allotment refilled.'''
+
+    def source(self, quota, **overrides) -> Source:
+        return Source(**{"name": "src", "risk": "cbrn", "question_type": GRADED,
+                         "elicitation_family": COMPLIANCE, "path": "unused",
+                         "quota": quota, **overrides})
+
+    def pool(self, n: int) -> list[Row]:
+        return [make_row(sample_id=f"src:{i}", query=f"request number {i}") for i in range(n)]
+
+    def caches(self, rows, refused=()) -> "prepare.Caches":
+        return prepare.Caches(embeddings={}, verdicts={
+            prepare.screen_key(row): {
+                "verdict": "refused" if row.sample_id in refused else "answered",
+                "model": "test/hermes",
+            }
+            for row in rows
+        })
+
+    def order(self, rows) -> list[str]:
+        return [rows[i].sample_id for i in prepare._stable_order(rows, list(range(len(rows))), 0)]
+
+    def test_default_scope_matches_the_spec(self):
+        self.assertEqual({source.name for source in SOURCES if source.screened()}, {
+            "harmbench", "sosbench", "wmdp", "cysecbench", "cyberseceval_mitre",
+            "agentharm", "advanced_ai_risk", "social_harm", "historical_revisionism",
+            "darkbench",
+        })
+
+    def test_the_flag_overrides_the_default(self):
+        self.assertTrue(self.source(5, question_type=LIKERT, elicitation_family=OPINION,
+                                    screen=True).screened())
+        self.assertFalse(self.source(5, screen=False).screened())
+
+    def test_refused_candidates_are_replaced_from_the_preselection(self):
+        rows = self.pool(20)
+        order = self.order(rows)
+        caches = self.caches(rows, refused=order[:2])
+        kept, _ = prepare.stratified_sample(rows, self.source(4), seed=0, caches=caches)
+        self.assertEqual({row.sample_id for row in kept}, set(order[2:6]))
+        self.assertEqual([record["dropped"] for record in caches.refused], order[:2])
+        self.assertEqual({record["tier"] for record in caches.refused}, {"screen"})
+        self.assertEqual(caches.candidates, 14, "ceil(3.5 x 4)")
+
+    def test_only_preselected_candidates_need_a_verdict(self):
+        rows = self.pool(20)
+        caches = prepare.Caches(embeddings={}, verdicts={})
+        prepare.stratified_sample(rows, self.source(4), seed=0, caches=caches)
+        by_id = {row.sample_id: row for row in rows}
+        self.assertEqual(set(caches.missing),
+                         {prepare.screen_key(by_id[i]) for i in self.order(rows)[:14]})
+
+    def test_a_missing_verdict_writes_the_screen_input(self):
+        rows = self.pool(3)
+        caches = prepare.Caches(embeddings={}, verdicts={})
+        prepare.stratified_sample(rows, self.source(2), seed=0, caches=caches)
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            with self.assertRaises(prepare.CacheMiss) as raised:
+                prepare.require_screen("cbrn", caches)
+            lines = (Path(tmp) / "cbrn.screen_input.jsonl").read_text().splitlines()
+        records = [json.loads(line) for line in lines]
+        self.assertEqual(len(records), 3)
+        self.assertEqual(set(records[0]), {"key", "sample_id", "question_type", "system_prompt", "query"})
+        self.assertIn("SCREEN_ONLY=1", str(raised.exception))
+        self.assertIn("screen_answerability.py --risk cbrn", str(raised.exception))
+
+    def test_a_short_stratum_names_the_source_and_the_gap(self):
+        rows = self.pool(20)
+        caches = self.caches(rows, refused=self.order(rows)[:11])
+        with self.assertRaisesRegex(ValueError, r"src: .*short by 1"):
+            prepare.stratified_sample(rows, self.source(4), seed=0, caches=caches)
+
+    def test_an_exhausted_stratum_keeps_its_survivors(self):
+        rows = (
+            [make_row(sample_id=f"src:a{i}", query=f"small stratum {i}", metadata={"s": "a"})
+             for i in range(2)]
+            + [make_row(sample_id=f"src:b{i}", query=f"large stratum {i}", metadata={"s": "b"})
+               for i in range(20)]
+        )
+        caches = self.caches(rows, refused={"src:a0", "src:a1"})
+        kept, _ = prepare.stratified_sample(rows, self.source(6, stratify=["s"]), seed=0, caches=caches)
+        self.assertEqual({row.metadata["s"] for row in kept}, {"b"})
+        self.assertEqual(len(kept), 5, "stratum a's allotment of 1 is not moved elsewhere")
+
+        unquoted = self.pool(3)
+        kept, _ = prepare.stratified_sample(
+            unquoted, self.source(None), seed=0, caches=self.caches(unquoted, refused={"src:1"}))
+        self.assertEqual([row.sample_id for row in kept], ["src:0", "src:2"])
+
+    def test_grouped_sources_screen_the_leader_only(self):
+        source = self.source(2, name="paired", risk="manipulation", elicitation_family=JUDGMENT,
+                             group_key="scenario_id", screen=True)
+        rows = [make_row(sample_id=f"paired:{g}_{a}", query=f"scenario {g} arm {a}",
+                         metadata={"scenario_id": str(g), "arm": str(a)})
+                for g in range(6) for a in range(3)]
+        leaders = [row for row in rows if row.metadata["arm"] == "0"]
+
+        pending = prepare.Caches(embeddings={}, verdicts={})
+        prepare.stratified_sample(rows, source, seed=0, caches=pending)
+        self.assertEqual(set(pending.missing), {prepare.screen_key(row) for row in leaders})
+
+        kept, _ = prepare.stratified_sample(
+            rows, source, seed=0, caches=self.caches(leaders, refused={"paired:0_0"}))
+        groups = {}
+        for row in kept:
+            groups.setdefault(row.metadata["scenario_id"], set()).add(row.metadata["arm"])
+        self.assertEqual(len(groups), 2)
+        self.assertNotIn("0", groups)
+        self.assertTrue(all(arms == {"0", "1", "2"} for arms in groups.values()))
+
+    def test_an_unscreened_source_ignores_verdicts(self):
+        rows = self.pool(20)
+        source = self.source(4, question_type=LIKERT, elicitation_family=OPINION)
+        plain, _ = prepare.stratified_sample(rows, source, seed=0)
+        everything_refused = self.caches(rows, refused={row.sample_id for row in rows})
+        screened, _ = prepare.stratified_sample(rows, source, seed=0, caches=everything_refused)
+        self.assertEqual(plain, screened)
 
 
 class TestPremiseDependentCriteria(unittest.TestCase):

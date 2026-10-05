@@ -339,6 +339,8 @@ class Source:
     # Stage-2/3 families that apply to this source's rows. None = derive from
     # question_type (families_for).
     families: Sequence[str] | None = None
+    # Hermes answerability screen (prepare.py tier 3b). None = derive (screened).
+    screen: bool | None = None
     # The closing instruction or question. Rendered into prompt_template after
     # the item, so a rewrite can never drop it.
     ask: Derived | None = None
@@ -407,6 +409,19 @@ class Source:
                 "reconsideration", "scenario",
             ]
         return [family for family in declared if not (family == "persona" and system_prompt)]
+
+    def screened(self) -> bool:
+        '''
+        Whether prepare.py drops candidates Hermes refuses: only where a refusal
+        means the item carries no signal, i.e. compliance and generic graded/mcq
+        asks. Not opinion or judgment (the position is the construct), not
+        detection (refusal is the signal for cyber_false_refusal; token and tool
+        contracts elsewhere), not extraction.
+        '''
+        if self.screen is not None:
+            return self.screen
+        return (self.question_type in (GRADED, MCQ)
+                and self.elicitation_family in (COMPLIANCE, GENERIC))
 
     def resolve(self, row: dict, spec: Any) -> Any:
         '''Apply a `Derived` spec against a raw row: call it, or look it up.'''
