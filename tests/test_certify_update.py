@@ -10,6 +10,7 @@ Run: uv run python3 -m unittest discover tests
 '''
 
 import json
+import os
 import runpy
 import sys
 import tempfile
@@ -17,6 +18,12 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
+
+from inspect_ai import Task
+from inspect_ai.dataset import Sample
+from inspect_ai.model._generate_config import active_generate_config, set_active_generate_config
+from inspect_ai.scorer import match
+from inspect_ai.solver import generate
 
 import certify
 from pipeline.utils import graders
@@ -186,6 +193,63 @@ class TestUsage(unittest.TestCase):
         record = certify.check_status([SimpleNamespace(status="success", samples=[], results=None)])
         self.assertEqual(record["usage"], {})
         self.assertIsNone(record["run_id"])
+
+
+def tiny_task(name: str) -> Task:
+    return Task(
+        dataset=[Sample(input="say ok", target="ok", id=f"{name}-{i}") for i in range(2)],
+        solver=generate(), scorer=match(), name=name,
+    )
+
+
+def eval_args(**overrides):
+    base = dict(limit=None, epochs=1, max_connections=4, max_retries=1, attempt_timeout=60,
+                timeout=60, working_limit=60)
+    base.update(overrides)
+    return SimpleNamespace(**base)
+
+
+class TestRunDir(unittest.TestCase):
+
+    def test_default_and_limit_runs_use_their_own_dir(self):
+        self.assertEqual(certify.run_dir("m", "current", None), Path("logs/m/current"))
+        self.assertEqual(certify.run_dir("m", "current", 3), Path("logs/m/current-limit3"))
+
+    def test_move_aside_keeps_the_old_dir_under_a_timestamp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            current = Path(tmp) / "current"
+            current.mkdir()
+            (current / "x.eval").write_text("")
+            moved = certify.move_aside(current)
+            self.assertFalse(current.exists())
+            self.assertTrue(moved.name.startswith("current-"))
+            self.assertTrue((moved / "x.eval").exists())
+            self.assertIsNone(certify.move_aside(current), "nothing to move is not an error")
+
+
+class TestEvalSetResume(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.run = Path(self.tmp.name) / "current"
+        os.environ["INSPECT_DISPLAY"] = "none"
+        # eval_set leaves its GenerateConfig (cache=True) as the process-wide
+        # default, which would serve later mockllm tests cached answers
+        self.addCleanup(set_active_generate_config, active_generate_config())
+
+    def test_second_run_reruns_nothing_and_logs_have_samples(self):
+        first = certify.start_eval([tiny_task("t")], "mockllm/model", {}, self.run, eval_args())
+        second = certify.start_eval([tiny_task("t")], "mockllm/model", {}, self.run, eval_args())
+        self.assertEqual(len(list(self.run.glob("*.eval"))), 1, "no new log on resume")
+        self.assertEqual(first[0].eval.run_id, second[0].eval.run_id)
+        self.assertEqual(len(second[0].samples or []), 2, "reused header was re-read")
+
+    def test_changed_task_in_same_run_dir_exits_with_hint(self):
+        certify.start_eval([tiny_task("t")], "mockllm/model", {}, self.run, eval_args())
+        with self.assertRaises(SystemExit) as ctx:
+            certify.start_eval([tiny_task("other")], "mockllm/model", {}, self.run, eval_args())
+        self.assertIn("--rerun", str(ctx.exception))
 
 
 if __name__ == "__main__":

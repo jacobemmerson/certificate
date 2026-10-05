@@ -16,10 +16,15 @@ exact command otherwise).
 '''
 
 import os
+import shutil
 import sys
 from argparse import ArgumentParser
+from datetime import datetime
+from pathlib import Path
 
-from inspect_ai import eval
+from inspect_ai import eval_set
+from inspect_ai._util.error import PrerequisiteError
+from inspect_ai.log import read_eval_log
 
 
 def display_mode() -> str:
@@ -101,6 +106,77 @@ def provider_routing(
     return routing or None
 
 
+LIMIT_SHUFFLE_SEED = 1
+
+
+def run_dir(model_id: str, run_id: str, limit: int | None) -> Path:
+    '''
+    logs/<model>/<run_id>, or logs/<model>/<run_id>-limitN under --limit: a
+    limit is not part of eval_set's task identity, so a 3-sample success log in
+    `current` would otherwise be reused as the full run's result.
+    '''
+    suffix = f"-limit{limit}" if limit else ""
+    return Path("logs") / model_id / f"{run_id}{suffix}"
+
+
+def move_aside(path: Path) -> Path | None:
+    '''--rerun: keep the old run dir next to the new one under a timestamp.'''
+    if not path.exists():
+        return None
+    target = path.with_name(f"{path.name}-{datetime.now():%Y%m%dT%H%M%S}")
+    shutil.move(str(path), str(target))
+    return target
+
+
+def start_eval(tasks: list, model: str, model_args: dict, log_dir: Path, args) -> list:
+    '''
+    eval_set over one run dir: tasks whose log is already `success` are skipped
+    and unfinished ones re-run only their missing samples, so a preempted or
+    killed run resumes where it stopped. Skipped tasks come back as header-only
+    logs (no samples); the results tree needs samples, so those are re-read.
+    '''
+    try:
+        _, logs = eval_set(
+            tasks,
+            log_dir=str(log_dir),
+            retry_attempts=3,
+            retry_wait=60,
+            model=model,
+            model_args=model_args,
+            continue_on_fail=True,
+            # tolerate scattered sample-level errors (e.g. an unparseable
+            # OpenRouter response that slips past retries) instead of failing
+            # the whole task — only fail if >10% of samples error
+            fail_on_error=0.1,
+            epochs=args.epochs,
+            # a fixed seed, not True: a resumed --limit run must select the
+            # same subset or eval_set discards the previous log
+            sample_shuffle=LIMIT_SHUFFLE_SEED if args.limit else None,
+            limit=args.limit,
+            max_connections=args.max_connections,
+            max_retries=args.max_retries,
+            attempt_timeout=args.attempt_timeout,
+            timeout=args.timeout,
+            working_limit=args.working_limit,
+            display=display_mode(),
+            # Eval-level cache benefits judge/grader calls (the bulk of API
+            # traffic under --perturb) and retries. The replay/reconsideration
+            # solvers opt out explicitly (cache=False in
+            # pipeline/utils/replay.py): their target calls
+            # replay identical prompts across epochs and must stay independent
+            # generations, so inheriting this would collapse them.
+            cache=True,
+        )
+    except PrerequisiteError as exc:
+        raise SystemExit(
+            f"{log_dir} holds logs from a different task configuration (flags, routing or "
+            f"artifacts changed since they were written):\n  {str(exc).splitlines()[0][:200]}\n"
+            "Use --rerun to move the directory aside, or --run-id NAME for a fresh one. "
+            "To finish a specific broken log instead: inspect_ai.eval_retry(<path>)."
+        )
+    return [log if log.samples else read_eval_log(log.location) for log in logs]
+
+
 def parse():
     
     args = ArgumentParser()
@@ -126,7 +202,16 @@ def parse():
         "--epochs", "-e", required=False, type=int, default=1, help="The number of turns to generate a response per sample and average over."
     )
     args.add_argument(
-        "--rerun", required=False, action='store_true', help="Reruns all results regardless of whether they are present in an existing file."
+        "--rerun", required=False, action='store_true',
+        help="Rerun every requested risk even if it already has results, and move the run's "
+             "log directory (logs/MODEL/RUN_ID) aside under a timestamp first, so the resume "
+             "logic cannot pick up its old logs."
+    )
+    args.add_argument(
+        "--run-id", required=False, default="current",
+        help="Name of the log directory under logs/MODEL/ this run writes to and resumes from "
+             "(default: current). A finished task in it is skipped and an unfinished one "
+             "re-runs only its missing samples; a --limit run uses RUN_ID-limitN."
     )
     args.add_argument(
         "--llamaguard", required=False, default="openrouter/meta-llama/llama-guard-4-12b",
@@ -437,7 +522,11 @@ if __name__ == "__main__":
 
     grader = args.grader if args.grader else load_graders()
     model_id = args.model.split("/")[-1]
-    log_dir = f"logs/{model_id}"
+    log_dir = run_dir(model_id, args.run_id, args.limit)
+    if args.rerun:
+        moved = move_aside(log_dir)
+        if moved:
+            print(f"--rerun: moved previous logs to {moved}")
 
     print(f"Model: {model_id}")
     print(f"Grader(s): {grader}")
@@ -544,36 +633,6 @@ if __name__ == "__main__":
             sim_k=args.sim_k if args.simulate else None,
         )
 
-    def start_eval(tasks: list):
-        return eval(
-            tasks,
-            model=args.model,
-            model_args=model_args,
-            log_dir=log_dir,
-            continue_on_fail=True,
-            retry_on_error=2,
-            # tolerate scattered sample-level errors (e.g. an unparseable
-            # OpenRouter response that slips past retries) instead of failing
-            # the whole task — only fail if >10% of samples error
-            fail_on_error=0.1,
-            epochs=args.epochs,
-            sample_shuffle=bool(args.limit),
-            limit=args.limit,
-            max_connections=args.max_connections,
-            max_retries=args.max_retries,
-            attempt_timeout=args.attempt_timeout,
-            timeout=args.timeout,
-            working_limit=args.working_limit,
-            display=display_mode(),
-            # Eval-level cache benefits judge/grader calls (the bulk of API
-            # traffic under --perturb) and retries. The replay/reconsideration
-            # solvers opt out explicitly (cache=False in
-            # pipeline/utils/replay.py): their target calls
-            # replay identical prompts across epochs and must stay independent
-            # generations, so inheriting this would collapse them.
-            cache=True,
-        )
-
     # ----- run -----
     # One eval() over every cluster, not one per cluster in a Python loop.
     # Each cluster is now a single task, so a serial loop would leave the
@@ -587,7 +646,7 @@ if __name__ == "__main__":
 
     all_tasks = [task for entry in BENCHMARKS.values() for task in entry["tasks"]]
     try:
-        logs = start_eval(all_tasks) or []
+        logs = start_eval(all_tasks, args.model, model_args, log_dir, args)
     except Exception as e:
         print(f"[ERROR] evaluation failed: {e}")
         logs = []
@@ -604,7 +663,7 @@ if __name__ == "__main__":
             print(f"[ERROR] {benchmark}: no log produced")
             continue
 
-        statuses[benchmark] = check_status(res, run_id=None)
+        statuses[benchmark] = check_status(res, run_id=args.run_id)
         if statuses[benchmark]['status'] != 'success':
             print(f"[WARNING] {benchmark}: run was {statuses[benchmark]['status']} "
                   f"({statuses[benchmark]['completed_samples']}/{statuses[benchmark]['total_samples']} samples)")
