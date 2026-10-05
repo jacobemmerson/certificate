@@ -19,7 +19,7 @@ independent artifact file.
 Usage:
     uv run python generate.py                          # all families, all clusters
     uv run python generate.py --only cyber --perturb paraphrase framing --perturb-k 1
-    uv run python generate.py --only cyber --simulate --sim-k 1
+    uv run python generate.py --only cyber --simulate --sim-k 2
     uv run python generate.py --missing-only           # fill gaps (e.g. failed reframings)
     uv run python generate.py --force                  # regenerate everything from scratch
 
@@ -106,11 +106,12 @@ def parse():
     )
     args.add_argument(
         "--simulate", required=False, action="store_true",
-        help="Also generate stage-3 scenario reframings (scenario.jsonl)."
+        help="Also generate stage-3 scenario trees (scenario.jsonl, prompt v4)."
     )
     args.add_argument(
-        "--sim-k", required=False, type=int, default=1,
-        help="Reframed scenarios per item under --simulate; default=1."
+        "--sim-k", required=False, type=int, default=2,
+        help="Scenario trees per item under --simulate; default=2. Variant 2 is prompted to use a "
+             "different deployment (role, sector, asker) from variant 1."
     )
     args.add_argument(
         "--reasoning", required=False, action="store_true",
