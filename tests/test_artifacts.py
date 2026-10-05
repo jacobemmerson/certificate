@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import certify
 import pipeline.artifacts as artifacts
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
@@ -243,3 +244,25 @@ class TestGenerateFraming(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestEstimateCalls(ArtifactStoreTestCase):
+    def test_counts_stored_rows_per_family(self):
+        write_family(self.name, "paraphrase", rewrite_rows(self.ids, k=2), meta={})
+        write_family(self.name, "framing",
+                     [{"id": i, "condition": f"framing_{v}", "query": "q"} for i in self.ids[:2] for v in range(2)],
+                     meta={})
+        write_family(self.name, "scenario", rewrite_rows(self.ids, "scenario", k=2), meta={})
+
+        estimate = certify.estimate_calls(
+            self.benchmarks, families=["paraphrase", "framing", "reconsideration"],
+            k=1, sim_k=2, graders=["a", "b"],
+        )["manipulation"]
+
+        # 3 control + 3 paraphrase (k=1 of 2) + 4 framing + 3 reconsideration + 3 ids x 2 scenarios x 3 turns
+        self.assertEqual(estimate, {"samples": 3, "target": 31, "judge": 62, "classifier": 18})
+
+    def test_limit_scales_stored_counts(self):
+        write_family(self.name, "paraphrase", rewrite_rows(self.ids), meta={})
+        estimate = certify.estimate_calls(self.benchmarks, ["paraphrase"], k=1, sim_k=None, graders="a", limit=1)
+        self.assertEqual(estimate["manipulation"], {"samples": 1, "target": 2, "judge": 2, "classifier": 0})

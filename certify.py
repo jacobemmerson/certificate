@@ -35,9 +35,9 @@ def display_mode() -> str:
     stdout is not a real terminal, honouring an explicit INSPECT_DISPLAY override.
     '''
     return os.environ.get("INSPECT_DISPLAY") or ("full" if sys.stdout.isatty() else "log")
-from pipeline.artifacts import validate_artifacts
+from pipeline.artifacts import REWRITE_FAMILIES, load_family, task_name, validate_artifacts
 from pipeline.registry import init_benchmarks, apply_stages, ALL_PERTURB_FAMILIES
-from pipeline.utils.scoring import RESULT_FAMILIES
+from pipeline.utils.scoring import RESULT_FAMILIES, SCENARIO
 from pipeline.utils import results as results_tree
 from pipeline.utils import retry_policy
 from pipeline.utils import routing as provider_routing_api
@@ -103,6 +103,40 @@ def provider_routing(
     if endpoints:
         routing.update(provider_routing_api.cheapest_capable_routing(endpoints))
     return routing or None
+
+
+def estimate_calls(benchmarks, families, k: int, sim_k: int | None, graders, limit: int | None = None) -> dict:
+    '''
+    Upper-bound target / judge / classifier call counts per risk, from the
+    stored artifact rows — printed before any canary call so a 60k-call run is
+    a decision, not a surprise. See docs/superpowers/plans/2026-10-05-ws-e-scale.md Task 6.
+    '''
+    n_graders = len(graders) if isinstance(graders, list) else 1
+    estimate = {}
+    for key, entry in benchmarks.items():
+        for base in entry["tasks"]:
+            size = len(base.dataset)
+            n = size if limit is None else min(limit, size)
+            share = n / size if size else 0.0
+            target, classifier = n, 0
+            for family in families or []:
+                if family == "reconsideration":
+                    target += n
+                    continue
+                rows = load_family(task_name(base), family)
+                stored = sum(
+                    min(k, len([r for r in v if not r.get("fallback")])) if family in REWRITE_FAMILIES else len(v)
+                    for v in rows.values()
+                )
+                target += round(share * stored)
+            if sim_k is not None:
+                turns = 3 * round(share * sum(min(sim_k, len(v)) for v in load_family(task_name(base), SCENARIO).values()))
+                target += turns
+                classifier = turns
+            # ponytail: judge counts every target call x graders; detection rows are
+            # regex-scored, so this is an upper bound — subtract per-source shapes if it matters
+            estimate[key] = {"samples": n, "target": target, "judge": target * n_graders, "classifier": classifier}
+    return estimate
 
 
 LIMIT_SHUFFLE_SEED = 1
@@ -599,12 +633,11 @@ if __name__ == "__main__":
         sys.exit(0)
 
     # Fail fast — before any eval spends money — on the three things that make
-    # a whole run worthless: an unusable judge (every sample errors on scoring,
-    # or worse, silently abstains into a perfect score), a target that answers
-    # with nothing (the same failure one layer up), and missing artifacts.
-    validate_graders(grader)
-    validate_target(args.model, model_args)
-
+    # a whole run worthless: missing artifacts (checked first, offline), an
+    # unusable judge (every sample errors on scoring, or worse, silently
+    # abstains into a perfect score), and a target that answers with nothing
+    # (the same failure one layer up). The call estimate prints before the
+    # two network canaries.
     validate_artifacts(
         BENCHMARKS,
         families=args.perturb if run_perturb else None,
@@ -613,6 +646,23 @@ if __name__ == "__main__":
         sim_k=args.sim_k,
         limit=args.limit,
     )
+
+    estimate = estimate_calls(
+        BENCHMARKS,
+        families=args.perturb if run_perturb else [],
+        k=args.perturb_k,
+        sim_k=args.sim_k if args.simulate else None,
+        graders=grader,
+        limit=args.limit,
+    )
+    print(f"\n{'risk':<18}{'samples':>8}{'target':>9}{'judge':>9}{'classifier':>11}")
+    for risk, calls in estimate.items():
+        print(f"{risk:<18}{calls['samples']:>8}{calls['target']:>9}{calls['judge']:>9}{calls['classifier']:>11}")
+    totals = {column: sum(calls[column] for calls in estimate.values()) for column in ("samples", "target", "judge", "classifier")}
+    print(f"{'total':<18}{totals['samples']:>8}{totals['target']:>9}{totals['judge']:>9}{totals['classifier']:>11}  (upper bounds)\n")
+
+    validate_graders(grader)
+    validate_target(args.model, model_args)
 
     if run_perturb or args.simulate:
         # Attaches one replay solver per enabled condition family (stage-2
