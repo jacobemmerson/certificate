@@ -113,6 +113,7 @@ CONTROL = "control"
 # `safety_scenario` alongside `safety_<family>` for each stage-2 family and a
 # single `safety_under_attack` roll-up over all of them.
 SCENARIO = "scenario"
+MULTILINGUAL = "multilingual"  # the one family whose judge prompt carries a language note (scorers/cluster.py)
 
 # reconsideration's single condition label — single source, re-exported by
 # pipeline/stage2_perturbation/solvers.py so the recorded condition and the

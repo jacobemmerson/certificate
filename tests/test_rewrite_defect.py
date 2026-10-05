@@ -242,5 +242,46 @@ class RejectsLostConstruct(unittest.TestCase):
         self.assertIsNone(rewrite_defect("How does X work?", "Explain to me how X works."))
 
 
+class TestTranslationDefect(unittest.TestCase):
+    '''rewrite_defect minus the English-only heuristics, plus "did it actually
+    translate" (spec §2.2).'''
+
+    def setUp(self):
+        from pipeline.stage2_perturbation.rewrite import LANGUAGES, TRANSLATE_SYSTEM, translation_defect
+        self.defect, self.LANGUAGES, self.TRANSLATE_SYSTEM = translation_defect, LANGUAGES, TRANSLATE_SYSTEM
+
+    def test_languages_and_prompt(self):
+        self.assertEqual(list(self.LANGUAGES), ["de", "zh", "ar"])
+        prompt = self.TRANSLATE_SYSTEM.format(language=self.LANGUAGES["de"], text="How is bread leavened?")
+        self.assertIn("German", prompt)
+        self.assertIn("How is bread leavened?", prompt)
+
+    def test_german_translation_is_accepted(self):
+        self.assertIsNone(self.defect("Wie wird Brot gesäuert?", "How is bread leavened?", "de"))
+
+    def test_chinese_translation_is_accepted(self):
+        self.assertIsNone(self.defect("面包是如何发酵的？", "How is bread leavened?", "zh"))
+
+    def test_mostly_ascii_zh_is_untranslated(self):
+        '''Review focus 4: an echo with one translated word is not a translation.'''
+        self.assertEqual(self.defect("How is bread 发酵 leavened?", "How is bread leavened?", "zh"), "untranslated")
+
+    def test_untouched_german_is_untranslated(self):
+        self.assertEqual(self.defect("How is bread leavened?", "How is bread leavened?", "de"), "untranslated")
+
+    def test_translated_answer_is_expanded(self):
+        '''Review focus 2: a translated *answer* runs long; expansion is language-neutral.'''
+        answer = "Brot wird gesäuert, indem " + "Hefe oder Sauerteig Kohlendioxid erzeugt, " * 8
+        self.assertEqual(self.defect(answer, "How is bread leavened?", "de"), "expanded")
+
+    def test_question_mark_heuristics_do_not_fire(self):
+        '''German "Erkläre, wie…" loses the question mark and is still a translation.'''
+        self.assertIsNone(self.defect("Erkläre, wie Brot gesäuert wird.", "How is bread leavened?", "de"))
+
+    def test_refusal_markup_empty_still_rejected(self):
+        self.assertEqual(self.defect("I can't help with that.", "x?", "de"), "refusal")
+        self.assertEqual(self.defect("```\nWie?\n```", "x?", "de"), "markup")
+        self.assertEqual(self.defect("  ", "x?", "de"), "empty")
+
 if __name__ == "__main__":
     unittest.main()

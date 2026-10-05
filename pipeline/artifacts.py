@@ -23,15 +23,13 @@ from inspect_ai import Task
 from inspect_ai._util.registry import registry_info
 
 from pipeline.stage2_perturbation.framing import FRAMING_VERSION
-from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS, REWRITE_PROMPT_VERSION
+from pipeline.stage2_perturbation.rewrite import REPEAT_FAMILIES, REWRITE_FAMILIES, REWRITE_PROMPT_VERSION
 from pipeline.stage3_simulation.prompts import PROMPT_VERSION as SCENARIO_PROMPT_VERSION
 from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY
 from pipeline.utils.replay import family_applies
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GENERATED_DIR = REPO_ROOT / "datasets" / "generated"
-
-REWRITE_FAMILIES = tuple(sorted(FAMILY_SYSTEM_PROMPTS))  # paraphrase, register
 
 # Current prompt/template version per family — compared against each artifact's
 # meta sidecar so a stale artifact set produces a loud warning (never a silent
@@ -145,7 +143,7 @@ def validate_artifacts(
             checks: list[tuple[str, int, bool]] = []  # (family, min_k, strict)
             strict = not limit
             checks += [
-                (f, perturb_k if f in REWRITE_FAMILIES else 1, strict)
+                (f, perturb_k if f in REPEAT_FAMILIES else 1, strict)
                 for f in requested if family_ids(task, f)
             ]
             if simulate:

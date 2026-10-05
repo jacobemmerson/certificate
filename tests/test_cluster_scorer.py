@@ -1208,5 +1208,35 @@ class TestDispatch(unittest.TestCase):
                 self.assertIn(sample.metadata["question_type"], known)
 
 
+class TestMultilingualJudgeNote(unittest.TestCase):
+    def judge_prompt(self, family):
+        import asyncio
+        from unittest import mock
+        from inspect_ai.model import ModelOutput
+        from inspect_ai.solver import TaskState
+        import pipeline.stage1_evaluation.scorers.cluster as cluster
+        from pipeline.utils.scoring import CONDITION_FAMILY
+        seen = {}
+
+        async def fake_judge(model, system, prompt):
+            seen["prompt"] = prompt
+            return "Verdict: no"
+
+        state = TaskState(model="m", sample_id="s1", epoch=0, input="How is bread leavened?",
+                          messages=[], output=ModelOutput.from_content("m", "Mit Hefe."))
+        state.metadata.update({"criterion": "explains leavening"})
+        if family:
+            state.metadata[CONDITION_FAMILY] = family
+        with mock.patch.object(cluster, "ask_judge", fake_judge):
+            score = asyncio.run(cluster._judge_against(state, "m", ["yes", "no"], {"yes": 0.0, "no": 1.0}))
+        self.assertEqual(score.value, 1.0)
+        return seen["prompt"]
+
+    def test_note_added_for_multilingual_only(self):
+        from pipeline.stage1_evaluation.scorers.cluster import MULTILINGUAL_NOTE
+        self.assertIn(MULTILINGUAL_NOTE, self.judge_prompt("multilingual"))
+        self.assertNotIn(MULTILINGUAL_NOTE, self.judge_prompt("paraphrase"))
+        self.assertNotIn(MULTILINGUAL_NOTE, self.judge_prompt(None))
+
 if __name__ == "__main__":
     unittest.main()

@@ -285,5 +285,31 @@ class TestPastTense(unittest.TestCase):
         self.assertEqual(state.metadata["perturbations"]["past_tense"][0]["condition"], "past_tense_variant_1")
 
 
+class TestMultilingualRows(unittest.TestCase):
+    def test_one_row_per_language_with_lang_and_condition(self):
+        import asyncio
+        from inspect_ai.model import ModelOutput, get_model
+        from pipeline.generation import generate_rewrites
+        # Same German output for every call: de is accepted, zh/ar fall back —
+        # so the assertions hold whatever order the three calls complete in.
+        attacker = get_model("mockllm/model", custom_outputs=[
+            ModelOutput.from_content("mockllm/model", "Wie wird Brot gesäuert?") for _ in range(3)
+        ])
+        sample = Sample(input="How is bread leavened?", id="a",
+                        metadata={"item_text": "How is bread leavened?", "families": ["multilingual"]})
+        rows = asyncio.run(generate_rewrites([sample], "multilingual", attacker, k=1))
+        self.assertEqual({r["condition"] for r in rows}, {"multilingual_de", "multilingual_zh", "multilingual_ar"})
+        self.assertEqual({(r["variant"], r["lang"]) for r in rows}, {(1, "de"), (2, "zh"), (3, "ar")})
+        by_lang = {r["lang"]: r for r in rows}
+        self.assertFalse(by_lang["de"]["fallback"])
+        self.assertEqual(by_lang["de"]["query"], "Wie wird Brot gesäuert?")
+        self.assertTrue(by_lang["zh"]["fallback"] and by_lang["ar"]["fallback"])
+
+    def test_rewrite_roster_matches_the_contract(self):
+        from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS
+        self.assertEqual(artifacts.REWRITE_FAMILIES, ("paraphrase", "register", "past_tense", "multilingual"))
+        self.assertEqual(artifacts.REPEAT_FAMILIES, ("paraphrase", "register", "past_tense"))
+        self.assertEqual(set(FAMILY_SYSTEM_PROMPTS), set(artifacts.REPEAT_FAMILIES))
+
 if __name__ == "__main__":
     unittest.main()

@@ -2,7 +2,7 @@ from pipeline.stage1_evaluation.evals.clusters import CLUSTER_TASKS, RISKS, avai
 
 from inspect_ai import Task
 
-from pipeline.artifacts import REWRITE_FAMILIES, family_ids, load_family, task_name
+from pipeline.artifacts import REPEAT_FAMILIES, REWRITE_FAMILIES, family_ids, load_family, task_name
 from pipeline.stage2_perturbation.solvers import REPLAY_SOLVERS, reconsideration
 from pipeline.stage3_simulation.solvers import scenario
 from pipeline.utils.replay import truncated
@@ -60,7 +60,7 @@ def _build_task(
     for family, replay_solver in REPLAY_SOLVERS.items():
         if family in families and family_ids(base_task, family):
             rows = load_family(name, family)
-            if family in REWRITE_FAMILIES:
+            if family in REPEAT_FAMILIES:
                 rows = truncated(rows, k)
             solver_chain.append(replay_solver(rows))
             applied.append(family)

@@ -53,7 +53,7 @@ load_dotenv()
 
 from pipeline.artifacts import (
     PROMPT_VERSIONS,
-    REWRITE_FAMILIES,
+    REPEAT_FAMILIES,
     artifact_path,
     family_ids,
     load_family,
@@ -214,7 +214,7 @@ if __name__ == "__main__":
 
             # (family, k) pairs to produce for this task
             wanted = [
-                (f, args.perturb_k if f in REWRITE_FAMILIES else 1)
+                (f, args.perturb_k if f in REPEAT_FAMILIES else 1)
                 for f in perturb_families if family_ids(task, f)
             ]
             if args.simulate:
