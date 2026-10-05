@@ -1183,6 +1183,34 @@ class TestScreen(unittest.TestCase):
         self.assertEqual(plain, screened)
 
 
+class TestMeta(unittest.TestCase):
+
+    def test_meta_records_embedding_and_screen(self):
+        report = {"advanced_ai_risk": {
+            "loaded": 10, "exact_dropped": 0, "near_dropped": 0, "cross_source_dropped": 0,
+            "kept": 1, "strata": 1, "screen_candidates": 4, "screen_refused": 3,
+        }}
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(prepare, "OUT_DIR", Path(tmp)), \
+                mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            (Path(tmp) / "screen").mkdir()
+            (Path(tmp) / "screen" / "loss_of_control.jsonl").write_text(json.dumps(
+                {"key": "k", "verdict": "refused", "model": "vllm/NousResearch/Hermes-4-70B"}
+            ) + "\n")
+            prepare.write_outputs("loss_of_control", [make_row(risk="loss_of_control")],
+                                  report, [], seed=0)
+            meta = json.loads((Path(tmp) / "loss_of_control.meta.json").read_text())
+        self.assertEqual(meta["embedding"], {
+            "model": prepare.EMBEDDING_MODEL, "tau_cosine": 0.92,
+            "cache": "datasets/cache/embeddings/loss_of_control.npz",
+        })
+        self.assertEqual(meta["screen"], {
+            "model": ["vllm/NousResearch/Hermes-4-70B"], "applies_to": ["advanced_ai_risk"],
+            "candidate_factor": 3.5, "refused_dropped": {"advanced_ai_risk": 3},
+        })
+        self.assertFalse({"jaccard_tau_default", "cosine_tau_default", "token_gate"} & set(meta))
+
+
 class TestPremiseDependentCriteria(unittest.TestCase):
     '''
     A detection row's criterion is only ever read by the judged fallback, which

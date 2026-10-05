@@ -5,12 +5,14 @@ Build the risk-cluster datasets.
     uv run python3 -m datasets.prepare.cluster.prepare --dry-run
 
 Writes datasets/public/<risk>.csv plus a <risk>.meta.json sibling (provenance:
-seed, quotas, per-tier drop counts, source revisions) and <risk>.dropped.jsonl
-(the pairs tiers 1b and 2 removed, so the threshold is reviewable rather than
-trusted; each record carries the `tier` that dropped it).
+seed, quotas, per-tier drop counts, embedding model and threshold, screen model
+and refusals, source revisions) and <risk>.dropped.jsonl (every pair tiers 1b
+and 2 removed and every candidate the screen dropped, each tagged with its
+`tier`, so thresholds are reviewable rather than trusted).
 
-Selection is lexical only — no embeddings. The evidence for that, and for the
-token gate on tier 2, is in datasets/BENCHMARKS.md § "Filtering: the tiers".
+Reads two gitignored caches under datasets/cache/. On a miss it writes what is
+missing, prints the command that fills it and exits 2: embeddings first, then
+screen verdicts. The sequence is in datasets/BENCHMARKS.md § Sampling.
 '''
 
 from __future__ import annotations
@@ -818,11 +820,22 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
     csv_path = OUT_DIR / f"{risk}.csv"
     frame.to_csv(csv_path, index=False)
 
+    screened = [source.name for source in for_risk(risk) if source.screened()]
     meta = {
         "risk": risk,
         "rows": len(rows),
         "seed": seed,
-        "cosine_tau_default": COSINE_TAU,
+        "embedding": {
+            "model": EMBEDDING_MODEL,
+            "tau_cosine": COSINE_TAU,
+            "cache": f"datasets/cache/embeddings/{risk}.npz",
+        },
+        "screen": {
+            "model": sorted({record["model"] for record in load_screen(risk).values()}),
+            "applies_to": screened,
+            "candidate_factor": SCREEN_FACTOR,
+            "refused_dropped": {name: report[name]["screen_refused"] for name in screened},
+        },
         "sources": report,
         "revisions": source_revisions(),
     }
@@ -838,17 +851,22 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
 def print_report(risk: str, report: dict, rows: list[Row]):
     print(f"\n=== {risk} ===")
     header = (f"  {'source':22s} {'loaded':>7s} {'exact':>6s} {'near':>6s} "
-              f"{'cross':>6s} {'kept':>6s} {'share':>6s}")
+              f"{'cross':>6s} {'screen':>6s} {'kept':>6s} {'share':>6s}")
     print(header)
     print("  " + "-" * (len(header) - 2))
     total = len(rows) or 1
     for name, stats in report.items():
+        refused = stats.get("screen_refused", 0)
         print(
             f"  {name:22s} {stats['loaded']:7d} {stats['exact_dropped']:6d} "
             f"{stats['near_dropped']:6d} {stats['cross_source_dropped']:6d} "
-            f"{stats['kept']:6d} {100 * stats['kept'] / total:5.1f}%"
+            f"{refused:6d} {stats['kept']:6d} {100 * stats['kept'] / total:5.1f}%"
         )
-    print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {'':6s} {total:6d}")
+        candidates = stats.get("screen_candidates", 0)
+        if candidates and 2 * refused > candidates:
+            print(f"  [WARNING] {name}: the screen refused {refused} of {candidates} "
+                  f"candidates; raise SCREEN_FACTOR rather than shrink the quota")
+    print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {'':6s} {'':6s} {total:6d}")
 
 
 def main():
