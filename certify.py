@@ -363,6 +363,14 @@ def record_routing(statuses: dict, endpoints: list[dict] | None) -> dict:
 
 # ----- Updates models/models.json -----
 
+def completed_risks(entry: dict) -> set[str]:
+    '''Risks a rerun may skip: status success and a non-null headline.'''
+    return {
+        risk for risk, status in (entry.get('status') or {}).items()
+        if status.get('status') == 'success' and entry.get('scores', {}).get(risk) is not None
+    }
+
+
 def update(results, models, idx):
     '''
     Summarises results and updates models/models.json
@@ -390,15 +398,11 @@ def update(results, models, idx):
                 results['scores'].pop(benchmark, None)
                 results['results'].pop(benchmark, None)
                 results['status'].pop(benchmark, None)
-                results.get('partial_scores', {}).pop(benchmark, None)
 
         # take values from overlapping keys from the new results (right side of pipe operator)
         results['scores'] = prev.get('scores', {}) | results['scores']
         results['results'] = prev.get('results', {}) | results.get('results', {})
         results['status'] = prev_status | results.get('status', {})
-        results['partial_scores'] = (
-            prev.get('partial_scores', {}) | results.get('partial_scores', {})
-        )
         # Recomputed after the merge, so a --only rerun reports across every
         # risk the model has, not just the ones this run touched.
         results['aggregate'] = results_tree.model_aggregate(results['results'])
@@ -406,13 +410,6 @@ def update(results, models, idx):
     else:
         # add new entry
         models.append(results)
-
-    # A benchmark that has a complete score has no use for the partial figure
-    # it supersedes: two numbers for one benchmark read as equally current.
-    for benchmark in results.get('scores', {}):
-        results.get('partial_scores', {}).pop(benchmark, None)
-    if not results.get('partial_scores'):
-        results.pop('partial_scores', None)
 
     # write models file back
     with open('models/models.json', 'w') as f:
@@ -473,8 +470,8 @@ if __name__ == "__main__":
     # onto the same Task (one control generation, one log), and the wrapped
     # scorers report them under separate metric pools — safety_<family>/stability_under_attack
     # for the perturbation families, safety_scenario for the scenario family, plus a
-    # safety_under_attack roll-up over every attack pooled. The certification score is
-    # the worst condition across every enabled family (see pipeline/utils/scoring.py).
+    # safety_worst roll-up over every attack pooled. The certification score is the
+    # tail of the per-item worst case (see pipeline/utils/results.py).
     run_perturb = bool(args.perturb) and not args.no_perturb
 
     # check for existing model results
@@ -492,8 +489,8 @@ if __name__ == "__main__":
         if unknown:
             print(f"[WARNING] Unknown benchmark keys (ignored): {', '.join(sorted(unknown))}")
     elif idx != -1 and not args.rerun:
-        # default: skip benchmarks that already have results
-        tasks_to_skip = set(models[idx]['scores'].keys())
+        # default: skip risks that already certified cleanly
+        tasks_to_skip = completed_risks(models[idx])
 
     if tasks_to_skip:
         print(f"Skipping: {', '.join(sorted(tasks_to_skip))}")
@@ -619,13 +616,12 @@ if __name__ == "__main__":
         tree = results_tree.build(res)
         results_by_risk.update(tree)
 
-        # The flat headline stays: certify.py's own skip logic reads
-        # `scores.keys()` to decide what a rerun can leave alone, and a reader
-        # wants one number per risk without walking the tree.
+        # The flat headline: the tail (CVaR@10% of per-item worsts, spec §4.2).
+        # A run that did not finish cleanly publishes its tree but no headline;
+        # completed_risks() reads `scores` to decide what a rerun can skip.
         aggregate = (tree.get(entry["name"], {}).get("aggregate") or {})
         scores[benchmark] = (
-            aggregate.get("worst")
-            if aggregate.get("worst") is not None else -1
+            aggregate.get("tail") if statuses[benchmark]["status"] == "success" else None
         )
 
     if (not args.limit):
