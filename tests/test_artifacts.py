@@ -106,6 +106,16 @@ class TestRoundTrip(ArtifactStoreTestCase):
         self.assertIsNone(artifacts.family_meta(self.name, "paraphrase"))
 
 
+class TestMissingOnly(ArtifactStoreTestCase):
+    def test_fallback_rows_are_not_existing(self):
+        import generate
+        rows = rewrite_rows(self.ids[:2])
+        rows[1]["fallback"] = True
+        write_family(self.name, "paraphrase", rows, meta={"prompt_version": "3"})
+        self.assertEqual(generate.existing_keys(self.name, "paraphrase"), {(self.ids[0], 1)})
+        self.assertEqual(generate.existing_rows(self.name, "paraphrase"), [rows[0]])
+
+
 class TestValidateArtifacts(ArtifactStoreTestCase):
     def test_complete_rewrite_family_passes(self):
         write_family(self.name, "paraphrase", rewrite_rows(self.ids), meta={"prompt_version": "1"})

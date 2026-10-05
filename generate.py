@@ -167,19 +167,18 @@ def git_commit() -> str | None:
 
 def existing_keys(name: str, family: str) -> set[tuple[str, int]]:
     """(id, variant) pairs already on disk, or empty if no file yet."""
-    if not artifact_path(name, family).exists():
-        return set()
-    return {
-        (sample_id, row.get("variant", 0))
-        for sample_id, rows in load_family(name, family).items()
-        for row in rows
-    }
+    return {(str(row["id"]), row.get("variant", 0)) for row in existing_rows(name, family)}
 
 
 def existing_rows(name: str, family: str) -> list[dict]:
+    """Rows to keep on --missing-only. Fallback rows are left out so the run
+    retries exactly those variants instead of treating them as done."""
     if not artifact_path(name, family).exists():
         return []
-    return [row for rows in load_family(name, family).values() for row in rows]
+    return [
+        row for rows in load_family(name, family).values() for row in rows
+        if not row.get("fallback")
+    ]
 
 
 if __name__ == "__main__":
