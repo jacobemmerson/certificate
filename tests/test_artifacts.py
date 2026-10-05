@@ -242,10 +242,6 @@ class TestGenerateFraming(unittest.TestCase):
         self.assertEqual({r["id"] for r in rows}, {"a"})
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestEstimateCalls(ArtifactStoreTestCase):
     def test_counts_stored_rows_per_family(self):
         write_family(self.name, "paraphrase", rewrite_rows(self.ids, k=2), meta={})
@@ -266,3 +262,20 @@ class TestEstimateCalls(ArtifactStoreTestCase):
         write_family(self.name, "paraphrase", rewrite_rows(self.ids), meta={})
         estimate = certify.estimate_calls(self.benchmarks, ["paraphrase"], k=1, sim_k=None, graders="a", limit=1)
         self.assertEqual(estimate["manipulation"], {"samples": 1, "target": 2, "judge": 2, "classifier": 0})
+
+    def test_inapplicable_framing_is_skipped_without_an_artifact(self):
+        generic = Task(
+            dataset=[Sample(input="x", id="a", metadata={"elicitation_family": "generic"})],
+            name="all_generic",
+        )
+        estimate = certify.estimate_calls({"generic": {"tasks": [generic]}}, ["framing"], k=1, sim_k=None, graders="a")
+        self.assertEqual(estimate["generic"], {"samples": 1, "target": 1, "judge": 1, "classifier": 0})
+
+    def test_multi_task_entry_accumulates(self):
+        benchmarks = {"manipulation": {"tasks": [self.task, self.task]}}
+        estimate = certify.estimate_calls(benchmarks, [], k=1, sim_k=None, graders="a")
+        self.assertEqual(estimate["manipulation"], {"samples": 6, "target": 6, "judge": 6, "classifier": 0})
+
+
+if __name__ == "__main__":
+    unittest.main()

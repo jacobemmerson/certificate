@@ -35,7 +35,7 @@ def display_mode() -> str:
     stdout is not a real terminal, honouring an explicit INSPECT_DISPLAY override.
     '''
     return os.environ.get("INSPECT_DISPLAY") or ("full" if sys.stdout.isatty() else "log")
-from pipeline.artifacts import REWRITE_FAMILIES, load_family, task_name, validate_artifacts
+from pipeline.artifacts import REWRITE_FAMILIES, framing_applies, load_family, task_name, validate_artifacts
 from pipeline.registry import init_benchmarks, apply_stages, ALL_PERTURB_FAMILIES
 from pipeline.utils.scoring import RESULT_FAMILIES, SCENARIO
 from pipeline.utils import results as results_tree
@@ -114,6 +114,7 @@ def estimate_calls(benchmarks, families, k: int, sim_k: int | None, graders, lim
     n_graders = len(graders) if isinstance(graders, list) else 1
     estimate = {}
     for key, entry in benchmarks.items():
+        totals = estimate.setdefault(key, dict.fromkeys(("samples", "target", "judge", "classifier"), 0))
         for base in entry["tasks"]:
             size = len(base.dataset)
             n = size if limit is None else min(limit, size)
@@ -122,6 +123,8 @@ def estimate_calls(benchmarks, families, k: int, sim_k: int | None, graders, lim
             for family in families or []:
                 if family == "reconsideration":
                     target += n
+                    continue
+                if family == "framing" and not framing_applies(base):
                     continue
                 rows = load_family(task_name(base), family)
                 stored = sum(
@@ -135,7 +138,8 @@ def estimate_calls(benchmarks, families, k: int, sim_k: int | None, graders, lim
                 classifier = turns
             # ponytail: judge counts every target call x graders; detection rows are
             # regex-scored, so this is an upper bound — subtract per-source shapes if it matters
-            estimate[key] = {"samples": n, "target": target, "judge": target * n_graders, "classifier": classifier}
+            for column, value in zip(totals, (n, target, target * n_graders, classifier)):
+                totals[column] += value
     return estimate
 
 
