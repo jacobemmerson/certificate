@@ -5,12 +5,14 @@ Build the risk-cluster datasets.
     uv run python3 -m datasets.prepare.cluster.prepare --dry-run
 
 Writes datasets/public/<risk>.csv plus a <risk>.meta.json sibling (provenance:
-seed, quotas, per-tier drop counts, source revisions) and <risk>.dropped.jsonl
-(the pairs tiers 1b and 2 removed, so the threshold is reviewable rather than
-trusted; each record carries the `tier` that dropped it).
+seed, quotas, per-tier drop counts, embedding model and threshold, screen model
+and refusals, source revisions) and <risk>.dropped.jsonl (every pair tiers 1b
+and 2 removed and every candidate the screen dropped, each tagged with its
+`tier`, so thresholds are reviewable rather than trusted).
 
-Selection is lexical only — no embeddings. The evidence for that, and for the
-token gate on tier 2, is in datasets/BENCHMARKS.md § "Filtering: the tiers".
+Reads two gitignored caches under datasets/cache/. On a miss it writes what is
+missing, prints the command that fills it and exits 2: embeddings first, then
+screen verdicts. The sequence is in datasets/BENCHMARKS.md § Sampling.
 '''
 
 from __future__ import annotations
@@ -18,41 +20,184 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import subprocess
 from collections import defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
+import numpy as np
 import pandas as pd
 
 from . import readers
 from .schema import (
-    COLUMNS, ITEM, MCQ, Row, SchemaError, Source, jaccard, normalised, tokens, validate,
+    COLUMNS, ITEM, MCQ, Row, SchemaError, Source, normalised, validate,
 )
 from .sources import RISKS, for_risk
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 OUT_DIR = REPO_ROOT / "datasets" / "public"
+CACHE_DIR = REPO_ROOT / "datasets" / "cache"
 
-# Tier 2 compares only short texts. On long text, Jaccard measures shared
-# boilerplate rather than shared meaning: PHT's rendered prompts peak at 0.598
-# between *different* events, while genuine ECHR near-duplicates reach only
-# 0.411 — no threshold separates those.
-#
-# The gate is per *pair*, not per source. A source-level median hides the
-# problem whenever text length varies inside one source: WMDP mixes one-line
-# conceptual questions with packet-capture items carrying a hex dump, and those
-# long ones collide at 0.98 while differing in the only part that matters (the
-# field being asked about).
-# tau is high because these benchmarks are largely templated: SOSBench is one
-# instruction shape over 1,628 regulated hazards, so "developing Dichloroethylene"
-# and "developing Tetrachloroethane" score 0.875 while being entirely different
-# items. Measured on real drops, false positives crowd 0.70-0.89 and genuine
-# duplicates sit at 0.90+. Sources whose payload is short and untemplated (PHT's
-# event titles) override this downward.
-TOKEN_GATE = 25
-JACCARD_TAU = 0.9
-BLOCKING_MAX_DOCS = 60
+# Kept equal to scripts/embed_items.py::MODEL (tests/test_clusters.py checks).
+EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+EMBED_COMMAND = (
+    "uv run --no-project --with sentence-transformers --with numpy "
+    "python scripts/embed_items.py --risk {risk}"
+)
+# Tier 3b: candidates per allotted row sent to the answerability screen. 3.5
+# fills an allotment while Hermes refuses up to ~70% of its candidates; past
+# that the build stops and names the gap (raise this, never shrink the quota).
+SCREEN_FACTOR = 3.5
+SCREEN_COMMANDS = (
+    "sbatch --export=ALL,SCREEN_ONLY=1 scripts/generate_hermes_slurm.sh",
+    "uv run python3 scripts/screen_answerability.py --risk {risk} "
+    "--model openrouter/nousresearch/hermes-4-70b",
+)
+
+
+class CacheMiss(Exception):
+    '''A cache prepare.py reads lacks entries. The message says what to run.'''
+
+
+@dataclass
+class Caches:
+    '''What tier 3 reads besides the rows, threaded through as one argument.'''
+    embeddings: dict[str, np.ndarray]
+    # screen key -> cache record. None turns the screen off, which only unit
+    # tests do: build_risk always loads it, so no CSV is built unscreened.
+    verdicts: dict[str, dict] | None = None
+    missing: dict[str, dict] = field(default_factory=dict)  # screen inputs still needed
+    refused: list[dict] = field(default_factory=list)       # "screen" tier drop records
+    candidates: int = 0                                      # rows sent through the screen
+
+
+def screen_key(row: Row) -> str:
+    '''The prompt as delivered (system + user), so a verdict survives an id change.'''
+    return hashlib.blake2b(
+        f"{row.system_prompt}\x00{row.query}".encode(), digest_size=16
+    ).hexdigest()
+
+
+def load_screen(risk: str) -> dict[str, dict]:
+    '''key -> record from datasets/cache/screen/<risk>.jsonl (append-only; last wins).'''
+    path = CACHE_DIR / "screen" / f"{risk}.jsonl"
+    if not path.exists():
+        return {}
+    records = {}
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:  # truncated by a preempted job
+                continue
+            records[record["key"]] = record
+    return records
+
+
+def require_screen(risk: str, caches: Caches) -> None:
+    '''Raise CacheMiss, after writing the screen input, if any candidate lacks a verdict.'''
+    path = CACHE_DIR / f"{risk}.screen_input.jsonl"
+    if not caches.missing:
+        path.unlink(missing_ok=True)
+    else:
+        raise _cache_miss(
+            path,
+            [caches.missing[key] for key in sorted(caches.missing)],
+            *(command.format(risk=risk) for command in SCREEN_COMMANDS),
+        )
+
+
+def _screen(rows: list[Row], pool: list[int], caches: Caches) -> list[int]:
+    '''Drop candidates Hermes refused. One with no verdict yet is kept
+    provisionally and queued; build_risk raises CacheMiss before writing.'''
+    caches.candidates += len(pool)
+    kept = []
+    for index in pool:
+        row = rows[index]
+        key = screen_key(row)
+        record = caches.verdicts.get(key)
+        verdict = record and record.get("verdict")
+        if verdict == "refused":
+            caches.refused.append({
+                "tier": "screen", "dropped": row.sample_id,
+                "dropped_text": row.query[:300], "model": record["model"],
+            })
+        elif verdict == "answered":
+            kept.append(index)
+        else:
+            caches.missing[key] = {
+                "key": key, "sample_id": row.sample_id, "question_type": row.question_type,
+                "system_prompt": row.system_prompt, "query": row.query,
+            }
+            kept.append(index)
+    return kept
+
+
+def _cache_miss(path: Path, records: list[dict], *commands: str) -> CacheMiss:
+    '''Write what the cache lacks to `path` and build the error naming the fix.'''
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        for record in records:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return CacheMiss(f"{len(records)} missing -> {path}\n  run: " + "\n   or: ".join(commands))
+
+
+def embed_key(text: str) -> str | None:
+    '''
+    Cache key of a payload's embedding: blake2b-16 of its normalised text, which
+    is also the text embedded (all-MiniLM-L6-v2 is uncased, so folding case and
+    punctuation loses nothing). Payloads that normalise identically therefore
+    share one vector by construction. None for a payload with no words: there
+    is nothing to embed, and it is never anyone's duplicate.
+    '''
+    text = normalised(text)
+    return hashlib.blake2b(text.encode(), digest_size=16).hexdigest() if text else None
+
+
+def load_embeddings(risk: str) -> dict[str, np.ndarray]:
+    '''key -> unit float32 vector from datasets/cache/embeddings/<risk>.npz; {} if absent.'''
+    path = CACHE_DIR / "embeddings" / f"{risk}.npz"
+    if not path.exists():
+        return {}
+    with np.load(path) as data:
+        if str(data["model"]) != EMBEDDING_MODEL:
+            return {}
+        keys = data["keys"].tolist()
+        vectors = data["vectors"].astype(np.float32)
+    # Stored as float16, so re-normalise rather than trust the rounding.
+    vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+    return dict(zip(keys, vectors))
+
+
+def require_embeddings(
+    risk: str, pools: list[tuple[Source, list[Row]]], embeddings: dict
+) -> None:
+    '''Raise CacheMiss, after writing the embed input, if any payload lacks a vector.'''
+    missing = {}
+    for source, rows in pools:
+        payload = _payload_fn(source.dedup_on)
+        for row in rows:
+            key = embed_key(payload(row))
+            if key and key not in embeddings:
+                missing[key] = normalised(payload(row))
+    if missing:
+        raise _cache_miss(
+            CACHE_DIR / f"{risk}.embed_input.jsonl",
+            [{"key": key, "text": text} for key, text in sorted(missing.items())],
+            EMBED_COMMAND.format(risk=risk),
+        )
+
+# Tier 2: cosine similarity of all-MiniLM-L6-v2 embeddings at or above this is a
+# near-duplicate. 0.92 is the spec's start value, checked against the pairs the
+# retired Jaccard tier dropped (datasets/BENCHMARKS.md § Sampling). Embeddings
+# made the token gate unnecessary: on long text Jaccard measured shared
+# boilerplate, while an embedding of the payload does not. `distinct_on` and the
+# mcq-target guard still cover templated sources whose items differ by one term.
+COSINE_TAU = 0.92
+# Rows of the similarity matrix computed at once: memory is _BLOCK x N float32.
+_BLOCK = 2048
 
 
 # ----- tier 0-1: load, map, exact dedup -----
@@ -129,6 +274,10 @@ def rows_from_frame(source: Source, frame) -> list[Row]:
         if callable(must_survive):
             must_survive = must_survive(record)
 
+        system_prompt = str(
+            source.resolve(record, source.system_prompt) or ""
+        ) if source.system_prompt else ""
+
         row = Row(
             sample_id=f"{source.name}:{native_id}",
             source=source.name,
@@ -147,15 +296,13 @@ def rows_from_frame(source: Source, frame) -> list[Row]:
                 {str(k): float(v) for k, v in fallback_scale_map.items()}}
                if fallback_scale_map else {}),
             detector=source.detector,
-            system_prompt=str(
-                source.resolve(record, source.system_prompt) or ""
-            ) if source.system_prompt else "",
+            system_prompt=system_prompt,
             item_text=item_text,
             prompt_template=prompt_template,
             elicitation_family=source.elicitation_family,
             judge_style=source.judge_style, role=source.role, pool=source.pool,
-            summary=source.summary, rewrite=source.rewrite_default(),
-            framing=source.framing,
+            summary=source.summary,
+            families=source.families_for(system_prompt),
             metadata={**{key: _plain(record.get(key)) for key in source.metadata},
                       **({"must_survive": list(must_survive)} if must_survive else {})},
         )
@@ -263,15 +410,15 @@ def cross_source_dedup(
     return kept_pools, dropped
 
 
-# ----- tier 2: lexical near-dedup -----
+# ----- tier 2: cosine near-dedup -----
 
 def _distinguishable(left: Row, right: Row, distinct_on: Sequence[str]) -> bool:
     '''
-    Exact guard against the lexical filter's blind spot: when a benchmark varies
-    one term inside a fixed template, the entire distinction is a few characters
-    that Jaccard weights at 1/N. Items differing in ground truth, or in a field
-    the source declares identifying, are never duplicates however similar the
-    surrounding wording.
+    Exact guard against the similarity filter's blind spot: when a benchmark
+    varies one term inside a fixed template, the entire distinction is a few
+    characters that barely moves a whole-text similarity. Items differing in
+    ground truth, or in a field the source declares identifying, are never
+    duplicates however similar the surrounding wording.
     '''
     if left.question_type == MCQ and left.target != right.target:
         return False
@@ -280,54 +427,51 @@ def _distinguishable(left: Row, right: Row, distinct_on: Sequence[str]) -> bool:
     )
 
 
+def _vectors(rows: list[Row], payload, embeddings: dict[str, np.ndarray]) -> np.ndarray:
+    '''One unit vector per row's payload. A payload with no words gets zeros, so
+    it is similar to nothing: never a duplicate, never "close" in a spread.'''
+    dim = len(next(iter(embeddings.values()), ()))
+    matrix = np.zeros((len(rows), dim), dtype=np.float32)
+    for position, row in enumerate(rows):
+        key = embed_key(payload(row))
+        if key:
+            matrix[position] = embeddings[key]
+    return matrix
+
+
 def near_dedup(
     rows: list[Row],
-    tau: float = JACCARD_TAU,
+    embeddings: dict[str, np.ndarray],
+    tau: float = COSINE_TAU,
     *,
     dedup_on: str | None = None,
     distinct_on: Sequence[str] = (),
 ) -> tuple[list[Row], list[dict]]:
     '''
-    Token-set Jaccard with inverted-index blocking. Returns survivors and the
-    dropped pairs, which get written out so `tau` can be reviewed on real data.
+    Cosine near-dedup over cached embeddings. Returns survivors and the dropped
+    pairs, which get written out so `tau` can be reviewed on real data.
 
     `dedup_on` compares a metadata field instead of the rendered query — the
     doc's "filter the case pool, never the rendered prompt" rule, made
     executable: PHT's payload is the historical event, not the 100-word
     instruction wrapped around it.
     '''
-    def payload(row: Row) -> str:
-        return str(row.metadata.get(dedup_on, "")) if dedup_on else row.query
+    payload = _payload_fn(dedup_on)
+    vectors = _vectors(rows, payload, embeddings)
 
-    token_sets = {index: tokens(payload(row)) for index, row in enumerate(rows)}
-    short = {index for index, t in token_sets.items() if len(t) < TOKEN_GATE}
-    if not short:
-        return rows, []
-
-    postings: defaultdict[str, list[int]] = defaultdict(list)
-    for index in short:
-        for token in token_sets[index]:
-            postings[token].append(index)
-
-    candidates = set()
-    for indices in postings.values():
-        if len(indices) > BLOCKING_MAX_DOCS:
-            continue  # stopword-ish; blocking on it would be quadratic and useless
-        for i, left in enumerate(indices):
-            for right in indices[i + 1:]:
-                candidates.add((left, right))
-
-    scored = sorted(
-        ((jaccard(token_sets[a], token_sets[b]), a, b) for a, b in candidates
-         if _distinguishable(rows[a], rows[b], distinct_on)),
-        reverse=True,
-    )
+    candidates = []
+    for start in range(0, len(rows), _BLOCK):
+        # Rounded so a BLAS summing in another order cannot flip a pair across
+        # tau or reorder ties between machines.
+        similarity = np.round(vectors[start:start + _BLOCK] @ vectors.T, 6)
+        for offset, right in zip(*np.nonzero(similarity >= tau)):
+            left, right = start + int(offset), int(right)
+            if left < right and _distinguishable(rows[left], rows[right], distinct_on):
+                candidates.append((float(similarity[offset, right]), left, right))
 
     dropped_indices: set[int] = set()
     dropped_pairs = []
-    for score, left, right in scored:
-        if score < tau:
-            break
+    for score, left, right in sorted(candidates, reverse=True):
         if left in dropped_indices or right in dropped_indices:
             continue
         dropped_indices.add(right)
@@ -345,15 +489,15 @@ def near_dedup(
 # ----- tier 3: stratified quota -----
 
 def stratified_sample(
-    rows: list[Row], source: Source, seed: int
+    rows: list[Row], source: Source, seed: int, caches: Caches | None = None
 ) -> tuple[list[Row], dict]:
     if source.group_key:
-        return _grouped_sample(rows, source, seed)
-    return _row_sample(rows, source, seed)
+        return _grouped_sample(rows, source, seed, caches)
+    return _row_sample(rows, source, seed, caches)
 
 
 def _grouped_sample(
-    rows: list[Row], source: Source, seed: int
+    rows: list[Row], source: Source, seed: int, caches: Caches | None = None
 ) -> tuple[list[Row], dict]:
     '''
     Sample whole groups, so rows that are only meaningful together survive
@@ -372,7 +516,7 @@ def _grouped_sample(
     # Select over one representative row per group, so groups are picked by the
     # same stratification the source declares, then expand back to every member.
     leaders = {key: rows[indices[0]] for key, indices in groups.items()}
-    picked, report = _row_sample(list(leaders.values()), source, seed)
+    picked, report = _row_sample(list(leaders.values()), source, seed, caches)
 
     by_id = {id(row): key for key, row in leaders.items()}
     wanted = {by_id[id(row)] for row in picked}
@@ -409,48 +553,36 @@ def _stable_order(rows: list[Row], indices: list[int], seed: int) -> list[int]:
 
 
 def _diverse_order(
-    rows: list[Row], indices: list[int], take: int, source: Source, seed: int
+    rows: list[Row], indices: list[int], take: int, source: Source, seed: int,
+    embeddings: dict[str, np.ndarray],
 ) -> list[int]:
     '''
-    Greedy farthest-point: repeatedly take the item least similar to everything
-    already taken.
+    Greedy farthest-point on embedding cosine: repeatedly take the item least
+    similar to everything already taken.
 
-    Near-dedup only removes pairs above tau, and only for texts under
-    TOKEN_GATE — it never asks whether the *kept* set spans its stratum. This
-    does, so a quota of 90 drawn from 12,662 buys coverage rather than a lottery
-    ticket.
+    Near-dedup only removes pairs above tau — it never asks whether the *kept*
+    set spans its stratum. This does, so a quota of 90 drawn from 12,662 buys
+    coverage rather than a lottery ticket.
 
     Compares the same payload near_dedup does (`dedup_on` where declared, the
-    query otherwise): PHT's items differ by historical event inside a shared
-    ~100-word instruction, and spreading on the rendered prompt would spread on
-    boilerplate. The first pick comes from `_stable_order` so the whole walk is
-    deterministic without being tied to input order.
+    query otherwise). The first pick comes from `_stable_order` and ties break
+    on `key_bytes`, so the walk is deterministic without being tied to input
+    order.
     '''
-    payload = _payload_fn(source)
-    token_sets = {index: tokens(payload(rows[index])) for index in indices}
-
-    first = _stable_order(rows, indices, seed)[0]
+    vectors = _vectors([rows[i] for i in indices], _payload_fn(source.dedup_on), embeddings)
+    ties = [key_bytes(rows[i], seed) for i in indices]
+    first = indices.index(_stable_order(rows, indices, seed)[0])
     picked = [first]
-    # Each item's similarity to the closest thing already picked; the next pick
-    # is whatever minimises it.
-    nearest = {
-        index: jaccard(token_sets[index], token_sets[first]) for index in indices
-    }
-
-    taken = {first}
+    # Each item's similarity to the closest pick so far, taken items pinned at
+    # +inf; the next pick minimises it.
+    nearest = np.round(vectors @ vectors[first], 6)
+    nearest[first] = np.inf
     while len(picked) < take:
-        candidate = min(
-            (index for index in indices if index not in taken),
-            key=lambda index: (nearest[index], key_bytes(rows[index], seed)),
-        )
+        candidate = min(range(len(indices)), key=lambda p: (nearest[p], ties[p]))
         picked.append(candidate)
-        taken.add(candidate)
-        for index in indices:
-            nearest[index] = max(
-                nearest[index], jaccard(token_sets[index], token_sets[candidate])
-            )
-
-    return picked
+        nearest = np.maximum(nearest, np.round(vectors @ vectors[candidate], 6))
+        nearest[candidate] = np.inf
+    return [indices[p] for p in picked]
 
 
 def key_bytes(row: Row, seed: int) -> bytes:
@@ -460,15 +592,40 @@ def key_bytes(row: Row, seed: int) -> bytes:
     ).digest()
 
 
-def _payload_fn(source: Source):
+def _payload_fn(dedup_on: str | None):
     '''The text that identifies an item — near_dedup's rule, reused.'''
-    if source.dedup_on:
-        return lambda row: str(row.metadata.get(source.dedup_on, ""))
+    if dedup_on:
+        return lambda row: str(row.metadata.get(dedup_on, ""))
     return lambda row: row.query
 
 
 def _take(
-    rows: list[Row], indices: list[int], take: int, source: Source, seed: int
+    rows: list[Row], indices: list[int], take: int, source: Source, seed: int,
+    caches: Caches | None = None,
+) -> list[int]:
+    '''
+    Fill one stratum's allotment. With the screen on: pre-select SCREEN_FACTOR x
+    the allotment by the source's own selection, drop what Hermes refused, and
+    fill the allotment from the survivors by the same selection. A shortfall is
+    an error while a wider pre-selection could still fill it, and accepted once
+    the pre-selection already covers the whole stratum.
+    '''
+    if caches is None or caches.verdicts is None or not source.screened():
+        return _select(rows, indices, take, source, seed, caches)
+    pool = _select(rows, indices, math.ceil(SCREEN_FACTOR * take), source, seed, caches)
+    kept = _screen(rows, pool, caches)
+    if len(kept) < take and len(pool) < len(indices):
+        raise ValueError(
+            f"{source.name}: the screen kept {len(kept)} of {len(pool)} candidates for an "
+            f"allotment of {take}; short by {take - len(kept)}. Raise SCREEN_FACTOR "
+            f"({SCREEN_FACTOR}) rather than shrink the quota."
+        )
+    return _select(rows, kept, take, source, seed, caches)
+
+
+def _select(
+    rows: list[Row], indices: list[int], take: int, source: Source, seed: int,
+    caches: Caches | None = None,
 ) -> list[int]:
     '''Fill one stratum's allotment, by whichever selection the source declares.'''
     if take >= len(indices):
@@ -476,22 +633,25 @@ def _take(
     if source.select == UNIFORM:
         return _stable_order(rows, indices, seed)[:take]
     if source.select == DIVERSE:
-        return _diverse_order(rows, indices, take, source, seed)
+        if caches is None:
+            raise ValueError(f"{source.name}: diverse selection needs the embedding cache")
+        return _diverse_order(rows, indices, take, source, seed, caches.embeddings)
     raise ValueError(f"{source.name}: unknown select mode {source.select!r}")
 
 
 def _row_sample(
-    rows: list[Row], source: Source, seed: int
+    rows: list[Row], source: Source, seed: int, caches: Caches | None = None
 ) -> tuple[list[Row], dict]:
     quota = source.quota
     if quota is None or quota >= len(rows):
         if source.select not in (UNIFORM, DIVERSE):
             raise ValueError(f"{source.name}: unknown select mode {source.select!r}")
-        return rows, {"strata": 0, "allocated": len(rows)}
+        chosen = _take(rows, list(range(len(rows))), len(rows), source, seed, caches)
+        return [rows[i] for i in sorted(chosen)], {"strata": 0, "allocated": len(chosen)}
 
     if not source.stratify:
-        chosen = _take(rows, list(range(len(rows))), quota, source, seed)
-        return [rows[i] for i in sorted(chosen)], {"strata": 1, "allocated": quota}
+        chosen = _take(rows, list(range(len(rows))), quota, source, seed, caches)
+        return [rows[i] for i in sorted(chosen)], {"strata": 1, "allocated": len(chosen)}
 
     keys = [
         tuple(str(row.metadata.get(column, "")) for column in source.stratify)
@@ -505,7 +665,7 @@ def _row_sample(
 
     chosen: list[int] = []
     for key, take in allocation.items():
-        chosen.extend(_take(rows, buckets[key], take, source, seed))
+        chosen.extend(_take(rows, buckets[key], take, source, seed, caches))
 
     return (
         [rows[i] for i in sorted(chosen)],
@@ -571,32 +731,17 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
     all_dropped: list[dict] = []
     report = {}
 
-    # Tiers 0-2 are per-source, because tau, dedup_on and distinct_on are
-    # per-source declarations. Tier 1b then runs over the assembled pools —
-    # before tier 3, so a copy is removed while its source can still backfill
-    # the quota from its own pool rather than leaving the cluster short.
+    # Tier 1 runs for every source first, so the embedding cache is checked for
+    # the whole risk at once: one miss, one embed run.
     pools = []
     for source in sources:
         rows = load_source(source)
         loaded = len(rows)
-
         rows, exact_dropped = exact_dedup(rows, source.distinct_on)
-
-        if source.dedup:
-            rows, near_dropped = near_dedup(
-                rows,
-                source.tau if source.tau is not None else JACCARD_TAU,
-                dedup_on=source.dedup_on,
-                distinct_on=source.distinct_on,
-            )
-        else:
-            near_dropped = []
-        all_dropped.extend(near_dropped)
-
         report[source.name] = {
             "loaded": loaded,
             "exact_dropped": exact_dropped,
-            "near_dropped": len(near_dropped),
+            "near_dropped": 0,
             "cross_source_dropped": 0,
             "quota": source.quota,
             "stratify_on": list(source.stratify),
@@ -606,17 +751,44 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
         }
         pools.append((source, rows))
 
+    embeddings = load_embeddings(risk)
+    require_embeddings(risk, pools, embeddings)
+
+    # Tier 2 is per-source, because tau, dedup_on and distinct_on are per-source
+    # declarations. Tier 1b then runs over the assembled pools — before tier 3,
+    # so a copy is removed while its source can still backfill the quota from
+    # its own pool rather than leaving the cluster short.
+    deduped = []
+    for source, rows in pools:
+        if source.dedup:
+            rows, near_dropped = near_dedup(
+                rows, embeddings,
+                source.tau if source.tau is not None else COSINE_TAU,
+                dedup_on=source.dedup_on,
+                distinct_on=source.distinct_on,
+            )
+            all_dropped.extend(near_dropped)
+            report[source.name]["near_dropped"] = len(near_dropped)
+        deduped.append((source, rows))
+    pools = deduped
+
     sizes = {source.name: len(rows) for source, rows in pools}
     pools, cross_dropped = cross_source_dedup(pools)
     all_dropped.extend(cross_dropped)
-
+    caches = Caches(embeddings, verdicts=load_screen(risk))
     for source, rows in pools:
         report[source.name]["cross_source_dropped"] = sizes[source.name] - len(rows)
-        rows, allocation = stratified_sample(rows, source, seed)
+        refused, candidates = len(caches.refused), caches.candidates
+        rows, allocation = stratified_sample(rows, source, seed, caches)
         report[source.name]["kept"] = len(rows)
         report[source.name]["strata"] = allocation["strata"]
+        if source.screened():
+            report[source.name]["screen_candidates"] = caches.candidates - candidates
+            report[source.name]["screen_refused"] = len(caches.refused) - refused
         all_rows.extend(rows)
 
+    require_screen(risk, caches)
+    all_dropped.extend(caches.refused)
     return all_rows, report, all_dropped
 
 
@@ -654,12 +826,22 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
     csv_path = OUT_DIR / f"{risk}.csv"
     frame.to_csv(csv_path, index=False)
 
+    screened = [source.name for source in for_risk(risk) if source.screened()]
     meta = {
         "risk": risk,
         "rows": len(rows),
         "seed": seed,
-        "jaccard_tau_default": JACCARD_TAU,
-        "token_gate": TOKEN_GATE,
+        "embedding": {
+            "model": EMBEDDING_MODEL,
+            "tau_cosine": COSINE_TAU,
+            "cache": f"datasets/cache/embeddings/{risk}.npz",
+        },
+        "screen": {
+            "model": sorted({record["model"] for record in load_screen(risk).values()}),
+            "applies_to": screened,
+            "candidate_factor": SCREEN_FACTOR,
+            "refused_dropped": {name: report[name]["screen_refused"] for name in screened},
+        },
         "sources": report,
         "revisions": source_revisions(),
     }
@@ -675,17 +857,22 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
 def print_report(risk: str, report: dict, rows: list[Row]):
     print(f"\n=== {risk} ===")
     header = (f"  {'source':22s} {'loaded':>7s} {'exact':>6s} {'near':>6s} "
-              f"{'cross':>6s} {'kept':>6s} {'share':>6s}")
+              f"{'cross':>6s} {'screen':>6s} {'kept':>6s} {'share':>6s}")
     print(header)
     print("  " + "-" * (len(header) - 2))
     total = len(rows) or 1
     for name, stats in report.items():
+        refused = stats.get("screen_refused", 0)
         print(
             f"  {name:22s} {stats['loaded']:7d} {stats['exact_dropped']:6d} "
             f"{stats['near_dropped']:6d} {stats['cross_source_dropped']:6d} "
-            f"{stats['kept']:6d} {100 * stats['kept'] / total:5.1f}%"
+            f"{refused:6d} {stats['kept']:6d} {100 * stats['kept'] / total:5.1f}%"
         )
-    print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {'':6s} {total:6d}")
+        candidates = stats.get("screen_candidates", 0)
+        if candidates and 2 * refused > candidates:
+            print(f"  [WARNING] {name}: the screen refused {refused} of {candidates} "
+                  f"candidates; raise SCREEN_FACTOR rather than shrink the quota")
+    print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {'':6s} {'':6s} {total:6d}")
 
 
 def main():
@@ -699,13 +886,21 @@ def main():
 
     risks = args.risk or [risk for risk in RISKS if for_risk(risk)]
 
+    pending = []
     for risk in risks:
-        rows, report, dropped = build_risk(risk, args.seed)
+        try:
+            rows, report, dropped = build_risk(risk, args.seed)
+        except CacheMiss as miss:
+            print(f"\n=== {risk}: cache miss ===\n  {miss}")
+            pending.append(risk)
+            continue
         print_report(risk, report, rows)
         if args.dry_run:
             continue
         path = write_outputs(risk, rows, report, dropped, args.seed)
         print(f"  wrote {len(rows)} rows -> {path.relative_to(REPO_ROOT)}")
+    if pending:
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

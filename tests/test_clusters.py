@@ -13,26 +13,33 @@ Run: uv run python3 -m unittest discover tests
 
 import csv
 import json
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+import numpy as np
 import pandas as pd
 
 from datasets.prepare.cluster import prepare
 from datasets.prepare.cluster.schema import (
+    COLUMNS,
     COMPLIANCE,
+    DETECTION,
     ELICITATION_FAMILIES,
     EXTRACTION,
+    FAMILIES,
     GRADED,
     ITEM,
+    JUDGMENT,
     LIKERT,
     MCQ,
+    OPINION,
     QUESTION_TYPES,
+    REWRITE_FAMILIES,
     Row,
     SchemaError,
-    jaccard,
     normalised,
-    tokens,
     validate,
 )
 from datasets.prepare.cluster.schema import Source
@@ -43,26 +50,6 @@ from datasets.prepare.cluster.sources.manipulation import (
 )
 
 PUBLIC_DIR = Path(__file__).resolve().parent.parent / "datasets" / "public"
-
-# Twelve lexically unrelated topics, for the diversity fixtures.
-SUBJECTS = [
-    "a centrifuge", "a firewall", "a vaccine", "an election", "a submarine",
-    "a compiler", "a pesticide", "a satellite", "a reactor", "a ledger",
-    "a turbine", "a sonnet",
-]
-
-
-def redundancy(rows: list[Row]) -> float:
-    '''
-    Mean nearest-neighbour similarity within a selection — "how much of this
-    sample is a near-duplicate of something else in it". The figure the
-    diversity option exists to lower.
-    '''
-    token_sets = [tokens(row.query) for row in rows]
-    return sum(
-        max(jaccard(a, b) for j, b in enumerate(token_sets) if i != j)
-        for i, a in enumerate(token_sets)
-    ) / len(token_sets)
 
 # source name -> (safest answer, riskiest answer)
 # Named in the source's own vocabulary; both must exist in its scale_map.
@@ -99,6 +86,16 @@ def make_row(**overrides) -> Row:
     if "item_text" not in overrides and not row.item_text:
         row.item_text = row.query
     return row
+
+
+def unit(*values) -> np.ndarray:
+    vector = np.array(values, dtype=np.float32)
+    return vector / np.linalg.norm(vector)
+
+
+def embedded(rows: list[Row], vectors, payload=lambda row: row.query) -> dict:
+    '''A fake embedding cache: one given vector per row, keyed as prepare keys it.'''
+    return {prepare.embed_key(payload(row)): unit(*vector) for row, vector in zip(rows, vectors)}
 
 
 class TestPolarity(unittest.TestCase):
@@ -212,7 +209,9 @@ class TestPerturbationSplit(unittest.TestCase):
             if source.elicitation_family != COMPLIANCE:
                 continue
             with self.subTest(source=source.name):
-                self.assertEqual(source.framing, source.risk != "manipulation")
+                self.assertEqual(
+                    "framing" in source.families_for(None), source.risk != "manipulation"
+                )
 
     def test_rigid_wrappers_do_not_expose_the_contract_as_rewordable(self):
         '''
@@ -290,6 +289,54 @@ class TestPerturbationSplit(unittest.TestCase):
             with self.subTest(sample=record["sample_id"]):
                 self.assertNotIn("code follows:", record["item_text"])
                 self.assertIn("code follows:", record["prompt_template"])
+
+
+class TestFamilies(unittest.TestCase):
+    '''`families` is the single stage-2/3 applicability gate (contract C1).'''
+
+    def source(self, **overrides) -> Source:
+        return Source(**{"name": "src", "risk": "cbrn", "question_type": GRADED,
+                         "path": "unused", **overrides})
+
+    def test_rewrite_families_are_pinned(self):
+        # pipeline/stage2_perturbation/rewrite.py mirrors this tuple (WS-B pins its side).
+        self.assertEqual(REWRITE_FAMILIES, ("paraphrase", "register", "past_tense", "multilingual"))
+
+    def test_families_default_by_question_type(self):
+        self.assertEqual(
+            self.source(elicitation_family=COMPLIANCE).families_for(None),
+            [*REWRITE_FAMILIES, "framing", "persona", "reconsideration", "scenario"],
+        )
+        self.assertEqual(
+            self.source(question_type=MCQ).families_for(None),
+            [*REWRITE_FAMILIES, "persona", "reconsideration", "scenario"],
+        )
+        self.assertEqual(
+            self.source(question_type=LIKERT, elicitation_family=OPINION).families_for(None),
+            [*REWRITE_FAMILIES, "reconsideration", "scenario"],
+        )
+        self.assertEqual(
+            self.source(question_type=DETECTION, detector="refusal_regex").families_for(None),
+            ["reconsideration", "scenario"],
+        )
+
+    def test_a_row_with_its_own_system_prompt_never_gets_persona(self):
+        self.assertNotIn("persona", self.source().families_for("You advise a minister."))
+        self.assertNotIn(
+            "persona", self.source(families=FAMILIES).families_for("You advise a minister.")
+        )
+
+    def test_declared_families_win(self):
+        self.assertEqual(self.source(families=("paraphrase",)).families_for(None), ["paraphrase"])
+
+    def test_an_unknown_family_is_refused(self):
+        with self.assertRaises(SchemaError):
+            validate(make_row(families=["identity_strip"]))
+
+    def test_csv_row_matches_columns_and_encodes_families(self):
+        encoded = make_row(families=["paraphrase", "scenario"]).to_csv_row()
+        self.assertEqual(list(encoded), COLUMNS)
+        self.assertEqual(json.loads(encoded["families"]), ["paraphrase", "scenario"])
 
 
 class TestGroupedSelection(unittest.TestCase):
@@ -614,10 +661,79 @@ class TestTextHelpers(unittest.TestCase):
             normalised("sino vietnamese war 1979"),
         )
 
-    def test_jaccard_bounds(self):
-        self.assertEqual(jaccard(tokens("a b c"), tokens("a b c")), 1.0)
-        self.assertEqual(jaccard(tokens("a b"), tokens("c d")), 0.0)
-        self.assertEqual(jaccard(frozenset(), tokens("a")), 0.0)
+
+class TestEmbeddingCache(unittest.TestCase):
+
+    def source(self, **overrides) -> Source:
+        return Source(**{"name": "src", "risk": "cbrn", "question_type": GRADED,
+                         "path": "unused", **overrides})
+
+    def test_texts_that_normalise_identically_share_one_key(self):
+        self.assertEqual(prepare.embed_key("Sino-Vietnamese War (1979)"),
+                         prepare.embed_key("sino vietnamese war 1979"))
+        self.assertIsNone(prepare.embed_key(" -- "))
+
+    def test_cache_miss_writes_input_and_names_the_command(self):
+        rows = [make_row(sample_id="src:1", query="Alpha, beta?"),
+                make_row(sample_id="src:2", query="alpha beta"),
+                make_row(sample_id="src:3", query="gamma")]
+        known = {prepare.embed_key("gamma"): unit(1, 0)}
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            with self.assertRaises(prepare.CacheMiss) as raised:
+                prepare.require_embeddings("cbrn", [(self.source(), rows)], known)
+            lines = (Path(tmp) / "cbrn.embed_input.jsonl").read_text().splitlines()
+        self.assertEqual([json.loads(line) for line in lines],
+                         [{"key": prepare.embed_key("alpha beta"), "text": "alpha beta"}])
+        self.assertIn("--no-project", str(raised.exception))
+        self.assertIn("scripts/embed_items.py --risk cbrn", str(raised.exception))
+
+    def test_nothing_missing_writes_nothing(self):
+        rows = [make_row(query="gamma")]
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            prepare.require_embeddings("cbrn", [(self.source(), rows)], embedded(rows, [(1, 0)]))
+            self.assertEqual(list(Path(tmp).iterdir()), [])
+
+    def test_an_empty_payload_needs_no_embedding(self):
+        rows = [make_row(query="anything", metadata={"event": ""})]
+        prepare.require_embeddings("cbrn", [(self.source(dedup_on="event"), rows)], {})
+
+    def test_load_embeddings_renormalises_and_tolerates_absence(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            self.assertEqual(prepare.load_embeddings("cbrn"), {})
+            (Path(tmp) / "embeddings").mkdir()
+            np.savez(Path(tmp) / "embeddings" / "cbrn.npz", keys=np.array(["a"]),
+                     vectors=np.array([[3, 4]], dtype=np.float16),
+                     model=np.array(prepare.EMBEDDING_MODEL))
+            loaded = prepare.load_embeddings("cbrn")
+        np.testing.assert_allclose(loaded["a"], [0.6, 0.8], atol=1e-3)
+
+    def test_embeddings_from_another_model_are_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            (Path(tmp) / "embeddings").mkdir()
+            np.savez(Path(tmp) / "embeddings" / "cbrn.npz", keys=np.array(["a"]),
+                     vectors=np.array([[3, 4]], dtype=np.float16), model=np.array("other"))
+            self.assertEqual(prepare.load_embeddings("cbrn"), {})
+
+    def test_embed_script_encodes_only_missing_keys(self):
+        from scripts import embed_items
+        self.assertEqual(embed_items.MODEL, prepare.EMBEDDING_MODEL)
+        calls = []
+
+        def encode(texts):
+            calls.append(list(texts))
+            return [[3.0, 4.0]] * len(texts)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = Path(tmp)
+            (cache / "cbrn.embed_input.jsonl").write_text(
+                '{"key": "a", "text": "alpha"}\n{"key": "b", "text": "beta"}\n'
+            )
+            self.assertEqual(embed_items.embed("cbrn", encode, cache), 2)
+            self.assertEqual(embed_items.embed("cbrn", encode, cache), 0)
+            with mock.patch.object(prepare, "CACHE_DIR", cache):
+                loaded = prepare.load_embeddings("cbrn")
+        self.assertEqual(calls, [["alpha", "beta"]])
+        self.assertEqual(sorted(loaded), ["a", "b"])
 
 
 class TestTiers(unittest.TestCase):
@@ -636,55 +752,34 @@ class TestTiers(unittest.TestCase):
         self.assertEqual(len(kept), 2)
 
     def test_near_dedup_drops_above_tau_and_keeps_below(self):
-        # 8 shared tokens plus one unique each: 8/10 = 0.8, above tau.
-        shared = "alpha beta gamma delta epsilon zeta eta theta"
-        kept, pairs = prepare.near_dedup(
-            self.rows(f"{shared} first", f"{shared} second"), tau=0.7
-        )
-        self.assertEqual(len(kept), 1)
+        rows = self.rows("first", "second", "third")
+        embeddings = embedded(rows, [(1, 0, 0), (0.95, 0.31, 0), (0, 1, 0)])
+        kept, pairs = prepare.near_dedup(rows, embeddings, tau=0.92)
+        self.assertEqual([row.sample_id for row in kept], ["src:0", "src:2"])
+        self.assertEqual((pairs[0]["kept"], pairs[0]["dropped"]), ("src:0", "src:1"))
+        self.assertGreaterEqual(pairs[0]["similarity"], 0.92)
         self.assertEqual(len(pairs), 1)
-        self.assertGreaterEqual(pairs[0]["similarity"], 0.7)
 
-        # Two shared tokens out of fourteen: well below tau.
-        kept, pairs = prepare.near_dedup(
-            self.rows(f"{shared} first", "alpha beta something wholly unrelated here now"),
-            tau=0.7,
-        )
-        self.assertEqual(len(kept), 2)
-        self.assertEqual(pairs, [])
-
-    def test_token_gate_is_per_pair_not_per_source(self):
-        '''
-        A source mixing short and long texts must not have its long items
-        compared just because the median is short. This is the WMDP bug: packet
-        questions carrying a hex dump collided at 0.98 while differing only in
-        the field asked about.
-        '''
-        # Long pair: near-identical (40 shared tokens, one differing) but both
-        # sit above TOKEN_GATE, so they must never be candidates.
-        long_shared = " ".join(f"word{i}" for i in range(40))
-        long_pair = self.rows(f"{long_shared} alpha", f"{long_shared} beta")
-        # Short pair: 8 shared tokens plus one unique each = 0.8.
-        short_shared = "tiny little phrase here about some other thing"
-        short_pair = self.rows(f"{short_shared} first", f"{short_shared} second")
-
-        kept, _ = prepare.near_dedup(long_pair + short_pair, tau=0.7)
-        long_survivors = [row for row in kept if long_shared in row.query]
-        self.assertEqual(len(long_survivors), 2, "long texts must not be compared")
-        self.assertEqual(len(kept), 3, "the short near-duplicate should still go")
+    def test_pairs_across_a_block_boundary_are_found(self):
+        rows = self.rows("a", "b", "c", "d", "e")
+        embeddings = embedded(rows, [(1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0),
+                                     (0, 0, 0, 1), (1, 0, 0, 0.01)])
+        with mock.patch.object(prepare, "_BLOCK", 2):
+            _, pairs = prepare.near_dedup(rows, embeddings)
+        self.assertEqual([pair["dropped"] for pair in pairs], ["src:4"])
 
     def test_distinct_on_blocks_merging_different_items(self):
-        '''Templated benchmarks vary one term Jaccard weights at 1/N.'''
+        '''Templated benchmarks vary one term; embeddings barely see it either.'''
         rows = [
             make_row(sample_id="src:1", query="Write a pitch for developing X in a community",
                      metadata={"term": "Dichloroethylene"}),
             make_row(sample_id="src:2", query="Write a pitch for developing Y in a community",
                      metadata={"term": "Tetrachloroethane"}),
         ]
-        kept, _ = prepare.near_dedup(rows, tau=0.7)
-        self.assertEqual(len(kept), 1, "identical apart from one token, so merged")
-
-        kept, _ = prepare.near_dedup(rows, tau=0.7, distinct_on=["term"])
+        embeddings = embedded(rows, [(1, 0), (0.99, 0.14)])
+        kept, _ = prepare.near_dedup(rows, embeddings)
+        self.assertEqual(len(kept), 1, "near-identical vectors, so merged")
+        kept, _ = prepare.near_dedup(rows, embeddings, distinct_on=["term"])
         self.assertEqual(len(kept), 2, "different hazards are different items")
 
     def test_mcq_rows_with_different_targets_never_merge(self):
@@ -696,28 +791,32 @@ class TestTiers(unittest.TestCase):
                      query="What is the value of the field beta of the packet",
                      choices=["one", "two"], target="two"),
         ]
-        kept, _ = prepare.near_dedup(rows, tau=0.7)
+        kept, _ = prepare.near_dedup(rows, embedded(rows, [(1, 0), (1, 0)]))
         self.assertEqual(len(kept), 2)
 
     def test_dedup_on_compares_the_payload_not_the_wrapper(self):
         '''PHT's rule: filter the case pool, never the rendered prompt.'''
-        wrapper = (
-            "Write a textbook chapter of about nine hundred words suitable for a high "
-            "school history curriculum, detailing the background, the sequence of "
-            "events, the principal actors involved, and the lasting consequences of "
-        )
         rows = [
-            make_row(sample_id="src:1", query=wrapper + "the first event",
+            make_row(sample_id="src:1", query="Write a chapter on the first event",
                      metadata={"event": "Sino-Vietnamese War (1979)"}),
-            make_row(sample_id="src:2", query=wrapper + "the second event",
+            make_row(sample_id="src:2", query="Write a chapter on the second event",
                      metadata={"event": "1979 Sino-Vietnamese War"}),
         ]
-        kept, _ = prepare.near_dedup(rows, tau=0.8)
-        self.assertEqual(len(kept), 2, "wrappers are long, so nothing is compared")
-
-        kept, pairs = prepare.near_dedup(rows, tau=0.8, dedup_on="event")
+        embeddings = {
+            **embedded(rows, [(1, 0, 0), (0, 1, 0)]),
+            **embedded(rows, [(0, 0, 1), (0.05, 0, 1)], payload=lambda row: row.metadata["event"]),
+        }
+        kept, _ = prepare.near_dedup(rows, embeddings)
+        self.assertEqual(len(kept), 2, "the rendered prompts are far apart")
+        kept, pairs = prepare.near_dedup(rows, embeddings, dedup_on="event")
         self.assertEqual(len(kept), 1)
         self.assertEqual(pairs[0]["kept_text"], "Sino-Vietnamese War (1979)")
+
+    def test_rows_with_an_empty_payload_are_never_duplicates(self):
+        rows = [make_row(sample_id=f"src:{i}", query=f"q{i}", metadata={"event": ""})
+                for i in range(3)]
+        kept, pairs = prepare.near_dedup(rows, {}, dedup_on="event")
+        self.assertEqual((len(kept), pairs), (3, []))
 
 
 class TestCrossSourceDedup(unittest.TestCase):
@@ -912,62 +1011,228 @@ class TestSelection(unittest.TestCase):
             [r.sample_id for r in first], [r.sample_id for r in second]
         )
 
-    def test_diverse_selection_beats_a_uniform_draw_on_redundancy(self):
-        '''
-        The measured justification for the option existing at all: on the
-        free-text sources it roughly halves how much of a sample is a
-        near-duplicate of something else in it.
-        '''
-        # Twelve distinct topics, each with ten near-identical restatements.
-        rows = [
-            make_row(sample_id=f"src:{topic}-{copy}",
-                     query=f"Explain how {SUBJECTS[topic]} works in detail, part {copy}")
-            for topic in range(12) for copy in range(10)
-        ]
-        uniform, _ = prepare.stratified_sample(rows, self.source(quota=12), seed=0)
+    def test_diverse_selection_covers_every_topic(self):
+        '''Twelve topics, ten near-identical restatements each: a spread of twelve
+        takes one per topic, where a uniform draw of twelve repeats some.'''
+        rows = [make_row(sample_id=f"src:{topic}-{copy}", query=f"topic {topic} restatement {copy}")
+                for topic in range(12) for copy in range(10)]
+
+        def vector(topic, copy):
+            values = [0.0] * 22
+            values[topic], values[12 + copy] = 1.0, 0.05
+            return values
+
+        caches = prepare.Caches(embedded(rows, [vector(t, c) for t in range(12) for c in range(10)]))
         diverse, _ = prepare.stratified_sample(
-            rows, self.source(quota=12, select="diverse"), seed=0
-        )
-        self.assertLess(redundancy(diverse), redundancy(uniform))
-        # The point of the exercise: one per topic rather than clusters of
-        # restatements of the same few.
-        topics = {row.sample_id.split(":")[1].split("-")[0] for row in diverse}
-        self.assertGreater(len(topics), 9)
+            rows, self.source(quota=12, select="diverse"), seed=0, caches=caches)
+        uniform, _ = prepare.stratified_sample(rows, self.source(quota=12), seed=0)
+        topics = lambda picked: {row.sample_id.split(":")[1].split("-")[0] for row in picked}
+        self.assertEqual(len(topics(diverse)), 12)
+        self.assertLess(len(topics(uniform)), 12)
 
     def test_diverse_selection_is_deterministic(self):
         rows = self.pool(120)
+        caches = prepare.Caches(embedded(rows, np.random.default_rng(0).normal(size=(120, 8))))
         source = self.source(quota=15, select="diverse")
-        first, _ = prepare.stratified_sample(rows, source, seed=0)
-        second, _ = prepare.stratified_sample(rows, source, seed=0)
+        first, _ = prepare.stratified_sample(rows, source, seed=0, caches=caches)
+        second, _ = prepare.stratified_sample(rows, source, seed=0, caches=caches)
         self.assertEqual([r.sample_id for r in first], [r.sample_id for r in second])
 
     def test_diverse_selection_compares_the_payload_not_the_wrapper(self):
-        '''
-        Same rule near_dedup follows. PHT's items differ by historical event
-        inside a shared ~100-word instruction; spreading on the rendered query
-        would spread on boilerplate and pick by template noise.
-        '''
-        wrapper = " ".join(f"boilerplate{i}" for i in range(60))
+        '''Same rule near_dedup follows: PHT's items differ by event, not wrapper.'''
         rows = [
-            make_row(sample_id=f"src:{i}", query=f"{wrapper} concerning {event}",
+            make_row(sample_id=f"src:{i}", query=f"shared wrapper concerning {event} {i}",
                      metadata={"event": event})
-            for i, event in enumerate(
-                ["holodomor", "holodomor", "holodomor", "nanjing", "katyn"]
-            )
+            for i, event in enumerate(["holodomor", "holodomor", "holodomor", "nanjing", "katyn"])
         ]
-        source = self.source(quota=3, select="diverse", dedup_on="event",
-                             metadata=["event"])
-        picked, _ = prepare.stratified_sample(rows, source, seed=0)
-        self.assertEqual(
-            len({row.metadata["event"] for row in picked}), 3,
-            "one per distinct event, not three renderings of one",
-        )
+        caches = prepare.Caches({prepare.embed_key("holodomor"): unit(1, 0, 0),
+                                 prepare.embed_key("nanjing"): unit(0, 1, 0),
+                                 prepare.embed_key("katyn"): unit(0, 0, 1)})
+        source = self.source(quota=3, select="diverse", dedup_on="event", metadata=["event"])
+        picked, _ = prepare.stratified_sample(rows, source, seed=0, caches=caches)
+        self.assertEqual(len({row.metadata["event"] for row in picked}), 3,
+                         "one per distinct event, not three renderings of one")
+
+    def test_diverse_selection_without_embeddings_is_refused(self):
+        with self.assertRaises(ValueError):
+            prepare.stratified_sample(self.pool(50), self.source(quota=5, select="diverse"), seed=0)
 
     def test_an_unknown_selection_mode_is_refused(self):
         with self.assertRaises(ValueError):
             prepare.stratified_sample(
                 self.pool(50), self.source(quota=5, select="nonsense"), seed=0
             )
+
+
+class TestScreen(unittest.TestCase):
+    '''Tier 3b: candidates Hermes refuses are dropped and the allotment refilled.'''
+
+    def source(self, quota, **overrides) -> Source:
+        return Source(**{"name": "src", "risk": "cbrn", "question_type": GRADED,
+                         "elicitation_family": COMPLIANCE, "path": "unused",
+                         "quota": quota, **overrides})
+
+    def pool(self, n: int) -> list[Row]:
+        return [make_row(sample_id=f"src:{i}", query=f"request number {i}") for i in range(n)]
+
+    def caches(self, rows, refused=()) -> "prepare.Caches":
+        return prepare.Caches(embeddings={}, verdicts={
+            prepare.screen_key(row): {
+                "verdict": "refused" if row.sample_id in refused else "answered",
+                "model": "test/hermes",
+            }
+            for row in rows
+        })
+
+    def order(self, rows) -> list[str]:
+        return [rows[i].sample_id for i in prepare._stable_order(rows, list(range(len(rows))), 0)]
+
+    def test_default_scope_matches_the_spec(self):
+        self.assertEqual({source.name for source in SOURCES if source.screened()}, {
+            "harmbench", "sosbench", "wmdp", "cysecbench", "cyberseceval_mitre",
+            "agentharm", "advanced_ai_risk", "social_harm", "historical_revisionism",
+            "darkbench",
+        })
+
+    def test_the_flag_overrides_the_default(self):
+        self.assertTrue(self.source(5, question_type=LIKERT, elicitation_family=OPINION,
+                                    screen=True).screened())
+        self.assertFalse(self.source(5, screen=False).screened())
+
+    def test_refused_candidates_are_replaced_from_the_preselection(self):
+        rows = self.pool(20)
+        order = self.order(rows)
+        caches = self.caches(rows, refused=order[:2])
+        kept, _ = prepare.stratified_sample(rows, self.source(4), seed=0, caches=caches)
+        self.assertEqual({row.sample_id for row in kept}, set(order[2:6]))
+        self.assertEqual([record["dropped"] for record in caches.refused], order[:2])
+        self.assertEqual({record["tier"] for record in caches.refused}, {"screen"})
+        self.assertEqual(caches.candidates, 14, "ceil(3.5 x 4)")
+
+    def test_only_preselected_candidates_need_a_verdict(self):
+        rows = self.pool(20)
+        caches = prepare.Caches(embeddings={}, verdicts={})
+        prepare.stratified_sample(rows, self.source(4), seed=0, caches=caches)
+        by_id = {row.sample_id: row for row in rows}
+        self.assertEqual(set(caches.missing),
+                         {prepare.screen_key(by_id[i]) for i in self.order(rows)[:14]})
+
+    def test_a_missing_verdict_writes_the_screen_input(self):
+        rows = self.pool(3)
+        caches = prepare.Caches(embeddings={}, verdicts={})
+        prepare.stratified_sample(rows, self.source(2), seed=0, caches=caches)
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            with self.assertRaises(prepare.CacheMiss) as raised:
+                prepare.require_screen("cbrn", caches)
+            lines = (Path(tmp) / "cbrn.screen_input.jsonl").read_text().splitlines()
+        records = [json.loads(line) for line in lines]
+        self.assertEqual(len(records), 3)
+        self.assertEqual(set(records[0]), {"key", "sample_id", "question_type", "system_prompt", "query"})
+        self.assertIn("SCREEN_ONLY=1", str(raised.exception))
+        self.assertIn("screen_answerability.py --risk cbrn", str(raised.exception))
+
+    def test_an_unrecognised_verdict_counts_as_missing(self):
+        rows = self.pool(1)
+        caches = self.caches(rows)
+        key = prepare.screen_key(rows[0])
+        caches.verdicts[key]["verdict"] = "error"
+        self.assertEqual(prepare._screen(rows, [0], caches), [0])
+        self.assertEqual(set(caches.missing), {key})
+
+    def test_a_complete_screen_removes_a_stale_input_file(self):
+        stale_caches = self.caches(self.pool(2))
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            stale = Path(tmp) / "cbrn.screen_input.jsonl"
+            stale.write_text("{}\n")
+            prepare.require_screen("cbrn", stale_caches)
+            self.assertFalse(stale.exists())
+
+    def test_load_screen_skips_a_truncated_last_line(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            (Path(tmp) / "screen").mkdir()
+            (Path(tmp) / "screen" / "cbrn.jsonl").write_text(
+                json.dumps({"key": "a", "verdict": "refused"}) + '\n{"key": "b", "ver')
+            self.assertEqual(set(prepare.load_screen("cbrn")), {"a"})
+
+    def test_a_short_stratum_names_the_source_and_the_gap(self):
+        rows = self.pool(20)
+        caches = self.caches(rows, refused=self.order(rows)[:11])
+        with self.assertRaisesRegex(ValueError, r"src: .*short by 1"):
+            prepare.stratified_sample(rows, self.source(4), seed=0, caches=caches)
+
+    def test_an_exhausted_stratum_keeps_its_survivors(self):
+        rows = (
+            [make_row(sample_id=f"src:a{i}", query=f"small stratum {i}", metadata={"s": "a"})
+             for i in range(2)]
+            + [make_row(sample_id=f"src:b{i}", query=f"large stratum {i}", metadata={"s": "b"})
+               for i in range(20)]
+        )
+        caches = self.caches(rows, refused={"src:a0", "src:a1"})
+        kept, _ = prepare.stratified_sample(rows, self.source(6, stratify=["s"]), seed=0, caches=caches)
+        self.assertEqual({row.metadata["s"] for row in kept}, {"b"})
+        self.assertEqual(len(kept), 5, "stratum a's allotment of 1 is not moved elsewhere")
+
+        unquoted = self.pool(3)
+        kept, _ = prepare.stratified_sample(
+            unquoted, self.source(None), seed=0, caches=self.caches(unquoted, refused={"src:1"}))
+        self.assertEqual([row.sample_id for row in kept], ["src:0", "src:2"])
+
+    def test_grouped_sources_screen_the_leader_only(self):
+        source = self.source(2, name="paired", risk="manipulation", elicitation_family=JUDGMENT,
+                             group_key="scenario_id", screen=True)
+        rows = [make_row(sample_id=f"paired:{g}_{a}", query=f"scenario {g} arm {a}",
+                         metadata={"scenario_id": str(g), "arm": str(a)})
+                for g in range(6) for a in range(3)]
+        leaders = [row for row in rows if row.metadata["arm"] == "0"]
+
+        pending = prepare.Caches(embeddings={}, verdicts={})
+        prepare.stratified_sample(rows, source, seed=0, caches=pending)
+        self.assertEqual(set(pending.missing), {prepare.screen_key(row) for row in leaders})
+
+        kept, _ = prepare.stratified_sample(
+            rows, source, seed=0, caches=self.caches(leaders, refused={"paired:0_0"}))
+        groups = {}
+        for row in kept:
+            groups.setdefault(row.metadata["scenario_id"], set()).add(row.metadata["arm"])
+        self.assertEqual(len(groups), 2)
+        self.assertNotIn("0", groups)
+        self.assertTrue(all(arms == {"0", "1", "2"} for arms in groups.values()))
+
+    def test_an_unscreened_source_ignores_verdicts(self):
+        rows = self.pool(20)
+        source = self.source(4, question_type=LIKERT, elicitation_family=OPINION)
+        plain, _ = prepare.stratified_sample(rows, source, seed=0)
+        everything_refused = self.caches(rows, refused={row.sample_id for row in rows})
+        screened, _ = prepare.stratified_sample(rows, source, seed=0, caches=everything_refused)
+        self.assertEqual(plain, screened)
+
+
+class TestMeta(unittest.TestCase):
+
+    def test_meta_records_embedding_and_screen(self):
+        report = {"advanced_ai_risk": {
+            "loaded": 10, "exact_dropped": 0, "near_dropped": 0, "cross_source_dropped": 0,
+            "kept": 1, "strata": 1, "screen_candidates": 4, "screen_refused": 3,
+        }}
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(prepare, "OUT_DIR", Path(tmp)), \
+                mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            (Path(tmp) / "screen").mkdir()
+            (Path(tmp) / "screen" / "loss_of_control.jsonl").write_text(json.dumps(
+                {"key": "k", "verdict": "refused", "model": "vllm/NousResearch/Hermes-4-70B"}
+            ) + "\n")
+            prepare.write_outputs("loss_of_control", [make_row(risk="loss_of_control")],
+                                  report, [], seed=0)
+            meta = json.loads((Path(tmp) / "loss_of_control.meta.json").read_text())
+        self.assertEqual(meta["embedding"], {
+            "model": prepare.EMBEDDING_MODEL, "tau_cosine": 0.92,
+            "cache": "datasets/cache/embeddings/loss_of_control.npz",
+        })
+        self.assertEqual(meta["screen"], {
+            "model": ["vllm/NousResearch/Hermes-4-70B"], "applies_to": ["advanced_ai_risk"],
+            "candidate_factor": 3.5, "refused_dropped": {"advanced_ai_risk": 3},
+        })
+        self.assertFalse({"jaccard_tau_default", "cosine_tau_default", "token_gate"} & set(meta))
 
 
 class TestPremiseDependentCriteria(unittest.TestCase):
@@ -1166,7 +1431,10 @@ class TestDeterminism(unittest.TestCase):
 
     def test_same_seed_gives_identical_rows(self):
         risk = next((r for r in RISKS if for_risk(r)), None)
-        first, _, _ = prepare.build_risk(risk, seed=0)
+        try:
+            first, _, _ = prepare.build_risk(risk, seed=0)
+        except prepare.CacheMiss:
+            self.skipTest(f"{risk} caches not built; run prepare.py (it prints the commands)")
         second, _, _ = prepare.build_risk(risk, seed=0)
         self.assertEqual(
             [row.sample_id for row in first], [row.sample_id for row in second]

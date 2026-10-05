@@ -94,8 +94,9 @@ def _to_sample(row: dict) -> Sample:
             "role": row.get("role") or "pooled",
             "pool": row.get("pool") or "",
             "summary": row.get("summary") or "mean",
-            "rewrite": (row.get("rewrite") or "true") == "true",
-            "framing": (row.get("framing") or "true") == "true",
+            # The single stage-2/3 applicability gate (pipeline/utils/replay.py).
+            # None for a CSV built before the column existed: every family applies.
+            "families": json.loads(row["families"]) if row.get("families") else None,
         },
     )
 

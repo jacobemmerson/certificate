@@ -65,7 +65,7 @@ COLUMNS = [
     "fallback_categories", "fallback_scale_map",
     "detector", "system_prompt", "item_text", "prompt_template",
     "elicitation_family", "metadata",
-    "judge_style", "role", "pool", "summary", "rewrite", "framing",
+    "judge_style", "role", "pool", "summary", "families",
 ]
 
 # ----- elicitation families -----
@@ -79,6 +79,14 @@ OPINION = "opinion"        # "rate your agreement" — a fixed scale answer
 GENERIC = "generic"        # open-ended; no framing templates apply
 
 ELICITATION_FAMILIES = frozenset({COMPLIANCE, JUDGMENT, OPINION, GENERIC})
+
+# ----- perturbation families -----
+# Which stage-2/3 families apply to a row travels in the CSV as `families`, the
+# single applicability gate (pipeline/utils/replay.py reads metadata["families"]).
+# REWRITE_FAMILIES is mirrored by pipeline/stage2_perturbation/rewrite.py, which
+# datasets/ cannot import (see DETECTORS above); a test on each side pins it.
+REWRITE_FAMILIES = ("paraphrase", "register", "past_tense", "multilingual")
+FAMILIES = (*REWRITE_FAMILIES, "framing", "persona", "reconsideration", "scenario")
 
 # Marks where `item_text` sits inside `prompt_template`. A sentinel plus
 # str.replace, deliberately not str.format: the likert templates contain
@@ -164,17 +172,14 @@ class Row:
     role: str = "pooled"            # "diagnostic" = visible per-benchmark, out of the cluster mean
     pool: str = ""                  # sources sharing a pool enter the cluster mean once
     summary: str = "mean"           # a summary registered in scorers/source_metrics.py
-    rewrite: bool = True            # stage-2 rewrite families apply to this row
-    framing: bool = True            # stage-2 framing templates apply to this row
+    families: list[str] = field(default_factory=list)  # stage-2/3 families that apply (FAMILIES)
 
     def to_csv_row(self) -> dict:
         '''Flatten to a CSV row, JSON-encoding the structured columns.'''
         row = asdict(self)
         for col in ("categories", "scale_map", "choices", "metadata",
-                    "fallback_categories", "fallback_scale_map"):
+                    "fallback_categories", "fallback_scale_map", "families"):
             row[col] = json.dumps(row[col], ensure_ascii=False, sort_keys=True)
-        row["rewrite"] = "true" if self.rewrite else "false"
-        row["framing"] = "true" if self.framing else "false"
         return row
 
 
@@ -201,6 +206,9 @@ def validate(row: Row) -> None:
 
     if row.elicitation_family not in ELICITATION_FAMILIES:
         fail(f"unknown elicitation_family {row.elicitation_family!r}")
+    unknown_families = set(row.families) - set(FAMILIES)
+    if unknown_families:
+        fail(f"unknown families {sorted(unknown_families)}")
     if ITEM not in row.prompt_template:
         fail(f"prompt_template has no {ITEM} slot")
     # The perturbation path rebuilds the prompt by substituting a reworded
@@ -322,29 +330,23 @@ class Source:
     item_text: Derived | None = None
     prompt_template: Derived | None = None
     elicitation_family: str = GENERIC
-    # False opts out of the framing templates while keeping the family (the
-    # refusal floor in scorers/cluster.py is also keyed on COMPLIANCE): the
-    # compliance wrappers ask for a *procedure*, which changes a request for
-    # an artifact (a story, an essay) into a different ask.
-    framing: bool = True
     metadata: Sequence[str] = ()
 
     judge_style: str = "reasoned"
     role: str = "pooled"
     pool: str = ""
     summary: str = "mean"
-    # None = derive from question_type: detection rows keep their construct in
-    # item_text, so rewording them measures the rewriter, not the model.
-    rewrite: bool | None = None
+    # Stage-2/3 families that apply to this source's rows. None = derive from
+    # question_type (families_for).
+    families: Sequence[str] | None = None
+    # Hermes answerability screen (prepare.py tier 3b). None = derive (screened).
+    screen: bool | None = None
     # The closing instruction or question. Rendered into prompt_template after
     # the item, so a rewrite can never drop it.
     ask: Derived | None = None
     # Strings every rewrite of this row must still contain (a required output
     # token, a misattributed name). Per-row via a callable.
     must_survive: Sequence[str] | Callable[[dict], list[str]] = ()
-
-    def rewrite_default(self) -> bool:
-        return self.rewrite if self.rewrite is not None else self.question_type != DETECTION
 
     # selection
     stratify: Sequence[str] = ()
@@ -382,7 +384,44 @@ class Source:
     dedup: bool = True
     dedup_on: str | None = None      # metadata field to compare instead of `query`
     distinct_on: Sequence[str] = ()  # differing values here => never duplicates
-    tau: float | None = None         # per-source Jaccard threshold
+    tau: float | None = None         # per-source cosine threshold (default COSINE_TAU)
+
+    def families_for(self, system_prompt: str | None) -> list[str]:
+        '''
+        The `families` column for one row.
+
+        Detection rows keep their construct inside the text, so rewording or
+        reframing it measures the rewriter rather than the model: only the live
+        challenge and the scenario apply. The framing templates ask for a
+        procedure, so they fit compliance requests only. Persona replaces the
+        system turn, so a row steered by its own system prompt never gets it,
+        declared or not.
+        '''
+        if self.families is not None:
+            declared = list(self.families)
+        elif self.question_type == DETECTION:
+            declared = ["reconsideration", "scenario"]
+        else:
+            declared = [
+                *REWRITE_FAMILIES,
+                *(["framing"] if self.elicitation_family == COMPLIANCE else []),
+                *(["persona"] if self.question_type in (GRADED, MCQ) else []),
+                "reconsideration", "scenario",
+            ]
+        return [family for family in declared if not (family == "persona" and system_prompt)]
+
+    def screened(self) -> bool:
+        '''
+        Whether prepare.py drops candidates Hermes refuses: only where a refusal
+        means the item carries no signal, i.e. compliance and generic graded/mcq
+        asks. Not opinion or judgment (the position is the construct), not
+        detection (refusal is the signal for cyber_false_refusal; token and tool
+        contracts elsewhere), not extraction.
+        '''
+        if self.screen is not None:
+            return self.screen
+        return (self.question_type in (GRADED, MCQ)
+                and self.elicitation_family in (COMPLIANCE, GENERIC))
 
     def resolve(self, row: dict, spec: Any) -> Any:
         '''Apply a `Derived` spec against a raw row: call it, or look it up.'''
@@ -398,17 +437,6 @@ class Source:
 _WORD = re.compile(r"[a-z0-9]+")
 
 
-def tokens(text: str) -> frozenset[str]:
-    return frozenset(_WORD.findall(str(text).lower()))
-
-
 def normalised(text: str) -> str:
     '''Key for exact-match dedup: case, punctuation and spacing folded away.'''
     return " ".join(_WORD.findall(str(text).lower()))
-
-
-def jaccard(a: frozenset[str], b: frozenset[str]) -> float:
-    if not a or not b:
-        return 0.0
-    intersection = len(a & b)
-    return intersection / (len(a) + len(b) - intersection)

@@ -59,6 +59,26 @@ for i in $(seq 1 80); do
 done
 curl -sf "http://localhost:$PORT/health" > /dev/null || { echo "vLLM never became healthy"; exit 1; }
 
+# ---- answerability screen ---------------------------------------------------
+# prepare.py leaves datasets/cache/<risk>.screen_input.jsonl when candidates
+# have no screen verdict yet. Screen them, then rebuild that risk's CSV so the
+# artifacts below are generated for the screened selection. Keys already
+# screened are skipped, so requeueing costs nothing.
+for input in datasets/cache/*.screen_input.jsonl; do
+    [ -e "$input" ] || continue
+    risk=$(basename "$input" .screen_input.jsonl)
+    uv run python scripts/screen_answerability.py --risk "$risk" \
+        --model "vllm/$MODEL" \
+        --model-base-url "http://localhost:$PORT/v1" \
+        --max-connections 32
+    uv run python -m datasets.prepare.cluster.prepare --risk "$risk"
+done
+# sbatch --export=ALL,SCREEN_ONLY=1 stops here, so refused_dropped in
+# datasets/public/<risk>.meta.json can be reviewed before any generation.
+if [ "${SCREEN_ONLY:-0}" = 1 ]; then
+    exit 0
+fi
+
 # ---- artifact generation ----------------------------------------------------
 # --missing-only makes this safe to requeue after preemption or timeout:
 # finished families are skipped, interrupted ones are filled in and merged.
@@ -67,9 +87,7 @@ uv run python generate.py \
     --attacker "vllm/$MODEL" \
     --model-base-url "http://localhost:$PORT/v1" \
     --max-connections 32 \
+    --missing-only \
     --perturb-k 1 \
     --simulate --sim-k 1 \
-    --reasoning \
-    --only manipulation \
-    --limit 5 \
-    --force
+    --reasoning
