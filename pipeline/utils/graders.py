@@ -8,12 +8,60 @@ TODO: rename file to something more fitting since this is general utilties
 from inspect_ai.log import EvalLog
 from inspect_ai.scorer import SampleScore
 from pathlib import Path
+import fcntl
 import json
+import os
+import re
+import tempfile
 
 from pipeline.stage1_evaluation.scorers.source_metrics import contract, summarise
 from pipeline.utils.scoring import is_scored, safety
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+MODELS_DIR = REPO_ROOT / "models"
+
+
+def model_result_path(model_id: str) -> Path:
+    """`models/results/<slug>.json`: the one file a certification run writes."""
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", model_id)
+    return MODELS_DIR / "results" / f"{slug}.json"
+
+
+def write_json_atomic(path: Path, obj) -> None:
+    """Write via a sibling tmp file + os.replace so a killed process (slurm
+    preemption, Ctrl-C) leaves the previous file intact, never a half-written one."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(obj, f, indent=4)
+            f.write("\n")
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
+
+
+def load_model_results() -> list[dict]:
+    """Every per-model record, sorted by id (case-insensitive) — the order models.json is rebuilt in."""
+    results_dir = MODELS_DIR / "results"
+    if not results_dir.is_dir():
+        return []
+    records = [json.loads(p.read_text()) for p in results_dir.glob("*.json")]
+    return sorted(records, key=lambda m: m["id"].lower())
+
+
+def rebuild_models_json() -> Path:
+    """models.json is derived: rebuild it from the per-model files, atomically."""
+    path = MODELS_DIR / "models.json"
+    lock = MODELS_DIR / "results" / ".rebuild.lock"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    # Without it, a rebuild that read results/ before another job's file existed
+    # can os.replace last and drop that job's model from models.json.
+    with open(lock, "a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        write_json_atomic(path, load_model_results())
+    return path
 
 def load_graders(path: str | Path | None = None) -> list[str]:
     """Load grader model names from a text file (one per line, # comments ignored)."""
@@ -127,21 +175,11 @@ def load_models_with_check(model_id: str | None = None) -> tuple[list[dict], int
     Return the models list and the index of `model_id` within it (-1 if not
     found, or if no model_id is given).
     '''
-    path = REPO_ROOT / "models" / "models.json"
-    if not path.exists():
-        raise FileNotFoundError(f"Model results file not found: {path}")
-
-    try:
-        with open(path, 'r') as f:
-            models = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        models = []
-
+    models = load_model_results()
     if model_id:
         for i, m in enumerate(models):
             if m['id'] == model_id:
                 return models, i
-
     return models, -1
 
 

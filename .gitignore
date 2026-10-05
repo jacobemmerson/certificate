@@ -13,3 +13,6 @@ Live-Human-Rights-Bench/
 .cache/huggingface/
 # local analysis scratch (reports, rater exports)
 analysis/
+
+# certify.py rebuild lock
+models/results/.rebuild.lock

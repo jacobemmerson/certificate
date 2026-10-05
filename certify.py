@@ -15,7 +15,6 @@ certification (this script validates the artifacts and fails fast with the
 exact command otherwise).
 '''
 
-import json
 import os
 import sys
 from argparse import ArgumentParser
@@ -40,6 +39,7 @@ from pipeline.utils import retry_policy
 from pipeline.utils import routing as provider_routing_api
 from pipeline.utils.graders import (
     load_graders, load_models_with_check, validate_graders, validate_target,
+    model_result_path, rebuild_models_json, write_json_atomic,
 )
 
 # OpenRouter's provider routing accepts a price ceiling per token class, in USD
@@ -364,13 +364,7 @@ def record_routing(statuses: dict, endpoints: list[dict] | None) -> dict:
 # ----- Updates models/models.json -----
 
 def update(results, models, idx):
-    '''
-    Summarises results and updates models/models.json
-    '''
-
-    if models: # store previous only if previous results exist
-        with open('models/models_previous.json', 'w') as f: # store as a safety net
-            json.dump(models, f, indent=4)
+    '''Merge this run's results over the stored record, write models/results/<slug>.json, rebuild models/models.json.'''
 
     # ----- store ------
     # if idx != -1, model results already exist
@@ -402,10 +396,6 @@ def update(results, models, idx):
         # Recomputed after the merge, so a --only rerun reports across every
         # risk the model has, not just the ones this run touched.
         results['aggregate'] = results_tree.model_aggregate(results['results'])
-        models[idx] = results
-    else:
-        # add new entry
-        models.append(results)
 
     # A benchmark that has a complete score has no use for the partial figure
     # it supersedes: two numbers for one benchmark read as equally current.
@@ -414,9 +404,8 @@ def update(results, models, idx):
     if not results.get('partial_scores'):
         results.pop('partial_scores', None)
 
-    # write models file back
-    with open('models/models.json', 'w') as f:
-        json.dump(models, f, indent=4)
+    write_json_atomic(model_result_path(results["id"]), results)
+    rebuild_models_json()
 
 
 # ----- main ------

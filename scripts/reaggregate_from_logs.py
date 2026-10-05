@@ -17,8 +17,7 @@ untouched. Every other field is preserved — including aa_intelligence_index /
 aa_model_match — and update() recomputes the headline across all four risks and
 clears the now-superseded partial_scores.
 
-Runs offline; touches no model or judge. update() writes a models_previous.json
-backup before it saves.
+Runs offline; touches no model or judge.
 
 Usage:
     uv run python3 scripts/reaggregate_from_logs.py gpt-5.6-sol
@@ -118,7 +117,7 @@ def main(model_id: str) -> None:
         return
 
     update(new, models, idx)
-    print(f"\nWrote {model_id} to models/models.json (backup: models/models_previous.json).")
+    print(f"\nWrote {model_id} to models/results/ and rebuilt models/models.json.")
 
 
 if __name__ == "__main__":

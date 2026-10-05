@@ -10,7 +10,6 @@ Run: uv run python3 -m unittest discover tests
 '''
 
 import json
-import os
 import sys
 import tempfile
 import unittest
@@ -18,6 +17,7 @@ from pathlib import Path
 from unittest import mock
 
 import certify
+from pipeline.utils import graders
 
 
 def entry(model_id: str, risks: dict, statuses: dict | None = None) -> dict:
@@ -46,13 +46,13 @@ class TestUpdate(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        (Path(self.tmp.name) / "models").mkdir()
-        cwd = os.getcwd()
-        os.chdir(self.tmp.name)
-        self.addCleanup(os.chdir, cwd)
+        self.models_dir = Path(self.tmp.name) / "models"
+        patcher = mock.patch.object(graders, "MODELS_DIR", self.models_dir)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def written(self) -> list:
-        return json.loads((Path(self.tmp.name) / "models" / "models.json").read_text())
+        return json.loads((self.models_dir / "models.json").read_text())
 
     def test_a_rerun_of_one_risk_preserves_the_others(self):
         stored = [entry("m", {"cbrn": 50.0, "cyber": 60.0, "manipulation": 70.0})]
@@ -94,16 +94,40 @@ class TestUpdate(unittest.TestCase):
 
     def test_a_new_model_is_appended(self):
         stored = [entry("a", {"cbrn": 50.0})]
+        graders.write_json_atomic(graders.model_result_path("a"), stored[0])
         certify.update(entry("b", {"cbrn": 60.0}), stored, idx=-1)
         self.assertEqual([m["id"] for m in self.written()], ["a", "b"])
 
-    def test_the_previous_file_is_kept_as_a_safety_net(self):
-        stored = [entry("m", {"cbrn": 90.0})]
-        certify.update(entry("m", {"cbrn": 10.0}), stored, idx=0)
-        previous = json.loads(
-            (Path(self.tmp.name) / "models" / "models_previous.json").read_text()
+    def test_the_per_model_file_is_the_source_of_truth(self):
+        certify.update(entry("m", {"cbrn": 42.0}), [], idx=-1)
+        per_model = json.loads((self.models_dir / "results" / "m.json").read_text())
+        self.assertEqual(per_model["scores"]["cbrn"], 42.0)
+        self.assertEqual(self.written(), [per_model])
+        self.assertEqual(
+            [p.name for p in self.models_dir.iterdir() if p.suffix != ".json" and p.is_file()],
+            [], "no tmp file left behind",
         )
-        self.assertEqual(previous[0]["results"]["cbrn"]["aggregate"]["worst"], 90.0)
+
+    def test_two_models_updated_from_stale_lists_both_survive(self):
+        # Two array-job processes each loaded `models` before the other wrote.
+        certify.update(entry("a", {"cbrn": 1.0}), [], idx=-1)
+        certify.update(entry("b", {"cbrn": 2.0}), [], idx=-1)
+        self.assertEqual([m["id"] for m in self.written()], ["a", "b"])
+        models, idx = graders.load_models_with_check("b")
+        self.assertEqual((len(models), idx), (2, 1))
+
+    def test_result_path_is_one_path_component(self):
+        path = graders.model_result_path("author/bar:free")
+        self.assertEqual(path.parent, self.models_dir / "results")
+        self.assertEqual(path.name, "author_bar_free.json")
+
+    def test_rebuild_sorts_by_id_and_is_idempotent(self):
+        certify.update(entry("Zed", {"cbrn": 1.0}), [], idx=-1)
+        certify.update(entry("alpha", {"cbrn": 2.0}), [], idx=-1)
+        first = (self.models_dir / "models.json").read_bytes()
+        graders.rebuild_models_json()
+        self.assertEqual((self.models_dir / "models.json").read_bytes(), first)
+        self.assertEqual([m["id"] for m in self.written()], ["alpha", "Zed"])
 
 
 class TestParse(unittest.TestCase):
