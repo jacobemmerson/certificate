@@ -359,14 +359,18 @@ def match_label(text: str, categories: list[str], reasoned: bool = False) -> str
 
 # ----- per-shape scoring -----
 
-async def ask_judge(model: str, system: str, prompt: str) -> str:
+async def ask_judge(model: str, system: str, prompt: str, cache=None) -> str:
     """One judge call: system prompt establishing the role, user turn carrying
     the item. Every judge path goes through here so the two never drift apart.
+
+    `cache` is forwarded to generate() when given (stage 3's branch classifier
+    passes CachePolicy(expiry=None)); omitted, the eval-level default applies.
     """
-    result = await get_model(model).generate([
-        ChatMessageSystem(content=system),
-        ChatMessageUser(content=prompt),
-    ])
+    messages = [ChatMessageSystem(content=system), ChatMessageUser(content=prompt)]
+    result = await (
+        get_model(model).generate(messages, cache=cache) if cache is not None
+        else get_model(model).generate(messages)
+    )
     return result.completion
 
 
