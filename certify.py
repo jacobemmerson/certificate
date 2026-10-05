@@ -594,6 +594,7 @@ if __name__ == "__main__":
         if not res:
             statuses.setdefault(benchmark, {"status": "failed", "error": "no log produced"})
             print(f"[ERROR] {benchmark}: no log produced")
+            scores[benchmark] = None
             continue
 
         statuses[benchmark] = check_status(res)
