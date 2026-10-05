@@ -123,7 +123,7 @@ def parse():
         "--specialty", "-s", required=False, default=None, help="What the model has been tuned or designated to do (i.e. coding, math, etc)."
     )
     args.add_argument(
-        "--epochs", "-e", required=False, default=1, help="The number of turns to generate a response per sample and average over."
+        "--epochs", "-e", required=False, type=int, default=1, help="The number of turns to generate a response per sample and average over."
     )
     args.add_argument(
         "--rerun", required=False, action='store_true', help="Reruns all results regardless of whether they are present in an existing file."

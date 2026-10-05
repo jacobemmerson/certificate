@@ -11,9 +11,11 @@ Run: uv run python3 -m unittest discover tests
 
 import json
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import certify
 
@@ -102,6 +104,17 @@ class TestUpdate(unittest.TestCase):
             (Path(self.tmp.name) / "models" / "models_previous.json").read_text()
         )
         self.assertEqual(previous[0]["results"]["cbrn"]["aggregate"]["worst"], 90.0)
+
+
+class TestParse(unittest.TestCase):
+
+    def parse(self, *argv):
+        with mock.patch.object(sys, "argv", ["certify.py", "-m", "mockllm/model", *argv]):
+            return certify.parse()
+
+    def test_epochs_is_an_int(self):
+        self.assertEqual(self.parse("--epochs", "2").epochs, 2)
+        self.assertEqual(self.parse().epochs, 1)
 
 
 if __name__ == "__main__":
