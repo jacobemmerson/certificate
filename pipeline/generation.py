@@ -36,6 +36,7 @@ from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS, _extract
 from pipeline.stage3_simulation.prompts import (
     REFRAME_SYS_PROMPT, SCENARIO_FAMILY, parse_reframing, reframe_prompt,
 )
+from pipeline.utils.replay import family_applies
 
 
 @dataclass
@@ -135,7 +136,7 @@ async def generate_rewrites(
     model = get_model(attacker_model)
     semaphore = asyncio.Semaphore(max_connections)
     existing = existing or set()
-    samples = [s for s in samples if (s.metadata or {}).get("rewrite", True)]
+    samples = [s for s in samples if family_applies(s.metadata, family)]
 
     async def one(sample: Sample, variant: int) -> dict:
         view = SampleView.of(sample)
@@ -180,6 +181,8 @@ def generate_framing(samples: list[Sample]) -> list[dict]:
     """
     rows = []
     for sample in samples:
+        if not family_applies(sample.metadata, "framing"):
+            continue
         view = SampleView.of(sample)
         templates = framing_templates(view)
         if not templates:

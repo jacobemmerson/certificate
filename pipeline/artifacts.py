@@ -22,10 +22,11 @@ from pathlib import Path
 from inspect_ai import Task
 from inspect_ai._util.registry import registry_info
 
-from pipeline.stage2_perturbation.framing import FRAMING_VERSION, framing_templates
+from pipeline.stage2_perturbation.framing import FRAMING_VERSION
 from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS, REWRITE_PROMPT_VERSION
 from pipeline.stage3_simulation.prompts import PROMPT_VERSION as SCENARIO_PROMPT_VERSION
 from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY
+from pipeline.utils.replay import family_applies
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GENERATED_DIR = REPO_ROOT / "datasets" / "generated"
@@ -107,30 +108,10 @@ def sample_ids(task: Task) -> list[str]:
     return [str(sample.id) for sample in task.dataset]
 
 
-def framing_ids(task: Task) -> set[str]:
-    """Sample ids in this task that framing templates actually apply to.
-
-    Elicitation family and the `framing` opt-out are per-sample (a cluster
-    mixes several), so framing covers a subset — generate_framing skips the rest, and coverage checks
-    must expect the same subset rather than the whole dataset.
-    """
-    return {
-        str(sample.id)
-        for sample in task.dataset
-        if framing_templates(sample)
-    }
-
-
-def rewrite_ids(task: Task) -> set[str]:
-    """Samples the rewrite families apply to: those whose row declared
-    `rewrite` (default: everything but detection rows, whose construct lives
-    inside the text a rewrite would change)."""
-    return {str(s.id) for s in task.dataset if (s.metadata or {}).get("rewrite", True)}
-
-
-def framing_applies(task: Task) -> bool:
-    """Whether any sample in this task has framing templates at all."""
-    return bool(framing_ids(task))
+def family_ids(task: Task, family: str) -> set[str]:
+    """Sample ids `family` applies to — the one coverage set generation,
+    validation and registry.py all use (spec §2.1)."""
+    return {str(s.id) for s in task.dataset if family_applies(s.metadata, family)}
 
 
 def validate_artifacts(
@@ -144,9 +125,8 @@ def validate_artifacts(
     """Fail fast (before any eval runs) unless every task in `benchmarks` has
     a complete artifact file for every requested pregenerated family.
 
-    Per family: rewrite families must cover every dataset sample id with at
-    least `perturb_k` variants; framing must cover every id it *applies* to
-    (elicitation family is per-sample — see framing_ids); scenario must have a file,
+    Per family: every id the family applies to (family_ids) must be covered —
+    rewrite families with at least `perturb_k` variants; scenario must have a file,
     but ids with fewer than `sim_k` variants only warn — generation drops
     unparseable reframings, mirroring the old live behavior, and replay just
     runs what exists (identically for every model). `reconsideration` is
@@ -161,15 +141,18 @@ def validate_artifacts(
     errors: list[str] = []
     for key, entry in benchmarks.items():
         for task in entry["tasks"]:
-            name = task_name(task)
             ids = set(sample_ids(task))
             checks: list[tuple[str, int, bool]] = []  # (family, min_k, strict)
-            strict_rewrite = not limit
-            checks += [(f, perturb_k, strict_rewrite) for f in requested if f in REWRITE_FAMILIES]
-            if "framing" in requested and framing_applies(task):
-                checks.append(("framing", 1, strict_rewrite))
+            strict = not limit
+            checks += [
+                (f, perturb_k if f in REWRITE_FAMILIES else 1, strict)
+                for f in requested if family_ids(task, f)
+            ]
             if simulate:
                 checks.append((SCENARIO_FAMILY, sim_k, False))
+            if not checks:
+                continue
+            name = task_name(task)
 
             for family, min_k, strict in checks:
                 cmd = f"uv run python generate.py --only {key} " + (
@@ -180,17 +163,12 @@ def validate_artifacts(
                     errors.append(f"Missing artifacts for {name}/{family} ({path}). Run: {cmd}")
                     continue
 
-                # Framing is the one family with per-sample applicability: a
-                # cluster mixes elicitation families, and samples whose family
-                # has no templates are skipped by generate_framing. Expecting
-                # full coverage would fail every cluster that contains one.
-                expected = (
-                    framing_ids(task) if family == "framing"
-                    else rewrite_ids(task) if family in REWRITE_FAMILIES
-                    else ids
-                )
+                expected = ids if family == SCENARIO_FAMILY else family_ids(task, family)
 
                 by_id = load_family(name, family)
+                orphans = set(by_id) - ids
+                if orphans and strict:
+                    errors.append(f"{name}/{family}: {len(orphans)} orphan id(s) not in the dataset. Run: {cmd} --force")
                 real = {i: [r for r in rows if not r.get("fallback")] for i, rows in by_id.items()}
                 missing = expected - {i for i, rows in real.items() if rows}
                 short = {i for i in expected & set(real) if 0 < len(real[i]) < min_k}

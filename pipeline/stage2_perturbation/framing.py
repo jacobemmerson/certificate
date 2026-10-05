@@ -9,9 +9,9 @@ pipeline/stage2_perturbation/adapters.py::elicitation_family). A risk cluster
 mixes elicitation families in one dataset, so applicability is per *sample*,
 not per task: rows whose family has no templates here (elicitation_family ==
 "generic", e.g. the open-ended "list role models" extraction rows) are skipped
-individually by pipeline/generation.py::generate_framing, and
-pipeline/artifacts.py::framing_ids scopes coverage checks to the subset that
-does apply.
+individually by pipeline/generation.py::generate_framing. Whether framing
+applies to a row at all is its `families` list
+(pipeline/utils/replay.py::family_applies).
 
 pipeline/stage2_perturbation/solvers.py::framing replays one stored variant per
 template here (never touching the shared control state.output), so the
@@ -44,8 +44,6 @@ FRAMING_TEMPLATES: dict[str, list[tuple[str, Callable[[str], str]]]] = {
 
 
 def framing_templates(state: Any) -> list[tuple[str, Callable[[str], str]]]:
-    """Templates that apply to one sample: its elicitation family's, unless the
-    row opted out (`framing=false` in the cluster schema)."""
-    if not (state.metadata or {}).get("framing", True):
-        return []
+    """Templates for one sample's elicitation family (applicability itself is
+    the `families` gate, pipeline/utils/replay.py::family_applies)."""
     return FRAMING_TEMPLATES.get(elicitation_family(state), [])

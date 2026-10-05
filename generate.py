@@ -55,7 +55,7 @@ from pipeline.artifacts import (
     PROMPT_VERSIONS,
     REWRITE_FAMILIES,
     artifact_path,
-    framing_applies,
+    family_ids,
     load_family,
     task_name,
     write_family,
@@ -213,9 +213,10 @@ if __name__ == "__main__":
                 samples = samples[: args.limit]
 
             # (family, k) pairs to produce for this task
-            wanted = [(f, args.perturb_k) for f in perturb_families if f in REWRITE_FAMILIES]
-            if "framing" in perturb_families and framing_applies(task):
-                wanted.append(("framing", 1))
+            wanted = [
+                (f, args.perturb_k if f in REWRITE_FAMILIES else 1)
+                for f in perturb_families if family_ids(task, f)
+            ]
             if args.simulate:
                 wanted.append((SCENARIO_FAMILY, args.sim_k))
 

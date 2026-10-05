@@ -2,8 +2,8 @@ from pipeline.stage1_evaluation.evals.clusters import CLUSTER_TASKS, RISKS, avai
 
 from inspect_ai import Task
 
-from pipeline.artifacts import framing_applies, load_family, task_name
-from pipeline.stage2_perturbation.solvers import REPLAY_SOLVERS, framing, reconsideration
+from pipeline.artifacts import REWRITE_FAMILIES, family_ids, load_family, task_name
+from pipeline.stage2_perturbation.solvers import REPLAY_SOLVERS, reconsideration
 from pipeline.stage3_simulation.solvers import scenario
 from pipeline.utils.replay import truncated
 from pipeline.utils.scoring import SCENARIO, scoring_step, wrap_scorers
@@ -58,12 +58,12 @@ def _build_task(
     solver_chain = [base_task.solver]
     applied: list[str] = []
     for family, replay_solver in REPLAY_SOLVERS.items():
-        if family in families:
-            solver_chain.append(replay_solver(truncated(load_family(name, family), k)))
+        if family in families and family_ids(base_task, family):
+            rows = load_family(name, family)
+            if family in REWRITE_FAMILIES:
+                rows = truncated(rows, k)
+            solver_chain.append(replay_solver(rows))
             applied.append(family)
-    if "framing" in families and framing_applies(base_task):
-        solver_chain.append(framing(load_family(name, "framing")))
-        applied.append("framing")
     if "reconsideration" in families:
         solver_chain.append(reconsideration())
         applied.append("reconsideration")
