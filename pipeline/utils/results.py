@@ -41,7 +41,7 @@ from inspect_ai.log import EvalLog
 from inspect_ai.scorer import Score, SampleScore
 
 from pipeline.stage1_evaluation.scorers.source_metrics import (
-    POOL_DERIVED, SUMMARIES, contract, summarise,
+    NEUTRAL_ARM, POOL_DERIVED, SUMMARIES, contract, summarise,
 )
 from pipeline.utils.scoring import (
     CONTROL, SCENARIO, is_scored, safety, sample_average, sample_worst,
@@ -288,16 +288,35 @@ def cvar10(values: list[float]) -> float | None:
     return fmean(sorted(values)[: ceil(0.1 * len(values))])
 
 
-def _per_item_worsts(scores: list[SampleScore], pools: dict[str, str]) -> dict[str, list[float]]:
-    '''Per source, and per pool over the union of its members, every item's worst.'''
-    out: dict[str, list[float]] = defaultdict(list)
+def _per_item_worsts(
+    scores: list[SampleScore], contracts: dict[str, dict], arms_intact: bool
+) -> dict[str, list[float]]:
+    '''
+    Per source, and per pool over the union of its members, every item's worst.
+
+    Restricted to the items the source's own summary scores, so `tail` and
+    `worst` describe the same rows: `neutral_arm_mean` keeps only the neutral
+    arm (all rows if it has none), exactly as `summarise` does.
+    '''
+    groups: dict[str, list[SampleScore]] = defaultdict(list)
+    summaries: dict[str, str] = {}
     for s in scores:
         source = str((s.sample_metadata or {}).get("source", ""))
         if not source:
             continue
-        for name in {source, pools.get(source, "")} - {""}:
-            out[name].append(float(s.score.value))
-    return dict(out)
+        c = contracts[source]
+        for name in {source, c["pool"]} - {""}:
+            groups[name].append(s)
+            summaries[name] = c["summary"]
+
+    out: dict[str, list[float]] = {}
+    for name, group in groups.items():
+        if arms_intact and summaries[name] == "neutral_arm_mean":
+            group = [
+                s for s in group if (s.sample_metadata or {}).get("persona") == NEUTRAL_ARM
+            ] or group
+        out[name] = [float(s.score.value) for s in group]
+    return out
 
 
 def build(task_results: list[EvalLog]) -> dict:
@@ -356,7 +375,7 @@ def _risk(task: EvalLog) -> dict:
     baseline = _summarise(task, {CONTROL}, "worst")
     worst = _summarise(task, families, "worst")
     average = _summarise(task, families, "average")
-    worsts = _per_item_worsts(worst_scores, pools)
+    worsts = _per_item_worsts(worst_scores, contracts, families != {SCENARIO})
     tail = {source: _percent(cvar10(values)) for source, values in worsts.items()}
     n_items = {source: len(values) for source, values in worsts.items()}
 

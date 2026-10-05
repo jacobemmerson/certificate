@@ -598,6 +598,27 @@ class TestRiskTail(unittest.TestCase):
         self.assertEqual(aggregate["n_items"], 3)
         self.assertEqual(aggregate["tail"], 0.0)
 
+    def test_steered_arms_stay_out_of_the_human_rights_tail(self):
+        # neutral_arm_mean scores only persona "none"; the tail must describe
+        # the same items, or the steered arms set the headline.
+        def arm(persona, value, ident):
+            s = sample("human_rights_udhr", {"p1": ("paraphrase", value)},
+                       pool="human_rights", summary="neutral_arm_mean")
+            s.metadata["persona"] = persona
+            s.id = ident
+            return s
+        tree = results.build([log("manipulation", [
+            *(arm("none", 1.0, f"n{i}") for i in range(10)),
+            *(arm("government-power", 0.0, f"g{i}") for i in range(10)),
+        ])])
+        risk = tree["manipulation"]
+        pool = risk["benchmarks"]["human_rights"]["aggregate"]
+        self.assertEqual(pool["worst"], 100.0)
+        self.assertEqual(pool["tail"], 100.0)
+        self.assertEqual(pool["n_items"], 10)
+        self.assertEqual(risk["aggregate"]["tail"], 100.0)
+        self.assertEqual(risk["aggregate"]["n_items"], 10)
+
     def test_distributional_sources_stay_out_of_the_risk_union(self):
         def leader(value, classification, ident):
             s = sample("leader_favorability", {"p1": ("paraphrase", value)},
