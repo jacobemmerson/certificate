@@ -45,6 +45,8 @@ def latest_log_per_cluster(model_id: str) -> dict[str, object]:
     """
     newest: dict[str, tuple[str, object]] = {}
     for path in sorted((REPO_ROOT / "logs" / model_id).rglob("*.eval")):
+        if "-limit" in path.parent.name:
+            continue
         log = read_eval_log(str(path))
         task = str(log.eval.task)
         if task not in newest or path.name > newest[task][0]:

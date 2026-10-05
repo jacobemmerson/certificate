@@ -9,6 +9,8 @@ with worse-quality data.
 Run: uv run python3 -m unittest discover tests
 '''
 
+import contextlib
+import io
 import json
 import os
 import runpy
@@ -242,7 +244,9 @@ class TestEvalSetResume(unittest.TestCase):
 
     def test_second_run_reruns_nothing_and_logs_have_samples(self):
         first = certify.start_eval([tiny_task("t")], "mockllm/model", {}, self.run, eval_args())
-        second = certify.start_eval([tiny_task("t")], "mockllm/model", {}, self.run, eval_args())
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            second = certify.start_eval([tiny_task("t")], "mockllm/model", {}, self.run, eval_args())
+        self.assertIn("[resume] reused finished log", out.getvalue())
         self.assertEqual(len(list(self.run.glob("*.eval"))), 1, "no new log on resume")
         self.assertEqual(first[0].eval.run_id, second[0].eval.run_id)
         self.assertEqual(len(second[0].samples or []), 2, "reused header was re-read")

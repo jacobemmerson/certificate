@@ -36,6 +36,7 @@ def write_json_atomic(path: Path, obj) -> None:
         with os.fdopen(fd, "w") as f:
             json.dump(obj, f, indent=4)
             f.write("\n")
+        os.chmod(tmp, 0o644)  # mkstemp makes 0600, which os.replace would carry over
         os.replace(tmp, path)
     except BaseException:
         os.unlink(tmp)

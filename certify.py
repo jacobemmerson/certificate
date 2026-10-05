@@ -105,7 +105,7 @@ def provider_routing(
     return routing or None
 
 
-def estimate_calls(benchmarks, families, k: int, sim_k: int | None, graders, limit: int | None = None) -> dict:
+def estimate_calls(benchmarks, families, k: int, sim_k: int | None, graders, limit: int | None = None, epochs: int = 1) -> dict:
     '''
     Upper-bound target / judge / classifier call counts per risk, from the
     stored artifact rows — printed before any canary call so a 60k-call run is
@@ -138,7 +138,7 @@ def estimate_calls(benchmarks, families, k: int, sim_k: int | None, graders, lim
                 classifier = turns
             # ponytail: judge counts every target call x graders; detection rows are
             # regex-scored, so this is an upper bound — subtract per-source shapes if it matters
-            for column, value in zip(totals, (n, target, target * n_graders, classifier)):
+            for column, value in zip(totals, (n, target * epochs, target * n_graders * epochs, classifier * epochs)):
                 totals[column] += value
     return estimate
 
@@ -207,7 +207,13 @@ def start_eval(tasks: list, model: str, model_args: dict, log_dir: Path, args) -
         # generations, so inheriting this would collapse them.
         cache=True,
     )
-    return [log if log.samples else read_eval_log(log.location) for log in logs]
+    reused = []
+    for log in logs:
+        if not log.samples:
+            print(f"[resume] reused finished log for {log.eval.task} from {log_dir} (--rerun or a new --run-id to regenerate)")
+            log = read_eval_log(log.location)
+        reused.append(log)
+    return reused
 
 
 def parse():
@@ -257,7 +263,7 @@ def parse():
     args.add_argument(
         "--only", "-o", required=False, nargs="+", metavar="RISK",
         help="Run only these systemic-risk clusters (e.g. --only cyber manipulation). "
-             "Other existing results are preserved."
+             "Other existing results are preserved. A finished log in the run dir is reused, not re-run."
     )
     args.add_argument(
         "--perturb", required=False, nargs="+", default=sorted(RESULT_FAMILIES & ALL_PERTURB_FAMILIES), choices=sorted(ALL_PERTURB_FAMILIES),
@@ -658,6 +664,7 @@ if __name__ == "__main__":
         sim_k=args.sim_k if args.simulate else None,
         graders=grader,
         limit=args.limit,
+        epochs=args.epochs,
     )
     print(f"\n{'risk':<18}{'samples':>8}{'target':>9}{'judge':>9}{'classifier':>11}")
     for risk, calls in estimate.items():
