@@ -70,12 +70,21 @@ def framing(variants_by_id: dict[str, list[dict]]) -> Solver:
     return solve
 
 
+@solver
+def past_tense(variants_by_id: dict[str, list[dict]]) -> Solver:
+    async def solve(state: TaskState, generate: Generate) -> TaskState:
+        return await replay(state, generate, "past_tense", variants_by_id)
+
+    return solve
+
+
 # Replay families keyed the way registry.py builds them. framing's rows are
 # per template, not per k, so registry.py truncates only REPEAT_FAMILIES.
 REPLAY_SOLVERS = {
     "paraphrase": paraphrase,
     "register": register,
     "framing": framing,
+    "past_tense": past_tense,
 }
 
 

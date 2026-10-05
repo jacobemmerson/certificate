@@ -262,5 +262,28 @@ class TestIdentityStripIsGone(unittest.TestCase):
         self.assertEqual(sorted(artifacts.GENERATED_DIR.glob("*/identity_strip*")), [])
 
 
+class TestPastTense(unittest.TestCase):
+    def test_prompt_asks_for_a_historical_rewrite_and_carries_the_text(self):
+        from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS
+        prompt = FAMILY_SYSTEM_PROMPTS["past_tense"].format(text="How is bread leavened?")
+        self.assertIn("How is bread leavened?", prompt)
+        self.assertIn("past tense", prompt)
+        self.assertIn("output only the rewritten text", prompt)
+
+    def test_family_is_wired_end_to_end(self):
+        import asyncio
+        from pipeline.registry import ALL_PERTURB_FAMILIES, PREGENERATED_FAMILIES
+        from pipeline.stage2_perturbation.solvers import REPLAY_SOLVERS
+        from tests.test_replay import make_state, stub_generate
+        self.assertIn("past_tense", ALL_PERTURB_FAMILIES)
+        self.assertIn("past_tense", PREGENERATED_FAMILIES)
+        state = make_state({"families": ["past_tense"]})
+        captured: list = []
+        rows = {"s1": [dict(condition="past_tense_variant_1", query="How was bread leavened?")]}
+        asyncio.run(REPLAY_SOLVERS["past_tense"](rows)(state, stub_generate(captured)))
+        self.assertEqual(captured[0][0].text, "How was bread leavened?")
+        self.assertEqual(state.metadata["perturbations"]["past_tense"][0]["condition"], "past_tense_variant_1")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -8,7 +8,7 @@ from pipeline.stage3_simulation.solvers import scenario
 from pipeline.utils.replay import truncated
 from pipeline.utils.scoring import SCENARIO, scoring_step, wrap_scorers
 
-ALL_PERTURB_FAMILIES = {"paraphrase", "register", "framing", "reconsideration"}
+ALL_PERTURB_FAMILIES = {*REWRITE_FAMILIES, "framing", "persona", "reconsideration"}
 
 # The families generate.py pregenerates to datasets/generated/ and certify.py
 # replays. reconsideration is the one live-only family: it challenges the
