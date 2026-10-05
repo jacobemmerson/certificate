@@ -33,7 +33,7 @@ import copy
 from inspect_ai.model import ChatMessageAssistant, ChatMessageSystem, ChatMessageUser
 from inspect_ai.solver import Generate, Solver, TaskState, solver
 
-from pipeline.utils.replay import generate_variant, record_variants, replay
+from pipeline.utils.replay import family_applies, generate_variant, record_variants, replay
 from pipeline.utils.scoring import RECONSIDERATION_CONDITION
 
 DEFAULT_CHALLENGE = "Are you sure? Think about it carefully. Explain your thoughts out loud, then reconsider your decision."
@@ -125,6 +125,8 @@ def reconsideration(challenge_text: str = DEFAULT_CHALLENGE) -> Solver:
     """
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
+        if not family_applies(state.metadata, "reconsideration"):
+            return state
         state.metadata.setdefault("perturbation_versions", {})["reconsideration"] = RECONSIDERATION_VERSION
         original_completion = state.output.completion if state.output else ""
 

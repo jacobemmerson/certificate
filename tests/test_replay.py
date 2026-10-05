@@ -281,6 +281,15 @@ class TestFamiliesGate(unittest.TestCase):
         asyncio.run(paraphrase(rows)(state, stub_generate(captured)))
         self.assertEqual(len(captured), 1)
 
+    def test_reconsideration_is_gated_too(self):
+        from pipeline.stage2_perturbation.solvers import reconsideration
+
+        state = make_state({"families": ["paraphrase"]})
+        captured: list = []
+        asyncio.run(reconsideration()(state, stub_generate(captured)))
+        self.assertEqual(captured, [])
+        self.assertNotIn("reconsideration", state.metadata.get("perturbations", {}))
+
     def test_absent_families_means_everything_applies(self):
         '''Logs and fixtures predating the column.'''
         from pipeline.utils.replay import family_applies
