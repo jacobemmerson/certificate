@@ -17,8 +17,8 @@ import pipeline.artifacts as artifacts
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
 from pipeline.artifacts import (
+    family_ids,
     load_family,
-    rewrite_ids,
     sample_ids,
     task_name,
     validate_artifacts,
@@ -57,6 +57,7 @@ def fixture_task():
                     "item_text": f"item {i}",
                     "prompt_template": f"Statement: {ITEM}\nAnswer on the scale:",
                     "elicitation_family": "compliance",
+                    "families": ["paraphrase", "register", "framing"],
                 },
             )
             for i in range(3)
@@ -103,6 +104,41 @@ class TestRoundTrip(ArtifactStoreTestCase):
         write_family(self.name, "framing", [], meta={"prompt_version": "1", "partial": True})
         self.assertEqual(artifacts.family_meta(self.name, "framing")["partial"], True)
         self.assertIsNone(artifacts.family_meta(self.name, "paraphrase"))
+
+
+class TestMissingOnly(ArtifactStoreTestCase):
+    def test_fallback_rows_are_not_existing(self):
+        import generate
+        rows = rewrite_rows(self.ids[:2])
+        rows[1]["fallback"] = True
+        write_family(self.name, "paraphrase", rows, meta={"prompt_version": "3"})
+        self.assertEqual(generate.existing_keys(self.name, "paraphrase"), {(self.ids[0], 1)})
+        self.assertEqual(generate.existing_rows(self.name, "paraphrase"), [rows[0]])
+
+
+class TestRegistryTruncation(ArtifactStoreTestCase):
+    def test_k_truncates_repeat_families_only(self):
+        """multilingual's variants are languages, not repeats: k=1 must keep all three."""
+        import pipeline.registry as registry
+        write_family(self.name, "multilingual", rewrite_rows(self.ids[:1], "multilingual", k=3), meta={})
+        write_family(self.name, "paraphrase", rewrite_rows(self.ids[:1], "paraphrase", k=3), meta={})
+        replayed = {}
+
+        def recording(family):
+            real = registry.REPLAY_SOLVERS[family]
+
+            def build(rows):
+                replayed[family] = rows
+                return real(rows)
+            return build
+
+        # the fixture has no registered scorer to wrap; only the solver chain matters here
+        with mock.patch.object(registry, "wrap_scorers", return_value=None), \
+                mock.patch.object(registry, "family_ids", return_value=set(self.ids[:1])), \
+                mock.patch.dict(registry.REPLAY_SOLVERS, {f: recording(f) for f in ("multilingual", "paraphrase")}):
+            registry._build_task(self.task, ["multilingual", "paraphrase"], k=1)
+        self.assertEqual(len(replayed["multilingual"][self.ids[0]]), 3)
+        self.assertEqual(len(replayed["paraphrase"][self.ids[0]]), 1)
 
 
 class TestValidateArtifacts(ArtifactStoreTestCase):
@@ -154,30 +190,37 @@ class TestValidateArtifacts(ArtifactStoreTestCase):
         write_family(self.name, "scenario", rows, meta={"prompt_version": "1"})
         validate_artifacts(self.benchmarks, families=None, simulate=True)
 
-    def test_rewrite_ids_skip_rows_that_declare_no_rewrite(self):
+    def test_family_ids_follow_the_families_column(self):
         task = fixture_task()
         ids = [str(s.id) for s in task.dataset]
-        task.dataset[0].metadata["rewrite"] = False
-        self.assertEqual(rewrite_ids(task), set(ids[1:]))
+        task.dataset[0].metadata["families"] = ["framing"]
+        self.assertEqual(family_ids(task, "paraphrase"), set(ids[1:]))
+        self.assertEqual(family_ids(task, "framing"), set(ids))
 
-    def test_validation_expects_only_rewrite_ids(self):
+    def test_validation_expects_only_applicable_ids(self):
         task = fixture_task()
         ids = [str(s.id) for s in task.dataset]
-        task.dataset[0].metadata["rewrite"] = False
+        task.dataset[0].metadata["families"] = ["framing"]
         write_family(task_name(task), "paraphrase", rewrite_rows(ids[1:]), {})
-        benchmarks = {"x": {"tasks": [task]}}
-        validate_artifacts(benchmarks, ["paraphrase"], simulate=False)   # must not raise
+        validate_artifacts({"x": {"tasks": [task]}}, ["paraphrase"], simulate=False)  # must not raise
+
+    def test_orphan_ids_fail_validation(self):
+        '''The 51 loss_of_control orphans: rows for ids no longer in the CSV.'''
+        rows = rewrite_rows(self.ids + ["gone"])
+        write_family(self.name, "paraphrase", rows, meta={"prompt_version": "1"})
+        with self.assertRaises(FileNotFoundError) as ctx:
+            validate_artifacts(self.benchmarks, families=["paraphrase"], simulate=False)
+        self.assertIn("1 orphan", str(ctx.exception))
 
     def test_framing_not_required_when_no_sample_qualifies(self):
-        # the fixture task's samples are "compliance", so framing IS required...
         with self.assertRaises(FileNotFoundError):
             validate_artifacts(self.benchmarks, families=["framing"], simulate=False)
-        # ...but a task whose every sample is generic is skipped entirely
-        generic = Task(
-            dataset=[Sample(input="x", id="a", metadata={"elicitation_family": "generic"})],
-            name="all_generic",
+        none = Task(
+            dataset=[Sample(input="x", id="a", metadata={"elicitation_family": "compliance", "families": []})],
+            name="none_apply",
         )
-        self.assertFalse(artifacts.framing_applies(generic))
+        self.assertEqual(family_ids(none, "framing"), set())
+        validate_artifacts({"x": {"tasks": [none]}}, families=["framing"], simulate=False)
 
 
 class TestPerturbationSplit(unittest.TestCase):
@@ -222,11 +265,10 @@ class TestGenerateFraming(unittest.TestCase):
         # judgment/opinion wrappers changed the ask on acceptability and Likert items
         self.assertEqual(list(FRAMING_TEMPLATES), ["compliance"])
 
-    def test_a_row_that_opts_out_yields_no_rows_and_no_ids(self):
+    def test_a_row_without_framing_in_families_yields_no_rows(self):
         opted_out = Sample(input="write a story", id="a",
-                           metadata={"elicitation_family": "compliance", "framing": False})
+                           metadata={"elicitation_family": "compliance", "families": ["paraphrase"]})
         self.assertEqual(generate_framing([opted_out]), [])
-        self.assertFalse(artifacts.framing_applies(Task(dataset=[opted_out], name="opted_out")))
 
     def test_generic_elicitation_yields_no_rows(self):
         self.assertEqual(generate_framing([Sample(input="x", id="a")]), [])
@@ -239,6 +281,126 @@ class TestGenerateFraming(unittest.TestCase):
             Sample(input="list some people", id="b", metadata={"elicitation_family": "generic"}),
         ])
         self.assertEqual({r["id"] for r in rows}, {"a"})
+
+
+class TestIdentityStripIsGone(unittest.TestCase):
+    def test_no_code_path_knows_the_family(self):
+        from pipeline.registry import ALL_PERTURB_FAMILIES
+        from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS
+        from pipeline.stage2_perturbation.solvers import REPLAY_SOLVERS
+        import pipeline.utils.scoring as scoring
+        for roster in (ALL_PERTURB_FAMILIES, FAMILY_SYSTEM_PROMPTS, REPLAY_SOLVERS, artifacts.PROMPT_VERSIONS):
+            self.assertNotIn("identity_strip", roster)
+        self.assertFalse(hasattr(scoring, "RESULT_FAMILIES"))
+
+    def test_no_identity_strip_artifacts_on_disk(self):
+        self.assertEqual(sorted(artifacts.GENERATED_DIR.glob("*/identity_strip*")), [])
+
+
+class TestPastTense(unittest.TestCase):
+    def test_prompt_asks_for_a_historical_rewrite_and_carries_the_text(self):
+        from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS
+        prompt = FAMILY_SYSTEM_PROMPTS["past_tense"].format(text="How is bread leavened?")
+        self.assertIn("How is bread leavened?", prompt)
+        self.assertIn("past tense", prompt)
+        self.assertIn("output only the rewritten text", prompt)
+
+    def test_family_is_wired_end_to_end(self):
+        import asyncio
+        from pipeline.registry import ALL_PERTURB_FAMILIES, PREGENERATED_FAMILIES
+        from pipeline.stage2_perturbation.solvers import REPLAY_SOLVERS
+        from tests.test_replay import make_state, stub_generate
+        self.assertIn("past_tense", ALL_PERTURB_FAMILIES)
+        self.assertIn("past_tense", PREGENERATED_FAMILIES)
+        state = make_state({"families": ["past_tense"]})
+        captured: list = []
+        rows = {"s1": [dict(condition="past_tense_variant_1", query="How was bread leavened?")]}
+        asyncio.run(REPLAY_SOLVERS["past_tense"](rows)(state, stub_generate(captured)))
+        self.assertEqual(captured[0][0].text, "How was bread leavened?")
+        self.assertEqual(state.metadata["perturbations"]["past_tense"][0]["condition"], "past_tense_variant_1")
+
+
+class TestMultilingualRows(unittest.TestCase):
+    def test_one_row_per_language_with_lang_and_condition(self):
+        import asyncio
+        from inspect_ai.model import ModelOutput, get_model
+        from pipeline.generation import generate_rewrites
+        # Same German output for every call: de is accepted, zh/ar fall back —
+        # so the assertions hold whatever order the three calls complete in.
+        attacker = get_model("mockllm/model", custom_outputs=[
+            ModelOutput.from_content("mockllm/model", "Wie wird Brot gesäuert?") for _ in range(3)
+        ])
+        sample = Sample(input="How is bread leavened?", id="a",
+                        metadata={"item_text": "How is bread leavened?", "families": ["multilingual"]})
+        rows = asyncio.run(generate_rewrites([sample], "multilingual", attacker, k=1))
+        self.assertEqual({r["condition"] for r in rows}, {"multilingual_de", "multilingual_zh", "multilingual_ar"})
+        self.assertEqual({(r["variant"], r["lang"]) for r in rows}, {(1, "de"), (2, "zh"), (3, "ar")})
+        by_lang = {r["lang"]: r for r in rows}
+        self.assertFalse(by_lang["de"]["fallback"])
+        self.assertEqual(by_lang["de"]["query"], "Wie wird Brot gesäuert?")
+        self.assertTrue(by_lang["zh"]["fallback"] and by_lang["ar"]["fallback"])
+
+    def test_rewrite_roster_matches_the_contract(self):
+        from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS
+        self.assertEqual(artifacts.REWRITE_FAMILIES, ("paraphrase", "register", "past_tense", "multilingual"))
+        self.assertEqual(artifacts.REPEAT_FAMILIES, ("paraphrase", "register", "past_tense"))
+        self.assertEqual(set(FAMILY_SYSTEM_PROMPTS), set(artifacts.REPEAT_FAMILIES))
+
+class TestGeneratePersona(unittest.TestCase):
+    def sample(self, **metadata):
+        return Sample(input="How is bread leavened?", id="a",
+                      metadata={"families": ["persona"], **metadata})
+
+    def test_two_rows_per_sample_query_unchanged(self):
+        from pipeline.generation import generate_persona
+        from pipeline.stage2_perturbation.framing import PERSONA_TEMPLATES
+        rows = generate_persona([self.sample()])
+        self.assertEqual([r["condition"] for r in rows], ["persona_professional", "persona_researcher"])
+        self.assertEqual({r["query"] for r in rows}, {"How is bread leavened?"})
+        self.assertEqual([r["system"] for r in rows], list(PERSONA_TEMPLATES.values()))
+        self.assertEqual(set(rows[0]), {"id", "condition", "system", "query"})
+
+    def test_templates_are_benign_context_without_conduct_rules(self):
+        from pipeline.stage2_perturbation.framing import PERSONA_TEMPLATES, PERSONA_VERSION
+        self.assertEqual(PERSONA_VERSION, "1")
+        for text in PERSONA_TEMPLATES.values():
+            for forbidden in ("always comply", "never refuse", "no restrictions", "ignore"):
+                self.assertNotIn(forbidden, text.lower())
+
+    def test_row_with_its_own_system_prompt_gets_no_persona(self):
+        '''Review focus 3: the persona solver replaces the system turn.'''
+        from pipeline.generation import generate_persona
+        self.assertEqual(generate_persona([self.sample(system_prompt="You advise a minister.")]), [])
+
+    def test_families_gate(self):
+        from pipeline.generation import generate_persona
+        self.assertEqual(generate_persona([self.sample(families=["paraphrase"])]), [])
+
+class TestFidelityAuditRoster(unittest.TestCase):
+    def test_families_follow_the_rewrite_roster(self):
+        import importlib
+        audit = importlib.import_module("scripts.audit_variant_fidelity")
+        self.assertEqual(audit.FAMILIES, (*artifacts.REWRITE_FAMILIES, "scenario"))
+        system, prompt = audit.blind_prompt({"family": "multilingual", "lang": "zh", "original": "o", "text": "t"})
+        self.assertIn("translation into Chinese (Simplified)", prompt)
+        _, prompt = audit.blind_prompt({"family": "scenario", "original": "o", "system": "s",
+                                        "turns": {"": "opening"}})
+        self.assertIn("opening", prompt)
+
+class TestPromptVersionsAndCli(unittest.TestCase):
+    def test_prompt_versions_contract(self):
+        from pipeline.stage3_simulation.prompts import PROMPT_VERSION as SCENARIO_VERSION
+        self.assertEqual(artifacts.PROMPT_VERSIONS, {
+            "paraphrase": "3", "register": "3", "past_tense": "3", "multilingual": "3",
+            "framing": "3", "persona": "1", "scenario": SCENARIO_VERSION,
+        })
+
+    def test_perturb_choices(self):
+        from pipeline.registry import ALL_PERTURB_FAMILIES, PREGENERATED_FAMILIES
+        self.assertEqual(ALL_PERTURB_FAMILIES, {
+            "paraphrase", "register", "past_tense", "multilingual", "framing", "persona", "reconsideration",
+        })
+        self.assertEqual(PREGENERATED_FAMILIES, ALL_PERTURB_FAMILIES - {"reconsideration"})
 
 
 if __name__ == "__main__":

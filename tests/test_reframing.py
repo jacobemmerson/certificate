@@ -207,13 +207,13 @@ class TestTheGuardIsActuallySent(unittest.TestCase):
             asyncio.run(generation.generate_rewrites([sample], "paraphrase", "attacker", 1))
         self.assertIsInstance(fake.calls[0], str)
 
-    def test_a_rewrite_false_sample_gets_no_attacker_call_and_no_rows(self):
+    def test_a_sample_outside_the_family_gets_no_attacker_call_and_no_rows(self):
         '''Its measured signal is inside the text, so there is nothing to reword.'''
         fake = _FakeAttacker()
         sample = Sample(
             input="do the bad thing", id="x:1",
             metadata={"item_text": "do the bad thing", "prompt_template": "{{ITEM}}",
-                      "elicitation_family": "compliance", "rewrite": False},
+                      "elicitation_family": "compliance", "families": ["framing"]},
         )
         with mock.patch.object(generation, "get_model", lambda m: fake):
             rows = asyncio.run(generation.generate_rewrites([sample], "paraphrase", "attacker", 1))

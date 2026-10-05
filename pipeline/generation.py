@@ -22,6 +22,7 @@ collapse them into one generation.
 from __future__ import annotations
 
 import asyncio
+import functools
 import re
 from dataclasses import dataclass, field
 
@@ -31,11 +32,15 @@ from inspect_ai.model import (
 )
 
 from pipeline.stage2_perturbation.adapters import item_text, render, scenario_source
-from pipeline.stage2_perturbation.framing import framing_templates
-from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS, _extract_rewrite
+from pipeline.stage2_perturbation.framing import PERSONA_TEMPLATES, framing_templates
+from pipeline.stage2_perturbation.rewrite import (
+    FAMILY_SYSTEM_PROMPTS, LANGUAGES, TRANSLATE_SYSTEM, _extract_rewrite, rewrite_defect,
+    translation_defect,
+)
 from pipeline.stage3_simulation.prompts import (
     REFRAME_SYS_PROMPT, SCENARIO_FAMILY, parse_reframing, reframe_prompt,
 )
+from pipeline.utils.replay import family_applies
 
 
 @dataclass
@@ -124,7 +129,7 @@ async def generate_rewrites(
     existing: set[tuple[str, int]] | None = None,
     max_connections: int = 20,
 ) -> list[dict]:
-    """Rows for one rewrite family (paraphrase/register/identity_strip):
+    """Rows for one rewrite family (paraphrase/register/past_tense, or multilingual: one translation per LANGUAGES entry):
     k attacker rewrites per sample, rendered through the benchmark's adapter.
     A failed or refused rewrite falls back to the original text and is
     persisted with fallback=true — the artifact set stays complete, and every
@@ -135,36 +140,51 @@ async def generate_rewrites(
     model = get_model(attacker_model)
     semaphore = asyncio.Semaphore(max_connections)
     existing = existing or set()
-    samples = [s for s in samples if (s.metadata or {}).get("rewrite", True)]
+    samples = [s for s in samples if family_applies(s.metadata, family)]
 
-    async def one(sample: Sample, variant: int) -> dict:
+    async def one(sample: Sample, variant: int, lang: str | None = None) -> dict:
         view = SampleView.of(sample)
         original_text = item_text(view)
+        if lang:
+            prompt = TRANSLATE_SYSTEM.format(language=LANGUAGES[lang], text=original_text)
+            defect = functools.partial(translation_defect, lang=lang)
+        else:
+            prompt = FAMILY_SYSTEM_PROMPTS[family].format(text=original_text)
+            defect = rewrite_defect
         async with semaphore:
-            completion = await _attacker_call(
-                model,
-                FAMILY_SYSTEM_PROMPTS[family].format(text=original_text),
-                f"{family} {sample.id} v{variant}",
-            )
+            completion = await _attacker_call(model, prompt, f"{family} {sample.id} {lang or f'v{variant}'}")
         new_text = _extract_rewrite(
             completion or "", fallback=original_text,
             must_survive=(sample.metadata or {}).get("must_survive") or (),
+            defect=defect,
         )
-        return {
+        row = {
             "id": str(sample.id),
             "variant": variant,
-            "condition": f"{family}_variant_{variant}",
+            "condition": f"multilingual_{lang}" if lang else f"{family}_variant_{variant}",
             "text": new_text,
             "query": render(view, new_text),
             "fallback": new_text == original_text,
         }
+        if lang:
+            row["lang"] = lang
+        return row
 
-    jobs = [
-        one(sample, variant)
-        for sample in samples
-        for variant in range(1, k + 1)
-        if (str(sample.id), variant) not in existing
-    ]
+    if family == "multilingual":
+        # one variant per language, index = position in LANGUAGES (C3); k is ignored
+        jobs = [
+            one(sample, variant, lang)
+            for sample in samples
+            for variant, lang in enumerate(LANGUAGES, 1)
+            if (str(sample.id), variant) not in existing
+        ]
+    else:
+        jobs = [
+            one(sample, variant)
+            for sample in samples
+            for variant in range(1, k + 1)
+            if (str(sample.id), variant) not in existing
+        ]
     return list(await asyncio.gather(*jobs))
 
 
@@ -175,11 +195,13 @@ def generate_framing(samples: list[Sample]) -> list[dict]:
     Elicitation family is a property of the *sample*, not the task — a risk
     cluster mixes all four in one dataset — so samples whose family has no
     templates (elicitation_family="generic", e.g. role_model_bias's open-ended
-    "list role models") or whose row opted out (`framing=false`) are skipped
+    "list role models") or whose `families` omit framing are skipped
     individually rather than disqualifying the whole task.
     """
     rows = []
     for sample in samples:
+        if not family_applies(sample.metadata, "framing"):
+            continue
         view = SampleView.of(sample)
         templates = framing_templates(view)
         if not templates:
@@ -192,6 +214,25 @@ def generate_framing(samples: list[Sample]) -> list[dict]:
                 "query": render(view, template_fn(original_text)),
             })
     return rows
+
+
+def generate_persona(samples: list[Sample]) -> list[dict]:
+    """Rows for the deterministic persona family: one per template per
+    applicable sample, query unchanged, no model calls. A row with its own
+    system prompt is skipped even if its families list says otherwise: the
+    replay solver would overwrite the steering the row measures."""
+    return [
+        {
+            "id": str(sample.id),
+            "condition": f"persona_{name}",
+            "system": system,
+            "query": SampleView.of(sample).input_text,
+        }
+        for sample in samples
+        if family_applies(sample.metadata, "persona")
+        and not (sample.metadata or {}).get("system_prompt")
+        for name, system in PERSONA_TEMPLATES.items()
+    ]
 
 
 async def generate_scenarios(

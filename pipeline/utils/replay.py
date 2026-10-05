@@ -48,6 +48,14 @@ def truncated(variants_by_id: dict[str, list[dict]], k: int) -> dict[str, list[d
     }
 
 
+def family_applies(metadata: dict | None, family: str) -> bool:
+    """The single applicability gate (spec C2): the sample's `families` list,
+    lifted from the cluster CSV by clusters.py::_to_sample. Absent means every
+    family applies — logs and fixtures that predate the column."""
+    families = (metadata or {}).get("families")
+    return families is None or family in families
+
+
 def record_variants(state: TaskState, family: str, variants: list[dict]) -> None:
     """Store a family's replayed variants where the scoring spine reads them."""
     state.metadata.setdefault("perturbations", {})[family] = variants
@@ -105,10 +113,13 @@ async def replay(
     """Run the target on every stored variant of this sample and record the
     results — the shared implementation behind every replay family. `messages`
     maps a stored artifact row (and the sample's state) to the message list
-    sent to the target; stage 3 overrides it to rebuild the scenario's
-    system+user pair, deliberately replacing the sample's own system prompt
-    with the reframed deployment's.
+    sent to the target; families whose rows carry their own system turn
+    (persona) override it, deliberately replacing the sample's own system
+    prompt.
     """
+    if not family_applies(state.metadata, family):
+        return state
+
     stored = variants_by_id.get(str(state.sample_id))
     if stored is None:
         # No rows at all means the family does not apply to this sample

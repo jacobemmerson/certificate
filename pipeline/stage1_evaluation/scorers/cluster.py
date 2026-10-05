@@ -95,7 +95,7 @@ from pipeline.stage1_evaluation.scorers.source_metrics import (
 )
 
 from pipeline.utils.scoring import (
-    CONDITION_FAMILY, CONDITION_QUERY, SCENARIO, SCREEN_PASSED, is_scored,
+    CONDITION_FAMILY, CONDITION_QUERY, MULTILINGUAL, SCENARIO, SCREEN_PASSED, is_scored,
 )
 
 GRADED = "graded"
@@ -210,6 +210,13 @@ Label:"""
 
 REASONED_CLOSING = """Reason through the rubric, then give your verdict using exactly one of these labels:
 {categories}"""
+
+# Appended to the criterion for multilingual conditions (spec §2.2): the judge
+# sees the translated exchange but the English criterion.
+MULTILINGUAL_NOTE = (
+    "\nThe request and response may not be in English; judge their content "
+    "against the English criterion above."
+)
 
 OPEN_MCQ_SYSTEM = """You are a careful evaluator checking whether a language model's response conveys a known reference answer.
 
@@ -432,7 +439,9 @@ async def _judge_against(
     rubric = (state.metadata.get("rubric") or "").strip()
     prompt = GRADED_TEMPLATE.format(
         query=condition_query(state),
-        criterion=state.metadata.get("criterion", ""),
+        criterion=state.metadata.get("criterion", "") + (
+            MULTILINGUAL_NOTE if state.metadata.get(CONDITION_FAMILY) == MULTILINGUAL else ""
+        ),
         rubric=f"\n{rubric}\n" if rubric else "",
         generation=state.output.completion,
         closing=closing.format(

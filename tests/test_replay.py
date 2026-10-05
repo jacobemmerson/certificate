@@ -245,34 +245,73 @@ class TestAbsentVersusEmptyFamily(unittest.TestCase):
         self.assertEqual(state.metadata["perturbations"]["paraphrase"], [])
 
 
-class TestRewriteFalseIsNotReplayed(unittest.TestCase):
+class TestFamiliesGate(unittest.TestCase):
     '''
-    `rewrite=False` samples measure a signal inside the text itself, so a
-    reworded variant measures something else. Artifacts committed before the
-    generation-time gate still hold their rows, and replay must not run them.
+    `metadata["families"]` is the one applicability gate (spec C2). Artifacts
+    generated before a row's families changed still hold rows for it, so the
+    gate has to hold at replay time, for every family, not just rewrites.
     '''
 
-    def test_stored_rows_are_skipped_for_a_rewrite_false_sample(self):
-        from pipeline.stage2_perturbation.solvers import paraphrase
+    def test_stored_rows_are_skipped_when_family_not_applicable(self):
+        from pipeline.stage2_perturbation.solvers import register
 
-        state = make_state({"rewrite": False})
+        state = make_state({"families": ["paraphrase", "reconsideration"]})
         captured: list = []
-        rows = {"s1": [dict(condition="paraphrase_variant_1", query="reworded")]}
-        asyncio.run(paraphrase(rows)(state, stub_generate(captured)))
+        rows = {"s1": [dict(condition="register_variant_1", query="reworded")]}
+        asyncio.run(register(rows)(state, stub_generate(captured)))
 
         self.assertEqual(captured, [])
-        self.assertNotIn("paraphrase", state.metadata.get("perturbations", {}))
+        self.assertNotIn("register", state.metadata.get("perturbations", {}))
 
-    def test_rewrite_true_sample_still_replays(self):
+    def test_framing_rows_are_gated_too(self):
+        from pipeline.stage2_perturbation.solvers import framing
+
+        state = make_state({"families": ["paraphrase"]})
+        captured: list = []
+        rows = {"s1": [dict(condition="framing_imperative", query="framed")]}
+        asyncio.run(framing(rows)(state, stub_generate(captured)))
+        self.assertEqual(captured, [])
+
+    def test_applicable_family_still_replays(self):
         from pipeline.stage2_perturbation.solvers import paraphrase
 
-        state = make_state({"rewrite": True})
+        state = make_state({"families": ["paraphrase"]})
         captured: list = []
         rows = {"s1": [dict(condition="paraphrase_variant_1", query="reworded")]}
         asyncio.run(paraphrase(rows)(state, stub_generate(captured)))
-
         self.assertEqual(len(captured), 1)
-        self.assertEqual(
-            [v["condition"] for v in state.metadata["perturbations"]["paraphrase"]],
-            ["paraphrase_variant_1"],
-        )
+
+    def test_reconsideration_is_gated_too(self):
+        from pipeline.stage2_perturbation.solvers import reconsideration
+
+        state = make_state({"families": ["paraphrase"]})
+        captured: list = []
+        asyncio.run(reconsideration()(state, stub_generate(captured)))
+        self.assertEqual(captured, [])
+        self.assertNotIn("reconsideration", state.metadata.get("perturbations", {}))
+
+    def test_absent_families_means_everything_applies(self):
+        '''Logs and fixtures predating the column.'''
+        from pipeline.utils.replay import family_applies
+        self.assertTrue(family_applies({}, "framing"))
+        self.assertTrue(family_applies(None, "persona"))
+        self.assertFalse(family_applies({"families": []}, "framing"))
+
+
+class TestPersonaMessages(unittest.TestCase):
+    def test_persona_system_prompt_then_original_query(self):
+        from pipeline.stage2_perturbation.solvers import persona
+
+        state = make_state({"families": ["persona"]})
+        captured: list = []
+        rows = {"s1": [{"condition": "persona_professional", "system": "You work at a firm.",
+                        "query": "the original question"}]}
+        asyncio.run(persona(rows)(state, stub_generate(captured)))
+
+        messages = captured[0]
+        self.assertEqual([type(m) for m in messages], [ChatMessageSystem, ChatMessageUser])
+        self.assertEqual(messages[0].text, "You work at a firm.")
+        self.assertEqual(messages[1].text, "the original question")
+        recorded = state.metadata["perturbations"]["persona"][0]
+        self.assertEqual(recorded["condition"], "persona_professional")
+        self.assertEqual(recorded["query"], "the original question")

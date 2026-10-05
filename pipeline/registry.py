@@ -2,13 +2,13 @@ from pipeline.stage1_evaluation.evals.clusters import CLUSTER_TASKS, RISKS, avai
 
 from inspect_ai import Task
 
-from pipeline.artifacts import framing_applies, load_family, task_name
-from pipeline.stage2_perturbation.solvers import REPLAY_SOLVERS, framing, reconsideration
+from pipeline.artifacts import REPEAT_FAMILIES, REWRITE_FAMILIES, family_ids, load_family, task_name
+from pipeline.stage2_perturbation.solvers import REPLAY_SOLVERS, reconsideration
 from pipeline.stage3_simulation.solvers import scenario
 from pipeline.utils.replay import truncated
 from pipeline.utils.scoring import SCENARIO, scoring_step, wrap_scorers
 
-ALL_PERTURB_FAMILIES = {"paraphrase", "register", "identity_strip", "framing", "reconsideration"}
+ALL_PERTURB_FAMILIES = {*REWRITE_FAMILIES, "framing", "persona", "reconsideration"}
 
 # The families generate.py pregenerates to datasets/generated/ and certify.py
 # replays. reconsideration is the one live-only family: it challenges the
@@ -50,20 +50,19 @@ def _build_task(
     wrapped one-per-base-judge (pipeline/utils/scoring.py::wrap_scorers).
 
     Returns base_task unchanged if nothing applies (e.g. only "framing" was
-    requested against a benchmark whose elicitation_family has no registered
-    framing templates, and sim_k is None).
+    requested and no sample's `families` includes it, and sim_k is None).
     """
     name = task_name(base_task)
 
     solver_chain = [base_task.solver]
     applied: list[str] = []
     for family, replay_solver in REPLAY_SOLVERS.items():
-        if family in families:
-            solver_chain.append(replay_solver(truncated(load_family(name, family), k)))
+        if family in families and family_ids(base_task, family):
+            rows = load_family(name, family)
+            if family in REPEAT_FAMILIES:
+                rows = truncated(rows, k)
+            solver_chain.append(replay_solver(rows))
             applied.append(family)
-    if "framing" in families and framing_applies(base_task):
-        solver_chain.append(framing(load_family(name, "framing")))
-        applied.append("framing")
     if "reconsideration" in families:
         solver_chain.append(reconsideration())
         applied.append("reconsideration")

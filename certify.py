@@ -34,7 +34,6 @@ def display_mode() -> str:
     return os.environ.get("INSPECT_DISPLAY") or ("full" if sys.stdout.isatty() else "log")
 from pipeline.artifacts import validate_artifacts
 from pipeline.registry import init_benchmarks, apply_stages, ALL_PERTURB_FAMILIES
-from pipeline.utils.scoring import RESULT_FAMILIES
 from pipeline.utils import results as results_tree
 from pipeline.utils import retry_policy
 from pipeline.utils import routing as provider_routing_api
@@ -142,13 +141,11 @@ def parse():
              "Other existing results are preserved."
     )
     args.add_argument(
-        "--perturb", required=False, nargs="+", default=sorted(RESULT_FAMILIES & ALL_PERTURB_FAMILIES), choices=sorted(ALL_PERTURB_FAMILIES),
+        "--perturb", required=False, nargs="+", default=sorted(ALL_PERTURB_FAMILIES), choices=sorted(ALL_PERTURB_FAMILIES),
         metavar="FAMILY",
-        help="Run surface-perturbation reliability auditing (see pipeline/stage2_perturbation/) for these families "
-             "(e.g. --perturb paraphrase reconsideration) on top of every benchmark in --only "
-             "(or all benchmarks if --only is omitted). Default: the families the results pool over "
-             "(scoring.RESULT_FAMILIES). Replays the pregenerated "
-             "variants from datasets/generated/ (run generate.py first); reconsideration runs live."
+        help="Run surface-perturbation auditing for these families (paraphrase register past_tense "
+             "multilingual framing persona reconsideration; default: all). Replays datasets/generated/ "
+             "(run generate.py first); reconsideration runs live."
     )
     args.add_argument(
         "--no-perturb", required=False, action='store_true',
@@ -158,7 +155,7 @@ def parse():
     args.add_argument(
         "--perturb-k", required=False, type=int, default=1,
         help="Use up to this many stored variants per item for the rewrite families "
-             "(paraphrase, register, identity_strip); default=1. Must not exceed the k the "
+             "(paraphrase, register, past_tense); default=1. Must not exceed the k the "
              "artifacts were generated with."
     )
     args.add_argument(

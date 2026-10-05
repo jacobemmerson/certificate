@@ -21,8 +21,8 @@
 # scripts/match_aa_index.py is re-run afterwards to restore them — exactly as a
 # normal certification batch is followed by the AA mapping step.
 #
-# --simulate plus the default (all-family) perturbation reproduce the conditions
-# the existing entry already carries (control, framing, identity_strip,
+# --simulate plus the pinned --perturb set reproduce the conditions
+# the existing entry already carries (control, framing,
 # paraphrase, reconsideration, register, scenario), so the regrade differs from
 # the original run only in the judge set, not the elicitation.
 #
@@ -97,6 +97,7 @@ for risk in "${RISKS[@]}"; do
         --only "$risk" \
         --rerun \
         --simulate \
+        --perturb paraphrase register framing reconsideration \
         --cheapest \
         --max-connections "$MAX_CONN"; then
     echo "[FAILED] $risk — continuing"

@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from inspect_ai.log import read_eval_log
 
-from pipeline.artifacts import REWRITE_FAMILIES, load_family
+from pipeline.artifacts import REWRITE_FAMILIES, artifact_path, load_family
 from pipeline.utils.results import build
 
 LLM_JUDGE = "openrouter/"
@@ -60,6 +60,8 @@ def fallback_truncation(k=1):
     out = {}
     for cluster in ("cbrn", "cyber", "loss_of_control", "manipulation"):
         for fam in REWRITE_FAMILIES:
+            if not artifact_path(cluster, fam).exists():
+                continue
             by_id = load_family(cluster, fam)
             dead = [i for i, rows in by_id.items() if rows[:k] and all(r.get("fallback") for r in rows[:k])]
             out[(cluster, fam)] = (len(dead), len(by_id))

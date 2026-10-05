@@ -10,7 +10,7 @@
 #SBATCH --requeue
 
 # Generates ALL stage-2 perturbation artifacts (paraphrase, register,
-# identity_strip, framing) plus stage-3 scenario reframings with a locally
+# past_tense, multilingual, framing, persona) plus stage-3 scenario reframings with a locally
 # served Hermes-4-70B attacker.
 #
 # vLLM is deliberately NOT a project dependency (it pins its own torch and
