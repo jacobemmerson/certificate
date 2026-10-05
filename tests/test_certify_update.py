@@ -233,7 +233,9 @@ class TestEvalSetResume(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.run = Path(self.tmp.name) / "current"
-        os.environ["INSPECT_DISPLAY"] = "none"
+        env = mock.patch.dict(os.environ, {"INSPECT_DISPLAY": "none", "INSPECT_CACHE_DIR": self.tmp.name})
+        env.start()
+        self.addCleanup(env.stop)
         # eval_set leaves its GenerateConfig (cache=True) as the process-wide
         # default, which would serve later mockllm tests cached answers
         self.addCleanup(set_active_generate_config, active_generate_config())
@@ -245,11 +247,11 @@ class TestEvalSetResume(unittest.TestCase):
         self.assertEqual(first[0].eval.run_id, second[0].eval.run_id)
         self.assertEqual(len(second[0].samples or []), 2, "reused header was re-read")
 
-    def test_changed_task_in_same_run_dir_exits_with_hint(self):
+    def test_other_task_in_same_run_dir_runs_and_keeps_first_log(self):
         certify.start_eval([tiny_task("t")], "mockllm/model", {}, self.run, eval_args())
-        with self.assertRaises(SystemExit) as ctx:
-            certify.start_eval([tiny_task("other")], "mockllm/model", {}, self.run, eval_args())
-        self.assertIn("--rerun", str(ctx.exception))
+        logs = certify.start_eval([tiny_task("other")], "mockllm/model", {}, self.run, eval_args())
+        self.assertEqual(len(list(self.run.glob("*.eval"))), 2)
+        self.assertEqual([log.eval.task for log in logs], ["other"])
 
 
 if __name__ == "__main__":

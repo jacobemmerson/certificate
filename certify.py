@@ -23,7 +23,6 @@ from datetime import datetime
 from pathlib import Path
 
 from inspect_ai import eval_set
-from inspect_ai._util.error import PrerequisiteError
 from inspect_ai.log import read_eval_log
 
 
@@ -130,50 +129,46 @@ def move_aside(path: Path) -> Path | None:
 
 def start_eval(tasks: list, model: str, model_args: dict, log_dir: Path, args) -> list:
     '''
-    eval_set over one run dir: tasks whose log is already `success` are skipped
-    and unfinished ones re-run only their missing samples, so a preempted or
-    killed run resumes where it stopped. Skipped tasks come back as header-only
-    logs (no samples); the results tree needs samples, so those are re-read.
+    eval_set over one run dir resumes the matching log per task: a `success`
+    log is skipped and an unfinished one re-runs only its missing samples, so
+    a preempted or killed run resumes where it stopped. Logs of other tasks
+    (clusters already scored, or outside --only) and of older configurations
+    are left alone; a task whose configuration changed re-runs in full.
+    Skipped tasks come back as header-only logs (no samples); the results tree
+    needs samples, so those are re-read.
     '''
-    try:
-        _, logs = eval_set(
-            tasks,
-            log_dir=str(log_dir),
-            retry_attempts=3,
-            retry_wait=60,
-            model=model,
-            model_args=model_args,
-            continue_on_fail=True,
-            # tolerate scattered sample-level errors (e.g. an unparseable
-            # OpenRouter response that slips past retries) instead of failing
-            # the whole task — only fail if >10% of samples error
-            fail_on_error=0.1,
-            epochs=args.epochs,
-            # a fixed seed, not True: a resumed --limit run must select the
-            # same subset or eval_set discards the previous log
-            sample_shuffle=LIMIT_SHUFFLE_SEED if args.limit else None,
-            limit=args.limit,
-            max_connections=args.max_connections,
-            max_retries=args.max_retries,
-            attempt_timeout=args.attempt_timeout,
-            timeout=args.timeout,
-            working_limit=args.working_limit,
-            display=display_mode(),
-            # Eval-level cache benefits judge/grader calls (the bulk of API
-            # traffic under --perturb) and retries. The replay/reconsideration
-            # solvers opt out explicitly (cache=False in
-            # pipeline/utils/replay.py): their target calls
-            # replay identical prompts across epochs and must stay independent
-            # generations, so inheriting this would collapse them.
-            cache=True,
-        )
-    except PrerequisiteError as exc:
-        raise SystemExit(
-            f"{log_dir} holds logs from a different task configuration (flags, routing or "
-            f"artifacts changed since they were written):\n  {str(exc).splitlines()[0][:200]}\n"
-            "Use --rerun to move the directory aside, or --run-id NAME for a fresh one. "
-            "To finish a specific broken log instead: inspect_ai.eval_retry(<path>)."
-        )
+    _, logs = eval_set(
+        tasks,
+        log_dir=str(log_dir),
+        log_dir_allow_dirty=True,
+        retry_attempts=3,
+        retry_wait=60,
+        model=model,
+        model_args=model_args,
+        continue_on_fail=True,
+        # tolerate scattered sample-level errors (e.g. an unparseable
+        # OpenRouter response that slips past retries) instead of failing
+        # the whole task — only fail if >10% of samples error
+        fail_on_error=0.1,
+        epochs=args.epochs,
+        # a fixed seed, not True: a resumed --limit run must select the
+        # same subset or eval_set discards the previous log
+        sample_shuffle=LIMIT_SHUFFLE_SEED if args.limit else None,
+        limit=args.limit,
+        max_connections=args.max_connections,
+        max_retries=args.max_retries,
+        attempt_timeout=args.attempt_timeout,
+        timeout=args.timeout,
+        working_limit=args.working_limit,
+        display=display_mode(),
+        # Eval-level cache benefits judge/grader calls (the bulk of API
+        # traffic under --perturb) and retries. The replay/reconsideration
+        # solvers opt out explicitly (cache=False in
+        # pipeline/utils/replay.py): their target calls
+        # replay identical prompts across epochs and must stay independent
+        # generations, so inheriting this would collapse them.
+        cache=True,
+    )
     return [log if log.samples else read_eval_log(log.location) for log in logs]
 
 
