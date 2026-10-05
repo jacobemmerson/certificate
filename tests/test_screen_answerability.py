@@ -52,7 +52,12 @@ class TestScreen(unittest.TestCase):
                 out.write_text(existing)
             model = FakeModel(replies)
             failed = asyncio.run(screen_answerability.screen(records, model, "test/hermes", out))
-            lines = [json.loads(line) for line in out.read_text().splitlines()] if out.exists() else []
+            lines = []
+            for line in out.read_text().splitlines() if out.exists() else []:
+                try:
+                    lines.append(json.loads(line))
+                except json.JSONDecodeError:  # the truncated line a test seeds
+                    pass
         return failed, lines, model
 
     def test_verdicts_are_appended_with_a_truncated_completion(self):
@@ -81,6 +86,13 @@ class TestScreen(unittest.TestCase):
             [record("m", "qm", question_type="mcq"), record("g", "qg")], {"qm": "B", "qg": "B"})
         self.assertEqual({line["key"]: line["verdict"] for line in lines},
                          {"m": "answered", "g": "refused"})
+
+    def test_a_truncated_last_line_is_skipped_and_terminated(self):
+        existing = json.dumps({"key": "a", "verdict": "answered"}) + '\n{"key": "b", "ver'
+        _, lines, model = self.run_screen(
+            [record("a", "qa"), record("b", "qb")], {"qb": ANSWER}, existing)
+        self.assertEqual(model.sent, ["qb"])
+        self.assertEqual([line["key"] for line in lines], ["a", "b"])
 
     def test_a_system_prompt_is_sent_as_a_system_turn(self):
         _, _, model = self.run_screen(

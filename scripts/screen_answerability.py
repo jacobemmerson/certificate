@@ -40,14 +40,23 @@ async def screen(records: list[dict], model, model_name: str, out_path: Path,
                  max_connections: int = 20) -> int:
     '''Screen every record whose key `out_path` lacks; returns the failed-call count.'''
     done = set()
+    needs_newline = False
     if out_path.exists():
         with open(out_path, encoding="utf-8") as f:
-            done = {json.loads(line)["key"] for line in f}
+            text = f.read()
+        needs_newline = bool(text) and not text.endswith("\n")
+        for line in text.splitlines():
+            try:
+                done.add(json.loads(line)["key"])
+            except json.JSONDecodeError:  # truncated by a preempted job; re-screened
+                pass
     semaphore = asyncio.Semaphore(max_connections)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     failed = 0
 
     with open(out_path, "a", encoding="utf-8") as out:
+        if needs_newline:
+            out.write("\n")
         async def one(record: dict) -> None:
             nonlocal failed
             async with semaphore:

@@ -1123,6 +1123,13 @@ class TestScreen(unittest.TestCase):
         self.assertIn("SCREEN_ONLY=1", str(raised.exception))
         self.assertIn("screen_answerability.py --risk cbrn", str(raised.exception))
 
+    def test_load_screen_skips_a_truncated_last_line(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            (Path(tmp) / "screen").mkdir()
+            (Path(tmp) / "screen" / "cbrn.jsonl").write_text(
+                json.dumps({"key": "a", "verdict": "refused"}) + '\n{"key": "b", "ver')
+            self.assertEqual(set(prepare.load_screen("cbrn")), {"a"})
+
     def test_a_short_stratum_names_the_source_and_the_gap(self):
         rows = self.pool(20)
         caches = self.caches(rows, refused=self.order(rows)[:11])

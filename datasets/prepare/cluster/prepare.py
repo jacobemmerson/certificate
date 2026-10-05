@@ -83,8 +83,15 @@ def load_screen(risk: str) -> dict[str, dict]:
     path = CACHE_DIR / "screen" / f"{risk}.jsonl"
     if not path.exists():
         return {}
+    records = {}
     with open(path, encoding="utf-8") as f:
-        return {record["key"]: record for record in map(json.loads, f)}
+        for line in f:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:  # truncated by a preempted job
+                continue
+            records[record["key"]] = record
+    return records
 
 
 def require_screen(risk: str, caches: Caches) -> None:
