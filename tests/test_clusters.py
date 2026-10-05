@@ -20,14 +20,19 @@ import pandas as pd
 
 from datasets.prepare.cluster import prepare
 from datasets.prepare.cluster.schema import (
+    COLUMNS,
     COMPLIANCE,
+    DETECTION,
     ELICITATION_FAMILIES,
     EXTRACTION,
+    FAMILIES,
     GRADED,
     ITEM,
     LIKERT,
     MCQ,
+    OPINION,
     QUESTION_TYPES,
+    REWRITE_FAMILIES,
     Row,
     SchemaError,
     jaccard,
@@ -212,7 +217,9 @@ class TestPerturbationSplit(unittest.TestCase):
             if source.elicitation_family != COMPLIANCE:
                 continue
             with self.subTest(source=source.name):
-                self.assertEqual(source.framing, source.risk != "manipulation")
+                self.assertEqual(
+                    "framing" in source.families_for(None), source.risk != "manipulation"
+                )
 
     def test_rigid_wrappers_do_not_expose_the_contract_as_rewordable(self):
         '''
@@ -290,6 +297,54 @@ class TestPerturbationSplit(unittest.TestCase):
             with self.subTest(sample=record["sample_id"]):
                 self.assertNotIn("code follows:", record["item_text"])
                 self.assertIn("code follows:", record["prompt_template"])
+
+
+class TestFamilies(unittest.TestCase):
+    '''`families` is the single stage-2/3 applicability gate (contract C1).'''
+
+    def source(self, **overrides) -> Source:
+        return Source(**{"name": "src", "risk": "cbrn", "question_type": GRADED,
+                         "path": "unused", **overrides})
+
+    def test_rewrite_families_are_pinned(self):
+        # pipeline/stage2_perturbation/rewrite.py mirrors this tuple (WS-B pins its side).
+        self.assertEqual(REWRITE_FAMILIES, ("paraphrase", "register", "past_tense", "multilingual"))
+
+    def test_families_default_by_question_type(self):
+        self.assertEqual(
+            self.source(elicitation_family=COMPLIANCE).families_for(None),
+            [*REWRITE_FAMILIES, "framing", "persona", "reconsideration", "scenario"],
+        )
+        self.assertEqual(
+            self.source(question_type=MCQ).families_for(None),
+            [*REWRITE_FAMILIES, "persona", "reconsideration", "scenario"],
+        )
+        self.assertEqual(
+            self.source(question_type=LIKERT, elicitation_family=OPINION).families_for(None),
+            [*REWRITE_FAMILIES, "reconsideration", "scenario"],
+        )
+        self.assertEqual(
+            self.source(question_type=DETECTION, detector="refusal_regex").families_for(None),
+            ["reconsideration", "scenario"],
+        )
+
+    def test_a_row_with_its_own_system_prompt_never_gets_persona(self):
+        self.assertNotIn("persona", self.source().families_for("You advise a minister."))
+        self.assertNotIn(
+            "persona", self.source(families=FAMILIES).families_for("You advise a minister.")
+        )
+
+    def test_declared_families_win(self):
+        self.assertEqual(self.source(families=("paraphrase",)).families_for(None), ["paraphrase"])
+
+    def test_an_unknown_family_is_refused(self):
+        with self.assertRaises(SchemaError):
+            validate(make_row(families=["identity_strip"]))
+
+    def test_csv_row_matches_columns_and_encodes_families(self):
+        encoded = make_row(families=["paraphrase", "scenario"]).to_csv_row()
+        self.assertEqual(list(encoded), COLUMNS)
+        self.assertEqual(json.loads(encoded["families"]), ["paraphrase", "scenario"])
 
 
 class TestGroupedSelection(unittest.TestCase):

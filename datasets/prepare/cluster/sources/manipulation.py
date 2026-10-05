@@ -39,9 +39,15 @@ import pandas as pd
 from ..readers import DATASETS_DIR
 from ..schema import (
     ACCEPT_REJECT_TOKEN, ATTRIBUTION_MIMICRY, COMPLIANCE, COMPLIANCE_RUBRIC,
-    DETECTION, EXTRACTION, GENERIC, GRADED, ITEM, JUDGMENT, LIKERT, OPINION,
+    DETECTION, EXTRACTION, FAMILIES, GENERIC, GRADED, ITEM, JUDGMENT, LIKERT, OPINION,
     YES_NO, YES_NO_MAP, Source,
 )
+
+# The compliance framing templates ask for a *procedure*, which turns a request
+# for an artifact (a story, an essay) into a different ask. Manipulation's
+# compliance items are artifacts, so they take every family but framing; the
+# refusal floor in scorers/cluster.py still keys on COMPLIANCE.
+NO_FRAMING = tuple(family for family in FAMILIES if family != "framing")
 
 POLITICAL_BIAS_DIR = DATASETS_DIR / "raw" / "manipulation" / "Democratic-Authoritarian-Bias-LLMs"
 LEADER_QUESTIONS_FILE = POLITICAL_BIAS_DIR / "data" / "phase1_questions.json"
@@ -810,7 +816,7 @@ def mimicry_prompt(df: pd.DataFrame) -> pd.DataFrame:
 SOURCES = [
     Source(
         name="social_harm", risk="manipulation", question_type=GRADED,
-        elicitation_family=COMPLIANCE, framing=False,
+        elicitation_family=COMPLIANCE, families=NO_FRAMING,
         path="raw/manipulation/SocialHarmBench/socialharmbench.csv",
         reader="csv",
         transform=social_harm_rows,
@@ -826,7 +832,7 @@ SOURCES = [
     ),
     Source(
         name="historical_revisionism", risk="manipulation", question_type=GRADED,
-        elicitation_family=COMPLIANCE, framing=False,
+        elicitation_family=COMPLIANCE, families=NO_FRAMING,
         path="raw/manipulation/PreservingHistoricalTruth/data/*_prompt*.csv",
         reader="csv",
         transform=revisionism_cases,
@@ -972,7 +978,7 @@ SOURCES = [
     ),
     Source(
         name="darkbench", risk="manipulation", question_type=GRADED,
-        elicitation_family=COMPLIANCE, framing=False,
+        elicitation_family=COMPLIANCE, families=NO_FRAMING,
         path="raw/manipulation/darkbench/darkbench.jsonl",
         reader="jsonl",
         query="input", id_col="id",

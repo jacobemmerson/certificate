@@ -129,6 +129,10 @@ def rows_from_frame(source: Source, frame) -> list[Row]:
         if callable(must_survive):
             must_survive = must_survive(record)
 
+        system_prompt = str(
+            source.resolve(record, source.system_prompt) or ""
+        ) if source.system_prompt else ""
+
         row = Row(
             sample_id=f"{source.name}:{native_id}",
             source=source.name,
@@ -147,15 +151,13 @@ def rows_from_frame(source: Source, frame) -> list[Row]:
                 {str(k): float(v) for k, v in fallback_scale_map.items()}}
                if fallback_scale_map else {}),
             detector=source.detector,
-            system_prompt=str(
-                source.resolve(record, source.system_prompt) or ""
-            ) if source.system_prompt else "",
+            system_prompt=system_prompt,
             item_text=item_text,
             prompt_template=prompt_template,
             elicitation_family=source.elicitation_family,
             judge_style=source.judge_style, role=source.role, pool=source.pool,
-            summary=source.summary, rewrite=source.rewrite_default(),
-            framing=source.framing,
+            summary=source.summary,
+            families=source.families_for(system_prompt),
             metadata={**{key: _plain(record.get(key)) for key in source.metadata},
                       **({"must_survive": list(must_survive)} if must_survive else {})},
         )

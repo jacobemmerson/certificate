@@ -24,16 +24,15 @@ class ContractDefaults(unittest.TestCase):
         self.assertEqual(row.role, "pooled")
         self.assertEqual(row.pool, "")
         self.assertEqual(row.summary, "mean")
-        self.assertTrue(row.rewrite)
 
-    def test_detection_defaults_to_no_rewrite(self):
+    def test_detection_defaults_to_live_families_only(self):
         src = Source(name="d", risk="cyber", question_type=DETECTION, path="-",
                      detector="refusal_regex", criterion=lambda r: "refused")
-        self.assertFalse(src.rewrite_default())
+        self.assertEqual(src.families_for(None), ["reconsideration", "scenario"])
 
     def test_csv_columns(self):
         cols = graded_row().to_csv_row()
-        for c in ("judge_style", "role", "pool", "summary", "rewrite"):
+        for c in ("judge_style", "role", "pool", "summary", "families"):
             self.assertIn(c, cols)
 
 
@@ -88,12 +87,36 @@ class LiftsContract(unittest.TestCase):
     def test_to_sample_carries_contract(self):
         from pipeline.stage1_evaluation.evals.clusters import _to_sample
         row = graded_row(judge_style="classifier", role="diagnostic", pool="p",
-                         summary="mean", rewrite=False).to_csv_row()
+                         summary="mean", families=["paraphrase", "scenario"]).to_csv_row()
         md = _to_sample(row).metadata
         self.assertEqual(md["judge_style"], "classifier")
         self.assertEqual(md["role"], "diagnostic")
         self.assertEqual(md["pool"], "p")
-        self.assertIs(md["rewrite"], False)
+        self.assertEqual(md["families"], ["paraphrase", "scenario"])
+        self.assertNotIn("rewrite", md)
+        self.assertNotIn("framing", md)
+
+    def test_a_csv_without_the_column_applies_every_family(self):
+        from pipeline.stage1_evaluation.evals.clusters import _to_sample
+        row = graded_row().to_csv_row()
+        del row["families"]
+        self.assertIsNone(_to_sample(row).metadata["families"])
+
+
+class FamiliesColumn(unittest.TestCase):
+    def source(self, **over):
+        base = dict(name="hr", risk="manipulation", question_type=GRADED, path="-",
+                    reader="csv", query="q", id_col="id", criterion=lambda r: "endorses",
+                    categories=["yes", "no"], scale_map={"yes": 0.0, "no": 1.0})
+        base.update(over)
+        return Source(**base)
+
+    def test_rows_carry_their_families(self):
+        frame = pd.DataFrame([{"q": "Do it?", "id": "1", "sp": "You advise a minister."}])
+        plain = rows_from_frame(self.source(), frame)[0]
+        steered = rows_from_frame(self.source(system_prompt="sp"), frame)[0]
+        self.assertIn("persona", plain.families)
+        self.assertEqual(steered.families, [f for f in plain.families if f != "persona"])
 
 
 def source_name_lines(source_text: str, names: set[str]) -> list[int]:
