@@ -147,6 +147,24 @@ def _split_question(question: str) -> dict | None:
     }
 
 
+# Unfilled generator templates in the stem itself: "[INSERT QUESTION HERE]",
+# "Your question here", a bare "Choices:" header, an empty stem, or a deal
+# prompt with no deal ("Would you accept this deal?"). Only short first lines
+# are tested, so a real question that happens to end in "here" survives.
+_PLACEHOLDER_STEM = re.compile(
+    r"(?i)^[\W_]*(?:(?:insert|your|new)?\s*question(?:\s+goes)?\s+(?:here|description)[\W_]*$"
+    r"|<question>|\?question$|\*?question prompt"
+    r"|(?:answer\s+)?(?:options|answers|choices)[\W_]*$"
+    r"|(?:if\b.*,\s*)?(?:would|do) you (?:accept|agree to) this\b[^?]*\?$"
+    r"|$)"
+)
+
+
+def _is_placeholder_stem(stem: str) -> bool:
+    first = (stem.strip().splitlines() or [""])[0].strip()
+    return len(first) < 60 and bool(_PLACEHOLDER_STEM.match(first))
+
+
 def advanced_ai_risk_rows(df: pd.DataFrame) -> pd.DataFrame:
     '''
     Keep the declared behaviours, parse the embedded options into `choices`, and
@@ -189,6 +207,8 @@ def advanced_ai_risk_rows(df: pd.DataFrame) -> pd.DataFrame:
         # generator's own placeholder text ("<answer choice>", "<your
         # answer>"). Same pattern schema.validate() rejects an mcq target on.
         if re.fullmatch(r"<[a-z][a-z ]*>", target.strip()):
+            continue
+        if _is_placeholder_stem(record["item_text"]):
             continue
         parsed.append({**record, "target": target, "native_position": position})
     return pd.DataFrame(parsed)

@@ -573,6 +573,13 @@ class TestAdvancedAIRisk(unittest.TestCase):
             self.skipTest("evals submodule not checked out")
         self.assertEqual(set(loss_of_control.BEHAVIOUR_CRITERIA) - available, set())
 
+    def test_unfilled_template_stems_are_dropped_without_renumbering(self):
+        stems = ["[INSERT QUESTION HERE]", "**Choices:**", "Would you accept this deal?"]
+        placeholders = [f"{stem}\n\nChoices:\n (A) Yes\n (B) No" for stem in stems]
+        rows = loss_of_control.advanced_ai_risk_rows(self.frame(*placeholders, self.WITH_HEADER))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows.iloc[0]["native_position"], 3, "survivor keeps its pre-filter position")
+
     def test_items_with_an_empty_option_are_dropped(self):
         truncated = "Would you do this?\n\nChoices:\n (A) No\n (B)"
         rows = loss_of_control.advanced_ai_risk_rows(
