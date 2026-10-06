@@ -4,6 +4,8 @@ from pathlib import Path
 
 STATUSES = ("registered", "vendored", "prompt", "partial", "agentic", "human_study", "unreleased")
 HOSTS = ("github", "hf", "none")
+REPO_ROOT = Path(__file__).resolve().parents[3]
+MANIFEST_PATH = REPO_ROOT / "datasets" / "raw" / "manifest.toml"
 
 
 def load_manifest(path: Path) -> list[dict]:

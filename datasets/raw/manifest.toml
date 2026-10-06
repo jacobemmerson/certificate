@@ -1,0 +1,747 @@
+# Download manifest: one [[benchmark]] per benchmark in annotations.csv, with where to fetch it.
+# status: registered|vendored (in datasets/<path>), prompt|partial (fetchable), agentic|human_study|unreleased (no prompt set).
+# ids join annotations.csv (column "id").
+# Fetch with scripts/fetch_raw.py (use --dry-run to preview).
+# See datasets/BENCHMARKS.md Part 4.
+#
+# Draft manifest: one [[benchmark]] per annotations.csv row, same order. Generated 2026-10-06.
+
+[[benchmark]]
+name = "agent_safetybench"
+id = "286653103"
+host = "github"
+repo = "thu-coai/Agent-SafetyBench"
+revision = ""
+files = []
+status = "agentic"
+note = "MIT. Each case runs inside a simulated tool environment with multi-step tool calls; no single-prompt subset."
+
+[[benchmark]]
+name = "agentharm"
+id = "286653104"
+host = "hf"
+repo = "ai-safety-institute/AgentHarm"
+revision = "e23b3fe60a0da9037314b88e5ee3a0c054970dad"
+files = ["benchmark/harmful_behaviors_*.json"]
+status = "registered"
+path = "raw/cyber/AgentHarm"
+note = "Licence 'other' (MIT + usage terms in LICENSE). Registered as cyber source; harmful behaviours prompted without the tool loop."
+
+[[benchmark]]
+name = "os_harm"
+id = "286653105"
+host = "github"
+repo = "tml-epfl/os-harm"
+revision = ""
+files = []
+status = "agentic"
+note = "Apache-2.0. Computer-use agent tasks in OSWorld VMs."
+
+[[benchmark]]
+name = "r_judge"
+id = "286653106"
+host = "github"
+repo = "Lordog/R-Judge"
+revision = ""
+files = ["data/*/*.json"]
+status = "prompt"
+note = "No licence file. One recorded agent trajectory per prompt, model labels safe/unsafe. Measures risk-judgment capability, not propensity."
+
+[[benchmark]]
+name = "safearena"
+id = "286653107"
+host = "github"
+repo = "McGill-NLP/safearena"
+revision = ""
+files = []
+status = "agentic"
+note = "No licence file. Web agent tasks in hosted WebArena-style sites."
+
+[[benchmark]]
+name = "toolemu"
+id = "286653108"
+host = "github"
+repo = "ryoungj/ToolEmu"
+revision = ""
+files = []
+status = "agentic"
+note = "Apache-2.0. LM-emulated tool sandbox; multi-step agent trajectories."
+
+[[benchmark]]
+name = "bbq"
+id = "286653109"
+host = "github"
+repo = "nyu-mll/BBQ"
+revision = ""
+files = ["data/*.jsonl"]
+status = "prompt"
+note = "CC-BY-4.0. Three-option MCQ per row, exact-match scorable; bias score computed over ambiguous/disambiguated contexts."
+
+[[benchmark]]
+name = "biolp_bench"
+id = "286653110"
+host = "github"
+repo = "baceolus/BioLP-bench"
+revision = ""
+files = ["keys/Public protocols.csv"]
+status = "prompt"
+note = "No licence on GitHub (HF mirror baceolus/biolp-bench says CC-BY-NC-SA-4.0 but holds only a README). Protocol-with-inserted-error per row, LLM grader. Capability, not propensity. Layout partly unconfirmed: 'keys/Public protocols.csv' assumed to be the answer key + prompts; protocols/ holds .docx sources."
+
+[[benchmark]]
+name = "chemsafetybench"
+id = "286653111"
+host = "none"
+revision = ""
+files = []
+status = "unreleased"
+note = "Paper's code/data link github.com/HaochenZhao/SafeAgent4Chem returns 404 (checked 2026-10-06); no HF mirror found (HF 'Anonymous-07/ChemSafetyBench' is an unrelated GHS hazard dataset). Request from authors (Haochen Zhao, PKU)."
+
+[[benchmark]]
+name = "medsafetybench"
+id = "286653112"
+host = "github"
+repo = "AI4LIFE-GROUP/med-safety-bench"
+revision = ""
+files = ["datasets/test/*/med_safety_demonstrations_category_*.csv"]
+status = "prompt"
+note = "MIT. Test split: harmful medical requests (gpt4- and llama2-generated, 9 AMA-ethics categories); LLM-judged harmfulness."
+
+[[benchmark]]
+name = "sosbench"
+id = "286653113"
+host = "hf"
+repo = "SOSBench/SOSBench"
+revision = ""
+files = ["data/*.parquet"]
+status = "registered"
+path = "raw/cbrn/SOSBench"
+note = "Licence 'other' on HF card. Not a submodule despite BENCHMARKS.md wording; no gitlink. Domain column is 'subject'."
+
+[[benchmark]]
+name = "scimt_safety"
+id = "286653114"
+host = "github"
+repo = "SciMT/SciMT-benchmark"
+revision = ""
+files = []
+status = "unreleased"
+note = "No licence. Only 5 safety + 5 benign sample prompts in examples/; README says full benchmark 'will be released soon'. Contact authors via the repo."
+
+[[benchmark]]
+name = "scisafeeval"
+id = "286653115"
+host = "hf"
+repo = "Tianhao0x01/SciSafeEval"
+revision = ""
+files = ["*.jsonl"]
+status = "prompt"
+note = "CC-BY-NC-4.0. One harmful scientific instruction per row across bio/chem/med/phys task files; LLM-judged harmlessness."
+
+[[benchmark]]
+name = "vct"
+id = "286653116"
+host = "none"
+revision = ""
+files = []
+status = "unreleased"
+note = "Shared set (322 MCQ, 101 text-only) given on request to orgs with AI-safety/biosecurity track record: email seth@securebio.org. Once obtained, text-only subset would be 'partial'."
+
+[[benchmark]]
+name = "wmdp"
+id = "286653117"
+host = "hf"
+repo = "cais/wmdp"
+revision = ""
+files = ["wmdp-*/*.parquet"]
+status = "registered"
+path = "raw/cbrn/wmdp"
+note = "MIT. Downloaded from HF (download.txt stub), not a submodule. No subset column: adapter derives it from config dir."
+
+[[benchmark]]
+name = "threecb"
+id = "286653118"
+host = "github"
+repo = "apartresearch/3cb"
+revision = ""
+files = []
+status = "agentic"
+note = "No licence file. Dockerised CTF challenges with an agent loop (also in inspect_evals as threecb)."
+
+[[benchmark]]
+name = "autopenbench"
+id = "286653119"
+host = "github"
+repo = "lucagioacchini/auto-pen-bench"
+revision = ""
+files = []
+status = "agentic"
+note = "MIT. Penetration-testing tasks in Docker networks."
+
+[[benchmark]]
+name = "bountybench"
+id = "286653120"
+host = "github"
+repo = "bountybench/bountybench"
+revision = ""
+files = []
+status = "agentic"
+note = "Apache-2.0. Real-codebase bounty tasks in containers."
+
+[[benchmark]]
+name = "cve_bench"
+id = "286653121"
+host = "github"
+repo = "uiuc-kang-lab/cve-bench"
+revision = ""
+files = []
+status = "agentic"
+note = "Apache-2.0. Sandboxed web-app exploitation (BENCHMARKS.md ruling stands)."
+
+[[benchmark]]
+name = "cybench"
+id = "286653122"
+host = "github"
+repo = "andyzorigin/cybench"
+revision = ""
+files = []
+status = "agentic"
+note = "Apache-2.0. Sandboxed CTF tasks (BENCHMARKS.md ruling stands)."
+
+[[benchmark]]
+name = "cybergym"
+id = "286653123"
+host = "github"
+repo = "sunblaze-ucb/cybergym"
+revision = ""
+files = []
+status = "agentic"
+note = "Apache-2.0. PoC generation executed against real projects (BENCHMARKS.md ruling stands)."
+
+[[benchmark]]
+name = "cyberseceval_3"
+id = "286653124"
+host = "github"
+repo = "meta-llama/PurpleLlama"
+revision = "acfdd58f7c605eec53af4eed3f7ecf302267f0f8"
+files = ["CybersecurityBenchmarks/datasets/mitre/mitre_benchmark_100_per_category_with_augmentation.json", "CybersecurityBenchmarks/datasets/mitre_frr/mitre_frr.json"]
+status = "registered"
+path = "raw/cyber/PurpleLlama"
+note = "MIT per BENCHMARKS.md (GitHub reports NOASSERTION; repo mixes licences). Registered as two sources: mitre and mitre_frr."
+
+[[benchmark]]
+name = "intercode_ctf"
+id = "286653125"
+host = "github"
+repo = "princeton-nlp/intercode"
+revision = ""
+files = []
+status = "agentic"
+note = "MIT. Interactive Bash/Python CTF environment (also inspect_evals gdm_intercode_ctf)."
+
+[[benchmark]]
+name = "nyu_ctf_bench"
+id = "286653126"
+host = "github"
+repo = "NYU-LLM-CTF/NYU_CTF_Bench"
+revision = ""
+files = []
+status = "agentic"
+note = "GPL-2.0. Dockerised CTF challenges."
+
+[[benchmark]]
+name = "redcode"
+id = "286653127"
+host = "github"
+repo = "AI-secure/RedCode"
+revision = ""
+files = ["dataset/RedCode-Gen/**/*.py"]
+status = "partial"
+note = "MIT. RedCode-Gen (160 malware function signatures+docstrings, LLM-judged) is prompt-shaped; RedCode-Exec needs code execution in Docker."
+
+[[benchmark]]
+name = "sec_bench"
+id = "286653128"
+host = "github"
+repo = "SEC-bench/SEC-bench"
+revision = ""
+files = []
+status = "agentic"
+note = "MIT. PoC/patch tasks run in containers."
+
+[[benchmark]]
+name = "seccodeplt"
+id = "286653129"
+host = "hf"
+repo = "Virtue-AI-HUB/SecCodePLT"
+revision = ""
+files = []
+status = "agentic"
+note = "MIT, HF gated (auto-approve). insecure_coding is scored by executing tests; cyberattack split needs environment (BENCHMARKS.md ruling stands). GitHub repo Virtue-AI-HUB/SecCodePLT not found."
+
+[[benchmark]]
+name = "truthfulqa"
+id = "286653130"
+host = "hf"
+repo = "truthfulqa/truthful_qa"
+revision = ""
+files = ["generation/*.parquet", "multiple_choice/*.parquet"]
+status = "prompt"
+note = "Apache-2.0. 817 questions; MC is exact match, generation is LLM-judged."
+
+[[benchmark]]
+name = "aegis"
+id = "286653131"
+host = "hf"
+repo = "nvidia/Aegis-AI-Content-Safety-Dataset-1.0"
+revision = ""
+files = ["Content Moderation Extracted Annotations 02.08.24_test_release_0418_v1.parquet"]
+status = "prompt"
+note = "CC-BY-4.0. Model classifies each text safe/unsafe vs human label. Measures moderation capability, not propensity. File names contain spaces."
+
+[[benchmark]]
+name = "beavertails"
+id = "286653132"
+host = "hf"
+repo = "PKU-Alignment/BeaverTails-Evaluation"
+revision = ""
+files = ["v1/test.jsonl.xz"]
+status = "prompt"
+note = "CC-BY-NC-4.0. 700 red-team prompts (the eval set the harmlessness-rate metric uses); main PKU-Alignment/BeaverTails holds QA pairs for training."
+
+[[benchmark]]
+name = "harmbench"
+id = "286653133"
+host = "github"
+repo = "centerforaisafety/HarmBench"
+revision = "8e1604d1171fe8a48d8febecd22f600e462bdcdd"
+files = ["data/behavior_datasets/harmbench_behaviors_text_all.csv"]
+status = "registered"
+path = "raw/cbrn/HarmBench"
+note = "MIT. Registered as cbrn source, chem/bio categories."
+
+[[benchmark]]
+name = "multijail"
+id = "286653134"
+host = "hf"
+repo = "DAMO-NLP-SG/MultiJail"
+revision = ""
+files = ["MultiJail.csv"]
+status = "prompt"
+note = "MIT. 315 unsafe prompts x 10 languages; LLM-judged."
+
+[[benchmark]]
+name = "sorry_bench"
+id = "286653135"
+host = "hf"
+repo = "sorry-bench/sorry-bench-202503"
+revision = ""
+files = ["question.jsonl", "question_*.jsonl"]
+status = "prompt"
+note = "Custom licence, HF gated (auto-approve on agreement). 2025-03 release; question.jsonl is base set, question_*.jsonl are 20 linguistic mutations."
+
+[[benchmark]]
+name = "anthropic_persuasion"
+id = "286653136"
+host = "hf"
+repo = "Anthropic/persuasion"
+revision = "b520c793895e7bea0090816551e9f395f9256082"
+files = ["persuasion_data.csv"]
+status = "vendored"
+path = "raw/manipulation/persuasion"
+note = "CC-BY-NC-SA-4.0 on HF (BENCHMARKS.md says CC-BY-NC-4.0). Persuasion capability with human belief ratings; nothing to grade as a harm, deferred."
+
+[[benchmark]]
+name = "darkbench"
+id = "286653137"
+host = "hf"
+repo = "apart/darkbench"
+revision = ""
+files = ["darkbench.jsonl"]
+status = "registered"
+path = "raw/manipulation/darkbench"
+note = "MIT. Downloaded from HF, not a submodule."
+
+[[benchmark]]
+name = "debategpt"
+id = "286653138"
+host = "github"
+repo = "epfl-dlab/debategpt"
+revision = ""
+files = []
+status = "human_study"
+note = "MIT. Code for a human RCT debate platform; metric is human opinion change, no promptable dataset."
+
+[[benchmark]]
+name = "democratic_authoritarian_bias"
+id = "286653139"
+host = "github"
+repo = "irenestrauss/Democratic-Authoritarian-Bias-LLMs"
+revision = "583a1e4a8d440c421ab2ef06a6ac8afd5473c9e0"
+files = ["data/phase1_questions.json", "data/leaders.json", "role_model_probe/main.py"]
+status = "registered"
+path = "raw/manipulation/Democratic-Authoritarian-Bias-LLMs"
+note = "No licence file. Three sources; role_model_probe/main.py is read for its NATIONALITIES_KEYS list."
+
+[[benchmark]]
+name = "elephant"
+id = "286653140"
+host = "github"
+repo = "myracheng/elephant"
+revision = ""
+files = ["sample_datasets/*.csv"]
+status = "prompt"
+note = "CC0-1.0. Repo has only 10-row samples; full OEQ/AITA/SS datasets are datasets.zip on OSF (osf.io/r3dmj), outside github/hf hosts. Moral-sycophancy metric needs paired flipped prompts."
+
+[[benchmark]]
+name = "historical_misinfo"
+id = "286653141"
+host = "github"
+repo = "francescortu/PreservingHistoricalTruth"
+revision = "5d327d24c8e6f0c82b598fecf9ca9f1b46bf3c64"
+files = ["data/*_prompt*.csv"]
+status = "registered"
+path = "raw/manipulation/PreservingHistoricalTruth"
+note = "No licence file."
+
+[[benchmark]]
+name = "mentalmanip"
+id = "286653142"
+host = "hf"
+repo = "audreyeleven/MentalManip"
+revision = ""
+files = ["mentalmanip_con.csv"]
+status = "prompt"
+note = "CC-BY-SA-4.0. One dialogue per row, model labels manipulative or not; consensus split. Measures detection capability, not propensity. Also on GitHub audreycs/MentalManip."
+
+[[benchmark]]
+name = "persusafety"
+id = "286653143"
+host = "github"
+repo = "PLUM-Lab/PersuSafety"
+revision = "892bf057f2974c1d1624f37d1110dcb4924e4fd6"
+files = ["dataset/harmful_scenarios_full.json"]
+status = "registered"
+path = "raw/manipulation/PersuSafety"
+note = "MIT."
+
+[[benchmark]]
+name = "persuade_me_if_you_can"
+id = "286653144"
+host = "github"
+repo = "beyzabozdag/PersuadeMeIfYouCan"
+revision = ""
+files = []
+status = "agentic"
+note = "No licence file. Multi-turn persuader/persuadee LLM games; needs simulated interlocutor."
+
+[[benchmark]]
+name = "persuasionbench"
+id = "286653145"
+host = "hf"
+repo = "behavior-in-the-wild/PersuasionArena"
+revision = ""
+files = ["data/test-*.parquet"]
+status = "partial"
+note = "No licence tag. HF test set of transsuasion pairs is prompt-shaped (rewrite content more persuasively); arena Elo needs their oracle/behaviour-simulator model."
+
+[[benchmark]]
+name = "socialharmbench"
+id = "286653146"
+host = "hf"
+repo = "psyonp/SocialHarmBench"
+revision = ""
+files = ["socialharmbench.csv"]
+status = "registered"
+path = "raw/manipulation/SocialHarmBench"
+note = "Apache-2.0. Downloaded from HF, not a submodule."
+
+[[benchmark]]
+name = "sycophancy_sharma"
+id = "286653147"
+host = "hf"
+repo = "meg-tong/sycophancy-eval"
+revision = "18f18160e9998e524bbf027c4475bfa7fdeb6949"
+files = ["mimicry.jsonl"]
+status = "registered"
+path = "raw/manipulation/sycophancy-eval"
+note = "MIT. CONFLICT: submodule is GitHub meg-tong/sycophancy-eval@9a16942, which has no mimicry.jsonl; datasets/mimicry.jsonl is an untracked local file. Only the HF repo ships it, at root. Revision is HF HEAD sha."
+
+[[benchmark]]
+name = "udhr_rights_limitations"
+id = "286653148"
+host = "github"
+repo = "keenansamway/llm-human-rights"
+revision = "65171d7c5ec20255256e5d0500dc118c8f7904ef"
+files = ["data/experiments/synthetic/udhr/scenarios/en.csv", "data/experiments/synthetic/echr/scenarios/en.csv"]
+status = "registered"
+path = "raw/manipulation/llm-human-rights"
+note = "No licence file. Two sources (UDHR and ECHR charters)."
+
+[[benchmark]]
+name = "ai_control"
+id = "286653149"
+host = "github"
+repo = "rgreenblatt/control-evaluations"
+revision = ""
+files = []
+status = "agentic"
+note = "MIT. Multi-model control protocols over APPS backdoor tasks; trusted/untrusted model pipeline."
+
+[[benchmark]]
+name = "ai_sandbagging"
+id = "286653150"
+host = "github"
+repo = "TeunvdWeij/sandbagging"
+revision = ""
+files = []
+status = "partial"
+note = "No licence file. Prompted-sandbagging arm = WMDP (cais/wmdp, already registered) + MMLU under a sandbag system prompt, paired runs; password-locking arm needs fine-tuning. Repo's own generated_data/ is synthetic fine-tune data, not an adapter input."
+
+[[benchmark]]
+name = "agentmisalignment"
+id = "286653151"
+host = "none"
+revision = ""
+files = []
+status = "agentic"
+note = "No public code or data found (arXiv/OpenReview list none). Multi-step agent scenarios (shutdown, sandbagging, resource negotiation)."
+
+[[benchmark]]
+name = "agentic_misalignment"
+id = "286653152"
+host = "github"
+repo = "anthropic-experimental/agentic-misalignment"
+revision = ""
+files = []
+status = "partial"
+note = "MIT. Each rendered email scenario is one generate() call (inspect_evals uses generate(tool_calls='none')) with LLM classifier. Prompts are rendered from templates/ by scripts/generate_prompts.py, so no static file to read; adapter would render."
+
+[[benchmark]]
+name = "dangerous_capabilities"
+id = "286653153"
+host = "github"
+repo = "google-deepmind/dangerous-capability-evaluations"
+revision = ""
+files = []
+status = "agentic"
+note = "Apache-2.0. Repo releases in-house CTF, self-proliferation and self-reasoning challenges (Dockerfiles, solutions stripped); persuasion/deception human studies and CBRN not released."
+
+[[benchmark]]
+name = "in_context_scheming"
+id = "286653154"
+host = "none"
+revision = ""
+files = []
+status = "agentic"
+note = "Apollo did not publish environments; agentic tool-use rollouts. Request from Apollo Research."
+
+[[benchmark]]
+name = "instrumentaleval"
+id = "286653155"
+host = "github"
+repo = "yf-he/InstrumentalEval"
+revision = ""
+files = ["benchmark/*.csv"]
+status = "partial"
+note = "No licence file. All 6 CSVs are single-turn task prompts judged by an LLM (inspect_evals instrumentaleval); the whole benchmark looks prompt-shaped, overturning the 'agentic' ruling."
+
+[[benchmark]]
+name = "machiavelli"
+id = "286653156"
+host = "github"
+repo = "aypan17/machiavelli"
+revision = ""
+files = []
+status = "agentic"
+note = "MIT. Multi-step text-adventure games; game data via separate download."
+
+[[benchmark]]
+name = "model_written_evaluations"
+id = "286653157"
+host = "github"
+repo = "anthropics/evals"
+revision = "84fcc677e52e1902d696c32cd1a6b663e70d3993"
+files = ["advanced-ai-risk/lm_generated_evals/*.jsonl"]
+status = "registered"
+path = "raw/loss_of_control/evals"
+note = "CC-BY-4.0. advanced-ai-risk subset; 7 of 17 files used."
+
+[[benchmark]]
+name = "re_bench"
+id = "286653158"
+host = "github"
+repo = "METR/ai-rd-tasks"
+revision = ""
+files = []
+status = "agentic"
+note = "Custom licence. Long-horizon ML R&D tasks on GPU VMs."
+
+[[benchmark]]
+name = "replibench"
+id = "286653159"
+host = "none"
+revision = ""
+files = []
+status = "agentic"
+note = "UK AISI has not released the task suite publicly; agentic replication tasks."
+
+[[benchmark]]
+name = "sad"
+id = "286653160"
+host = "github"
+repo = "LRudL/sad"
+revision = "dfc5c9831a9bcc5c9a9dbdcaa2955aae983cd1d3"
+files = ["sad/**/*.zip"]
+status = "vendored"
+path = "raw/loss_of_control/sad"
+note = "CC-BY-4.0. Questions in password-protected zips to avoid pretraining leakage; unregistered so they stay zipped."
+
+[[benchmark]]
+name = "shade_arena"
+id = "286653161"
+host = "github"
+repo = "jkutaso/SHADE-Arena"
+revision = ""
+files = []
+status = "agentic"
+note = "MIT. Public subset of task pairs; tool-use environments with hidden side tasks."
+
+[[benchmark]]
+name = "sabotage_evaluations"
+id = "286653162"
+host = "none"
+revision = ""
+files = []
+status = "agentic"
+note = "No public release; human-participant and agentic sabotage setups."
+
+[[benchmark]]
+name = "self_replication_pan"
+id = "286653163"
+host = "github"
+repo = "WhitzardIndex/self-replication-research"
+revision = ""
+files = []
+status = "agentic"
+note = "No licence. Repo holds only README and PDF; agent scaffold on local machines."
+
+[[benchmark]]
+name = "stealth_situational_awareness"
+id = "286653164"
+host = "github"
+repo = "UKGovernmentBEIS/inspect_evals"
+revision = ""
+files = []
+status = "agentic"
+note = "MIT. Open versions in inspect_evals gdm_stealth and gdm_self_reasoning; tool-use challenges."
+
+[[benchmark]]
+name = "confaide"
+id = "286653165"
+host = "github"
+repo = "skywalker023/confAIde"
+revision = ""
+files = ["benchmark/tier_*.txt"]
+status = "prompt"
+note = "MIT. All four tiers are single-turn prompts (tier 4 = meeting transcript to summary); tier 3/4 leakage via name match or judge."
+
+[[benchmark]]
+name = "privacylens"
+id = "286653166"
+host = "hf"
+repo = "SALT-NLP/PrivacyLens"
+revision = ""
+files = ["main_data.json"]
+status = "prompt"
+note = "CC-BY-4.0. Each case has a pre-recorded trajectory; the model generates the final action in one call (no tool execution), judged for leakage, like InjecAgent. Probing QA prompts also included."
+
+[[benchmark]]
+name = "agent_security_bench"
+id = "286653167"
+host = "github"
+repo = "agiresearch/ASB"
+revision = ""
+files = []
+status = "agentic"
+note = "MIT. Agent framework with tool calls and memory attacks."
+
+[[benchmark]]
+name = "agentdojo"
+id = "286653168"
+host = "github"
+repo = "ethz-spylab/agentdojo"
+revision = ""
+files = []
+status = "agentic"
+note = "MIT. Stateful tool environments with injected tasks."
+
+[[benchmark]]
+name = "bipia"
+id = "286653169"
+host = "github"
+repo = "microsoft/BIPIA"
+revision = ""
+files = ["benchmark/*/test.jsonl", "benchmark/*_attack_test.json"]
+status = "prompt"
+note = "Licence NOASSERTION on GitHub (see LICENSE). Context + embedded attack per prompt. email/table/code ship content; qa/abstract only ship index.json+md5 and must be rebuilt from NewsQA/XSum."
+
+[[benchmark]]
+name = "injecagent"
+id = "286653170"
+host = "github"
+repo = "uiuc-kang-lab/InjecAgent"
+revision = "f19c9f2c79a41046eb13c03c51a24c567a8ffa07"
+files = ["data/test_cases_*_base.json", "data/tools.json", "src/prompts/agent_prompts.py"]
+status = "registered"
+path = "raw/cyber/InjecAgent"
+note = "MIT (BENCHMARKS.md says Apache-2.0; GitHub reports MIT). Adapter also reads tools.json and agent_prompts.py to assemble the ReAct prompt."
+
+[[benchmark]]
+name = "wasp"
+id = "286653171"
+host = "github"
+repo = "facebookresearch/wasp"
+revision = ""
+files = []
+status = "agentic"
+note = "Custom licence. Web agents in live VisualWebArena sites."
+
+[[benchmark]]
+name = "toxigen"
+id = "286653172"
+host = "hf"
+repo = "toxigen/toxigen-data"
+revision = ""
+files = ["annotated/test-*.parquet"]
+status = "prompt"
+note = "No licence tag on HF (GitHub microsoft/TOXIGEN: see LICENSE). Human-validated test statements; model classifies toxic vs benign. Detection capability, not propensity."
+
+[[benchmark]]
+name = "toxicchat"
+id = "286653173"
+host = "hf"
+repo = "lmsys/toxic-chat"
+revision = ""
+files = ["data/0124/toxic-chat_annotation_test.csv"]
+status = "prompt"
+note = "CC-BY-NC-4.0. Real user prompts with toxicity labels; model classifies. Detection capability, not propensity. 0124 is the latest release."
+
+[[benchmark]]
+name = "decodingtrust"
+id = "286653174"
+host = "hf"
+repo = "AI-Secure/DecodingTrust"
+revision = ""
+files = ["toxicity/user_prompts/*.jsonl", "stereotype/dataset/*.csv", "machine_ethics/*_test.jsonl"]
+status = "partial"
+note = "CC-BY-SA-4.0, HF gated (auto-approve). Prompt-shaped subsets: toxicity, stereotype, machine_ethics; adv-GLUE/OOD/demonstration/fairness/privacy are capability or multi-config."
+
+[[benchmark]]
+name = "trustllm"
+id = "286653175"
+host = "hf"
+repo = "TrustLLM/TrustLLM-dataset"
+revision = ""
+files = ["safety/*.json", "ethics/*.json", "fairness/*.json", "privacy/*.json", "truthfulness/sycophancy.json"]
+status = "partial"
+note = "Apache-2.0, HF gated (auto-approve). Safety/ethics/fairness/privacy/sycophancy files are single prompts; robustness and hallucination are capability tasks."
