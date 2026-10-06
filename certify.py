@@ -515,10 +515,14 @@ def record_routing(statuses: dict, endpoints: list[dict] | None) -> dict:
 # ----- Updates models/models.json -----
 
 def completed_risks(entry: dict) -> set[str]:
-    '''Risks a rerun may skip: status success and a non-null headline.'''
+    '''Risks a rerun may skip: status success, a non-null headline, and a
+    current-schema tree (pre-refactor records have no aggregate `tail`, so their
+    headline means something else and must be recomputed).'''
     return {
         risk for risk, status in (entry.get('status') or {}).items()
-        if status.get('status') == 'success' and entry.get('scores', {}).get(risk) is not None
+        if status.get('status') == 'success'
+        and entry.get('scores', {}).get(risk) is not None
+        and "tail" in (((entry.get('results') or {}).get(risk) or {}).get('aggregate') or {})
     }
 
 

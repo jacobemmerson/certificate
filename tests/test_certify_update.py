@@ -185,6 +185,11 @@ class TestUpdate(unittest.TestCase):
         self.assertIn("cbrn_bench", written["results"]["cbrn"]["benchmarks"], "tree still present")
         self.assertNotIn("partial_scores", written)
 
+    def test_completed_risks_treats_an_old_schema_record_as_incomplete(self):
+        stored = entry("m", {"cbrn": 50.0, "cyber": 60.0})
+        stored["results"]["cyber"]["aggregate"] = {"mean": 70.0, "worst": 60.0}
+        self.assertEqual(certify.completed_risks(stored), {"cbrn"})
+
     def test_completed_risks_treats_a_null_score_as_incomplete(self):
         stored = entry("m", {"cbrn": 50.0, "cyber": None})
         stored["status"]["manipulation"] = {"status": "failed"}
