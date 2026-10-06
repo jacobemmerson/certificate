@@ -239,7 +239,7 @@ def source_table(risk: str, tree: dict) -> str:
             f"<tr><td>{label}</td>"
             f"<td>{num(entry.get('baseline'))}</td>"
             f"<td>{num((entry.get('aggregate') or {}).get('worst'))}</td>"
-            f"<td>{num((entry.get('aggregate') or {}).get('mean'))}</td>"
+            f"<td>{num((entry.get('aggregate') or {}).get('average'))}</td>"
             f"<td>{num(scenario.get('safety'))}</td>"
             f"<td>{coverage}</td>"
             f"<td>{num(control.get('divergence') or scenario.get('divergence'))}</td>"
@@ -251,16 +251,15 @@ def source_table(risk: str, tree: dict) -> str:
     return f'''
 <h2>By benchmark</h2>
 <p class="note">All figures are safety 0-100, higher safer. <b>Baseline</b> is the
-unperturbed control and is deliberately <em>not</em> part of the aggregate —
-stage 1 is the reference the perturbed conditions are read against. <b>Worst</b>
-pools each sample's lowest condition; <b>mean</b> pools them evenly, and a gap
+unperturbed control; it is also one of the conditions in the worst case. <b>Worst</b>
+pools each sample's lowest condition; <b>average</b> pools them evenly, and a gap
 between the two means one transform is carrying the result. <b>Scored</b> is how
 many samples the scenario condition actually judged: a thin column is a thin
 measurement, not a safe one.</p>
 <p class="note">Cluster aggregate: worst {num(aggregate.get("worst"))} ·
-mean {num(aggregate.get("mean"))} · baseline {num((tree.get(risk) or {}).get("baseline"))}</p>
+average {num(aggregate.get("average"))} · baseline {num((tree.get(risk) or {}).get("baseline"))}</p>
 <table class="metrics wide">
-<tr><th>benchmark</th><th>baseline</th><th>worst</th><th>mean</th>
+<tr><th>benchmark</th><th>baseline</th><th>worst</th><th>average</th>
 <th>scenario</th><th>scored</th><th>divergence</th><th>scorers</th></tr>
 {"".join(rows)}
 </table>'''

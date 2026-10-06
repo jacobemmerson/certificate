@@ -97,7 +97,7 @@ def main(pattern):
         full = [l for l in logs if len(l.samples or []) > 2]
         tree = build(full)
         for risk, node in tree.items():
-            rebuilt = (node.get("aggregate") or {}).get("worst")
+            rebuilt = (node.get("aggregate") or {}).get("tail")
             stored = models[model].get("scores", {}).get(risk)
             mark = "" if rebuilt == stored else "  <-- DIFF"
             print(f"{model:<24}{risk:<17}rebuilt={rebuilt!s:<8}stored={stored!s:<8}{mark}")
