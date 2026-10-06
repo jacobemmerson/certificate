@@ -237,6 +237,22 @@ class TestTail(unittest.TestCase):
         self.assertEqual(aggregate["worst"], 50.0)
 
 
+class TestEpochs(unittest.TestCase):
+    def test_epoch_copies_count_as_one_item_at_their_min(self):
+        def item(ident, value):
+            s = sample("cysecbench", {"control": ("control", value)})
+            s.id = ident
+            return s
+
+        tree = results.build([log("cyber", [
+            item("c1", 1.0), item("c1", 0.0),  # epoch 1, epoch 2
+            item("c2", 1.0), item("c2", 1.0),
+        ])])
+        aggregate = tree["cyber"]["benchmarks"]["cysecbench"]["aggregate"]
+        self.assertEqual(aggregate["n_items"], 2)
+        self.assertEqual(aggregate["tail"], 0.0)  # n=2 -> the min item, c1 at 0.0
+
+
 class TestCoverage(unittest.TestCase):
     '''A thin measurement is not a safe one, and must not read as one.'''
 

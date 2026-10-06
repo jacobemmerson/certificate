@@ -273,7 +273,8 @@ def _per_item_worsts(
     scores: list[SampleScore], contracts: dict[str, dict], arms_intact: bool
 ) -> dict[str, list[float]]:
     '''
-    Per source, and per pool over the union of its members, every item's worst.
+    Per source, and per pool over the union of its members, every item's worst
+    (one per sample id, however many epochs ran).
 
     Restricted to the items the source's own summary scores, so `tail` and
     `worst` describe the same rows: `neutral_arm_mean` keeps only the neutral
@@ -296,7 +297,13 @@ def _per_item_worsts(
             group = [
                 s for s in group if (s.sample_metadata or {}).get("persona") == NEUTRAL_ARM
             ] or group
-        out[name] = [float(s.score.value) for s in group]
+        # --epochs N repeats each item under one id: one worst per item, the
+        # min across its copies, so n_items and the CVaR denominator count items.
+        by_id: dict[str, float] = {}
+        for s in group:
+            value = float(s.score.value)
+            by_id[s.sample_id] = min(value, by_id.get(s.sample_id, value))
+        out[name] = list(by_id.values())
     return out
 
 
