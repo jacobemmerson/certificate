@@ -522,6 +522,10 @@ def completed_risks(entry: dict) -> set[str]:
     }
 
 
+RUN_OWNED_FIELDS = ("scores", "results", "status", "aggregate")
+IDENTITY_FIELDS = ("id", "name", "company", "region", "specialty")
+
+
 def update(results, models, idx):
     '''Merge this run's results over the stored record, write models/results/<slug>.json, rebuild models/models.json.'''
 
@@ -547,6 +551,15 @@ def update(results, models, idx):
         # Recomputed after the merge, so a --only rerun reports across every
         # risk the model has, not just the ones this run touched.
         results['aggregate'] = results_tree.model_aggregate(results['results'])
+
+        # Start from the stored record so keys this run does not own
+        # (aa_* from scripts/match_aa_index.py, hand edits) survive; identity
+        # comes from the CLI only where the record has none.
+        results = (
+            prev
+            | {key: results[key] for key in RUN_OWNED_FIELDS}
+            | {key: results.get(key) for key in IDENTITY_FIELDS if prev.get(key) is None}
+        )
 
     write_json_atomic(model_result_path(results["id"]), results)
     rebuild_models_json()

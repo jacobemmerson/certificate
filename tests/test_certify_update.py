@@ -163,6 +163,19 @@ class TestUpdate(unittest.TestCase):
         self.assertEqual(self.written()[1]["aa_intelligence_index"], 55.3)
         self.assertEqual(sorted(p.name for p in (self.models_dir / "results").glob("*.json")), ["a.json", "b.json"])
 
+    def test_unowned_fields_and_identity_survive_a_rerun(self):
+        stored = [entry("m", {"cbrn": 50.0})]
+        stored[0].update(name="Custom Name", aa_intelligence_index=55.3, aa_model_match="M")
+        rerun = entry("m", {"cbrn": 42.0})
+        rerun["name"] = "cli-name"
+
+        certify.update(rerun, stored, idx=0)
+
+        written = self.written()[0]
+        self.assertEqual(written["scores"]["cbrn"], 42.0)
+        self.assertEqual(written["name"], "Custom Name")
+        self.assertEqual((written["aa_intelligence_index"], written["aa_model_match"]), (55.3, "M"))
+
     def test_a_partial_run_stores_a_null_score_with_its_tree(self):
         partial = entry("m", {"cbrn": None})
         certify.update(partial, [], idx=-1)
