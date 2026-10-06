@@ -154,7 +154,7 @@ class TestUpdate(unittest.TestCase):
         self.assertEqual((self.models_dir / "models.json").read_bytes(), first)
         self.assertEqual([m["id"] for m in self.written()], ["alpha", "Zed"])
 
-    def test_split_script_is_idempotent_and_keeps_aa_fields(self):
+    def test_split_script_keeps_aa_fields_and_refuses_a_second_run(self):
         stored = [entry("b", {"cbrn": 1.0}), entry("a", {"cbrn": 2.0})]
         stored[0]["aa_intelligence_index"] = 55.3
         self.models_dir.mkdir()
@@ -163,7 +163,9 @@ class TestUpdate(unittest.TestCase):
 
         runpy.run_path(str(script), run_name="__main__")
         first = (self.models_dir / "models.json").read_bytes()
-        runpy.run_path(str(script), run_name="__main__")
+        with self.assertRaises(SystemExit) as ctx:
+            runpy.run_path(str(script), run_name="__main__")
+        self.assertIn("Delete them first", str(ctx.exception.code))
 
         self.assertEqual((self.models_dir / "models.json").read_bytes(), first)
         self.assertEqual([m["id"] for m in self.written()], ["a", "b"])
