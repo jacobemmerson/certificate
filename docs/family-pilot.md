@@ -31,13 +31,15 @@ Never open `datasets/public/{cbrn,cyber}.csv`, `datasets/generated/{cbrn,cyber}/
    total rows and `F fallback(s)`; usable = total - F. Every family needs usable > 0 and F well below
    the total (`generate.py` exits 1 on a 0%-usable batch). The `*.meta.json` sidecars have no
    usable/fallback fields. If the server rejects `--reasoning`, drop it and resubmit.
-3. Full run. Drop `--only manipulation --limit 5`; keep `--force` (`--missing-only` never checks
-   prompt_version, so it would keep stale v1/v2 files):
+3. Full run. Drop `--only manipulation --limit 5`; keep `--force` (`--missing-only` would also
+   regenerate the stale v1/v2 files in full, since it drops every row of a family whose
+   prompt_version differs, but `--force` states the intent):
    `--perturb paraphrase register past_tense multilingual --simulate --sim-k 2 --reasoning --force`
    `sbatch scripts/generate_hermes_slurm.sh`. Budget: ~8.3k calls at 32 connections, a few hours.
    Keep `--force`. A requeue reruns sbatch's spooled copy of the script, so edits do not reach it
    and it restarts from scratch; on interruption, cancel and resubmit with `--only <remaining risks>`.
-   Switch to `--missing-only` only once every file's meta shows the new prompt_version.
+   `--missing-only` is safe at any point: it regenerates any family still on an old
+   prompt_version and only fills gaps in current ones.
 4. Retry fallbacks. `--missing-only` treats fallback rows as missing, so it re-asks exactly the failed
    variants. Once every rewrite file's meta shows prompt_version "3", resubmit once or twice with
    `--perturb paraphrase register past_tense multilingual --missing-only`. A file whose retried variants

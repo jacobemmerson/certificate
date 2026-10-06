@@ -20,12 +20,16 @@ writes one log per risk with the control generated and judged once.
 
 `certify.py` validates artifacts before any eval starts (`artifacts.py::validate_artifacts`)
 and fails fast with the `generate.py` command that fixes it: every id the family applies
-to has a non-fallback row (at least `--perturb-k` for paraphrase/register/past_tense, at
-least `--sim-k` complete trees for scenario), no row is orphaned, and every scenario row
-has a full tree. A `meta.prompt_version` that differs from `PROMPT_VERSIONS` only warns
-there. `tests/test_artifacts_current.py` is the strict version: it also fails on a stale
-prompt version, on rewrite rows whose `query` is not the template re-rendered around
-`text`, and on framing/persona files the templates no longer reproduce, so stale artifacts
+to has rows (at least `--perturb-k` real variants for paraphrase/register/past_tense, at
+least `--sim-k` complete trees for scenario), no row is orphaned, every scenario row has a
+full tree, and a stored `meta.prompt_version` matches `PROMPT_VERSIONS`. An id whose rows
+are all fallbacks counts as covered, with a warning, and replays as a `missing` condition
+(an abstention); scenario stays strict, so a tree that never parsed blocks the run. Under
+`--limit` coverage gaps and version mismatches only warn. Both `certify.py` and
+`generate.py` also refuse to start on a CSV built before the `families` column (rebuild
+with `uv run python3 -m datasets.prepare.cluster.prepare`), which blocks stage-1-only runs
+too. `tests/test_artifacts_current.py` is the stricter offline check: it also fails on
+rewrite rows whose `query` is not the template re-rendered around `text`, and on framing/persona files the templates no longer reproduce, so stale artifacts
 fail the suite rather than a run. (Its two file checks are `expectedFailure` until the
 artifacts are regenerated; see [docs/family-pilot.md](../docs/family-pilot.md).)
 

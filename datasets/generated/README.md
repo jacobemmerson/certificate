@@ -84,8 +84,10 @@ Two checks, with different strictness:
   scenario row without `system` and all seven turns, or a `prompt_version` that differs from
   the code. It is currently an expected failure until the artifacts are regenerated.
 - `certify.py` calls `validate_artifacts` before spending anything. It errors on missing files,
-  orphan ids, too few variants/trees and malformed trees, but a `prompt_version` mismatch or a
-  `partial` file only prints a warning.
+  orphan ids, too few variants/trees, malformed trees and a stored `prompt_version` that
+  differs from the code (under `--limit` gaps and version mismatches only warn). An id whose
+  rows are all fallbacks counts as covered with a warning and is scored as `missing`; scenario
+  stays strict. A `partial` file only prints a warning.
 
 ## Regenerating
 
@@ -98,5 +100,6 @@ uv run python3 generate.py --force                            # from scratch
 ```
 
 `generate.py` skips a family whose file exists unless `--missing-only` or `--force`.
-`--missing-only` does not check `prompt_version`: after a version bump use `--force`
+`--missing-only` regenerates the whole family when the stored `prompt_version` differs from
+the code, so after a version bump it behaves like `--force` for that family
 (see [`docs/family-pilot.md`](../../docs/family-pilot.md)).
