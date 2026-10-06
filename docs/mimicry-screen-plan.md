@@ -205,4 +205,4 @@ so. Read the source's coverage before reading its score.
 
 - Sharma et al. 2023, *Towards Understanding Sycophancy in Language Models* — <https://arxiv.org/abs/2310.13548>
 - `datasets/BENCHMARKS.md`, the `sycophancy_mimicry` divergence row and note
-- `pipeline/stage2_perturbation/README.md`, "rows whose construct lives inside `item_text`"
+- `pipeline/README.md`, "The perturbation split"
