@@ -20,11 +20,11 @@ The last row is benchmarks minus diagnostics: `wmdp`, `cyber_false_refusal` and
 
 One Inspect `@task` per EU AI Act systemic risk (cbrn, cyber, loss_of_control,
 manipulation), whose dataset is a filtered union of several benchmarks. Merged
-into one task, **sample count becomes weight**: WMDP (3,668) plus SOSBench
-(3,000) would make a cbrn score ~55% WMDP by arithmetic, and DarkBench (660) plus
-PersuSafety (101) would be 87% DarkBench. Per-source quotas are therefore what
-lets the cluster score mean anything, and `tests/test_clusters.py` fails any
-cluster where one source exceeds 40% of it.
+into one task, **sample count becomes weight** in the headline tail: WMDP
+(3,668) plus SOSBench (3,000) would make a cbrn score ~55% WMDP by arithmetic,
+and DarkBench (660) plus PersuSafety (101) would be 87% DarkBench. Per-source
+quotas are therefore what lets the cluster score mean anything, and
+`tests/test_clusters.py` fails any cluster where one source exceeds 40% of it.
 
 ## One canonical schema per cluster
 
@@ -563,11 +563,11 @@ across the cross of each source's stratify columns and filled within each cell:
 | `advanced_ai_risk` | `behavior`, **evenly** (7 × 20) | diverse |
 
 `diverse` is opt-in for free-text sources, where it roughly halved within-sample
-redundancy; on template-shaped sources (`persusafety`, `injecagent`,
-`leader_favorability`) similarity measures the wrapper, so spreading on it picks
-odd boilerplate. Farthest-point over-weights unusual items, so a `diverse`
-source's score is a coverage figure, not an unbiased estimate over its whole
-pool; for a certificate that is the intent.
+redundancy (measured on the Jaccard build, not re-measured on embeddings); on
+template-shaped sources (`persusafety`, `injecagent`, `leader_favorability`) similarity
+measures the wrapper, so spreading on it picks odd boilerplate. Farthest-point
+over-weights unusual items, so a `diverse` source's score is a coverage figure, not an
+unbiased estimate over its whole pool; for a certificate that is the intent.
 
 ## What sampling does not do
 

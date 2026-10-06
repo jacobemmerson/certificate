@@ -35,10 +35,9 @@ from scipy.stats import wasserstein_distance
 
 from pipeline.utils.scoring import is_scored, safety
 
-# Per-source metrics are prefixed so downstream can tell them apart from the
-# condition-pool metrics (safety_<family>, safety_worst, ...) that wrap_scorers adds to
-# the same list. Without a marker, results.py would have to guess from
-# names, and would silently fold a stability percentage into a cluster score.
+# Nothing reads this today: it prefixed the per-source panel metrics, removed
+# with source_scores. Kept so any per-source metric re-added to the panel stays
+# distinguishable from the condition-pool metrics (safety_<family>, ...).
 SOURCE_METRIC_PREFIX = "source_"
 
 # A summary returns None when its inputs cannot support it — no scored samples,

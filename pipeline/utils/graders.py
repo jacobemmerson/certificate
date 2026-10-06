@@ -12,7 +12,6 @@ import os
 import re
 import tempfile
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 MODELS_DIR = REPO_ROOT / "models"
 

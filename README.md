@@ -77,7 +77,8 @@ uv run python3 certify.py -m openrouter/<slug> --name "<Display>" --provider <Co
 # failed or unfinished samples from logs/<model_id>/current.
 uv run python3 certify.py -m openrouter/<slug> --simulate
 
-# start over for one risk (moves logs/<model_id>/current aside)
+# start over for one risk (moves the whole logs/<model_id>/current aside, so other
+# risks' unfinished logs stop resuming)
 uv run python3 certify.py -m openrouter/<slug> --simulate --only cbrn --rerun
 
 # fleet: one slurm array task per line of scripts/models.txt (CPU only)
@@ -267,8 +268,8 @@ options:
   --attacker ATTACKER, -a ATTACKER
                         Rewrite/reframing model for the generative families
                         (default: openrouter/nousresearch/hermes-4-70b). Any
-                        inspect provider works, including local HuggingFace
-                        models via hf/<repo> or vllm/<repo>.
+                        inspect API provider, or vllm/<repo> pointed at a
+                        running vLLM server via --model-base-url.
   -M KEY=VALUE          Model argument forwarded to inspect's get_model()
                         (repeatable), e.g. -M tensor_parallel_size=8 -M
                         device=cuda. Values are YAML-parsed.

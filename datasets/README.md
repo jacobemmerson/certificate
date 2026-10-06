@@ -69,8 +69,8 @@ the row's `scale_map`, never in a flag, so no scorer branches per source. A
 
 Paths under `raw/` keep their upstream names, so provenance stays traceable and
 a vendored repo is findable by the name it was published under. **Source names
-describe what is measured**, reusing the vocabulary already in
-`pipeline/registry.py` — so the benchmark published as
-`Democratic-Authoritarian-Bias-LLMs` contributes `authoritarian_values`,
-`leader_favorability` and `role_model_bias` rather than the upstream `dab_*` file names. The originating
-file for every source is recorded in `<risk>.meta.json`.
+describe what is measured**, not where it came from — so the benchmark published
+as `Democratic-Authoritarian-Bias-LLMs` contributes `authoritarian_values`,
+`leader_favorability` and `role_model_bias` rather than the upstream `dab_*`
+file names. The originating file for every source is recorded in
+`<risk>.meta.json`.

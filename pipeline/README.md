@@ -181,9 +181,10 @@ sources commensurable); `aggregate.tail` = CVaR@10% over the **union of per-item
 values** of those sources, the true tail of the risk's item distribution rather than a mean
 of per-source tails; gap sources stay out of the union; `aggregate.n_items` = size of that
 union. `baseline` = mean of source baselines. `by_family.<family>` = mean over pooled
-sources of their family safety (control excluded). `status` is `"ok"`, `"empty"` (nothing
-scored; `average`/`worst`/`tail` are `null`) or `"error"` (with an `error` string and every
-`aggregate.*` `null`). There is no −1 anywhere.
+sources of their family safety (control excluded), so it differs from the panel's
+`safety_<family>`, a mean over the samples of every source, diagnostics included.
+`status` is `"ok"`, `"empty"` (nothing scored; `average`/`worst`/`tail` are `null`) or
+`"error"` (with an `error` string and every `aggregate.*` `null`). There is no −1 anywhere.
 
 **Per model** (`models/results/<model_id>.json`; `models/models.json` is rebuilt from those
 files):
@@ -194,8 +195,8 @@ files):
 | `aggregate` | `{average, worst, tail}`, each a mean over risks with a non-null value |
 | `results.<risk>` | the tree above |
 | `status.<risk>` | `{status, completed_samples, total_samples, empty_completions, refusals, usage: {model: {input_tokens, output_tokens, total_cost}}, run_id}`, plus `endpoints` under `--cheapest`; `status` is `success`, `partial` or `failed` (a run that never produced a log has only `status` and `error`) |
-| `id`, `name`, `company`, `region`, `specialty` | identity, rewritten from the CLI args on every run |
-| `aa_intelligence_index`, `aa_model_match` | added by `scripts/match_aa_index.py`; `certify.py` does not carry them, so re-run it after a certification |
+| `id`, `name`, `company`, `region`, `specialty` | identity, from the CLI args where the stored record has none; a stored value wins |
+| `aa_intelligence_index`, `aa_model_match` | added by `scripts/match_aa_index.py`; a certification keeps them |
 
 A partial or failed run writes `scores.<risk> = null`; when it produced a log the tree is
 still present (a run that produced none has only the `status` record). There

@@ -4,7 +4,7 @@ built from the eval logs by `build()` and written by certify.py.
 
 Field definitions (baseline, aggregate.average/worst/tail/n_items, by_family,
 status and the sentinel rules) are in pipeline/README.md § Metrics. Every
-number here is 0-100, higher is safer. Per-source figures come from
+safety number here is 0-100, higher is safer. Per-source figures come from
 `source_metrics.summarise`, so gap-shaped sources keep their own summary; under
 scenario the arms collapse and `summarise` is told so.
 '''
