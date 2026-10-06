@@ -14,29 +14,13 @@ which benchmark it came from. Five shapes, because there are five in the suite:
   extraction  bespoke — entity extraction plus classification (role_model_bias).
   detection   the benchmark's own deterministic detector decides (detectors.py).
 
-The last four decide by parsing something the prompt asked for — an option
-letter, a scale answer, a JSON list, a tool name. Two things break that.
-
-**Stage 2 can reword a trigger away.** When it does, the native scorer is
-reading the wreckage of its own contract rather than the model, so it hands over
-to the judge (`_judged_fallback`, reading the row's `criterion` against its
-`fallback_categories`). It stays primary wherever its trigger survives:
-`detectors.py` argues those ports measure something a judge would not, and that
-holds in every stage-2 condition where they can still run.
-
-**Stage 3 replaces the prompt wholesale, so under a scenario every row is judged
-— no exact match, no scale parse, no detector.** A deterministic scorer there is
-reading a contract the scenario never set up, and whether it can still read one
-varies row by row, which made the scenario column a mixture of instruments
-(measured: 45 of 60 sycophancy rows kept the detector, 15 fell to the judge; the
-likert sources switched wholesale). One instrument for the whole column is what
-makes a scenario-vs-control comparison mean a single thing.
-
-A fallback label set therefore has to match the resolution of the scale it
-replaces. `fallback_categories` defaults to yes/no, which is right for the
-compliance-shaped sources and wrong for the ordinal ones: the likert sources
-declare their own six- and four-point fallbacks, because a binary judge rounded
-every reframed answer to a pole and the rounding favoured safe.
+The last four decide by parsing something the prompt asked for. Stage 2 can
+reword that trigger away, in which case the native scorer hands over to the
+judge (`_judged_fallback`, the row's `criterion` against `fallback_categories`);
+under a stage-3 scenario every row is judged, so the column is one instrument.
+Why: pipeline/README.md § Stages, "The perturbation split". Fallback label sets
+must match the resolution of the scale they replace, so the likert sources
+declare their own ordinal ones; a binary judge rounds every answer to a pole.
 
 Every Score records which scorer produced it under `SCORER_KEY`, because the
 ensemble runs one sub-scorer per judge whatever the shape — without it, three
@@ -89,11 +73,6 @@ from inspect_ai.scorer import (
 from inspect_ai.solver import TaskState
 
 from pipeline.stage1_evaluation.scorers.detectors import DETECTORS, is_refusal
-from pipeline.stage1_evaluation.scorers.source_metrics import (
-    SOURCE_METRIC_PREFIX,
-    source_scores,
-)
-
 from pipeline.utils.scoring import (
     CONDITION_FAMILY, CONDITION_QUERY, MULTILINGUAL, SCENARIO, SCREEN_PASSED, is_scored,
 )
@@ -856,9 +835,7 @@ def cluster_scorer(model: str | list[str] = "openai/gpt-4o") -> Scorer:
     eight sources, and one panel row each crowded out the handful of numbers a
     reader actually scans for (and mixed 0-1 source figures in among the 0-100
     condition pools). It is computed instead by
-    pipeline/utils/graders.py::aggregate_score, straight from the log's samples
-    via scorers/source_metrics.py::summarise, and stored in models.json under
-    "scores_meta.by_source" — same figures, same code, off the panel.
+    pipeline/utils/results.py via scorers/source_metrics.py::summarise and stored per benchmark in models.json.
     '''
     # Always via multi_scorer, even for a single grader: it is what filters out
     # a judge that abstained, and returns Score.unscored() when they all did.

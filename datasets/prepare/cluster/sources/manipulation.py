@@ -987,8 +987,8 @@ SOURCES = [
         rubric=DARK_PATTERN_RUBRIC,
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["dark_pattern"],
-        # Free-text items, so lexical spread is a real axis: measured
-        # redundancy 0.215 -> 0.114 at this quota.
+        # Free-text items, so spread is a real axis: Jaccard-era
+        # redundancy 0.215 -> 0.114 at this quota (not re-measured on embeddings).
         select="diverse",
         stratify=["dark_pattern"], quota=72,
         transform=darkbench_rows,

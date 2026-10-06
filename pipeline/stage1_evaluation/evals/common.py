@@ -54,8 +54,7 @@ def csv_samples(
 def with_llamaguard(scorers: Scorer | list[Scorer], llamaguard_model: str | None) -> list[Scorer]:
     '''
     The standard scorer assembly: the benchmark's own scorer(s) first (the
-    first scorer's first metric is the reported certification score — see
-    pipeline/utils/graders.py::aggregate_score), plus LlamaGuard when a model
+    first scorer's first metric is what the eval panel reports), plus LlamaGuard when a model
     is configured (every benchmark carries it by default).
     '''
     scorers = scorers if isinstance(scorers, list) else [scorers]

@@ -23,15 +23,10 @@ Usage:
     uv run python generate.py --missing-only           # fill gaps (e.g. failed reframings)
     uv run python generate.py --force                  # regenerate everything from scratch
 
-Local HuggingFace attackers (e.g. on a slurm node) go through inspect's hf/
-and vllm/ providers; -M forwards model args to get_model():
+The attacker is any inspect API provider, or a vLLM server already running
+(vLLM is not in the project env; scripts/generate_hermes_slurm.sh serves it via
+uvx). -M forwards model args to get_model():
 
-    # vllm launches the server itself on the allocated GPUs
-    uv run python generate.py --simulate \
-        --attacker vllm/NousResearch/Hermes-4-405B-FP8 \
-        -M tensor_parallel_size=8
-
-    # or point at a vLLM server already running (e.g. a separate slurm job)
     uv run python generate.py --simulate \
         --attacker vllm/NousResearch/Hermes-4-405B-FP8 \
         --model-base-url http://$VLLM_NODE:8000/v1
@@ -74,7 +69,7 @@ def parse():
     args.add_argument(
         "--attacker", "-a", required=False, default="openrouter/nousresearch/hermes-4-70b",
         help="Rewrite/reframing model for the generative families (default: openrouter/nousresearch/hermes-4-70b). "
-             "Any inspect provider works, including local HuggingFace models via hf/<repo> or vllm/<repo>."
+             "Any inspect API provider, or vllm/<repo> pointed at a running vLLM server via --model-base-url."
     )
     args.add_argument(
         "-M", dest="model_args", required=False, action="append", default=[], metavar="KEY=VALUE",

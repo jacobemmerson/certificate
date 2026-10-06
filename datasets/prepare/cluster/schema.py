@@ -370,8 +370,9 @@ class Source:
     # fixed greeting, the leader-favourability scale, injecagent's ReAct
     # scaffold — every row reads almost identically by construction, so lexical
     # distance measures the wrapper and spreading on it just picks whichever
-    # rows word their boilerplate oddly. Measured: it roughly halves redundancy
-    # on the six free-text sources and moves the templated ones barely at all.
+    # rows word their boilerplate oddly. Measured on the Jaccard build (not yet
+    # re-measured on embeddings): it roughly halves redundancy on the six
+    # free-text sources and moves the templated ones barely at all.
     #
     # Diverse selection compares the same payload near-dedup does, so a source
     # that declares `dedup_on` is spread by that field rather than by the
