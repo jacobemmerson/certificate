@@ -38,6 +38,7 @@ def display_mode() -> str:
 from pipeline.artifacts import REPEAT_FAMILIES, family_ids, load_family, task_name, validate_artifacts
 from pipeline.registry import init_benchmarks, apply_stages, require_families_column, ALL_PERTURB_FAMILIES
 from pipeline.stage3_simulation.classify import DEFAULT_CLASSIFIER
+from pipeline.stage3_simulation.prompts import DEPTH
 from pipeline.utils.scoring import SCENARIO
 from pipeline.utils import results as results_tree
 from pipeline.utils import retry_policy
@@ -138,9 +139,9 @@ def estimate_calls(benchmarks, families, k: int, sim_k: int | None, graders, lim
                 trees = sum(
                     min(sim_k, len(v)) for i, v in load_family(task_name(base), SCENARIO).items() if i in applicable
                 )
-                turns = 3 * round(share * trees)
-                target += turns
-                classifier = turns
+                walked = round(share * trees)
+                target += DEPTH * walked
+                classifier = (DEPTH - 1) * walked  # the last turn is never classified
             # ponytail: judge counts every target call x graders; detection rows are
             # regex-scored, so this is an upper bound — subtract per-source shapes if it matters
             for column, value in zip(totals, (n, target * epochs, target * n_graders * epochs, classifier * epochs)):

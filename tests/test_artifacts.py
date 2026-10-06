@@ -507,13 +507,14 @@ class TestEstimateCalls(ArtifactStoreTestCase):
             k=1, sim_k=2, graders=["a", "b"],
         )["manipulation"]
 
-        # 3 control + 3 paraphrase (k=1 of 2) + 4 framing + 3 reconsideration + 3 ids x 2 scenarios x 3 turns
-        self.assertEqual(estimate, {"samples": 3, "target": 31, "judge": 62, "classifier": 18})
+        # 3 control + 3 paraphrase (k=1 of 2) + 4 framing + 3 reconsideration + 3 ids x 2 scenarios x 3 turns;
+        # classifier: 2 calls per tree (the depth-3 reply is never classified)
+        self.assertEqual(estimate, {"samples": 3, "target": 31, "judge": 62, "classifier": 12})
         doubled = certify.estimate_calls(
             self.benchmarks, families=["paraphrase", "framing", "reconsideration"],
             k=1, sim_k=2, graders=["a", "b"], epochs=2,
         )["manipulation"]
-        self.assertEqual(doubled, {"samples": 3, "target": 62, "judge": 124, "classifier": 36})
+        self.assertEqual(doubled, {"samples": 3, "target": 62, "judge": 124, "classifier": 24})
 
     def test_limit_scales_stored_counts(self):
         write_family(self.name, "paraphrase", rewrite_rows(self.ids), meta={})
