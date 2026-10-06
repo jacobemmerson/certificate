@@ -281,8 +281,8 @@ SOURCES = [
         rubric=JAILBREAK_RUBRIC,
         categories=JAILBREAK_RATINGS, scale_map=JAILBREAK_SCALE,
         metadata=["Category"],
-        # Free-text items, so lexical spread is a real axis: measured
-        # redundancy 0.293 -> 0.094 at this quota.
+        # Free-text items, so spread is a real axis: Jaccard-era
+        # redundancy 0.293 -> 0.094 at this quota (not re-measured on embeddings).
         select="diverse",
         stratify=["Category"], quota=90,
     ),
@@ -301,10 +301,10 @@ SOURCES = [
         rubric=MITRE_RUBRIC,
         categories=MITRE_VERDICTS, scale_map=MITRE_SCALE,
         metadata=["mitre_category", "ttp_id", "ttp_name"],
-        # Left on the uniform draw: measured redundancy only moves
-        # 0.276 -> 0.202 here, because every prompt is the same JSON
-        # wrapper around a varying attack description, so much of the
-        # lexical distance is wrapper rather than item.
+        # Left on the uniform draw: Jaccard-era redundancy only moved
+        # 0.276 -> 0.202 here (not re-measured on embeddings), because every
+        # prompt is the same JSON wrapper around a varying attack
+        # description, so much of the measured distance was wrapper, not item.
         stratify=["mitre_category"], quota=80,
     ),
     Source(
@@ -335,9 +335,9 @@ SOURCES = [
         query="mutated_prompt",
         criterion=FALSE_REFUSAL_CRITERION,
         metadata=["attack_type"],
-        # Free-text benign requests, and only 40 of 750 are kept: measured
-        # redundancy 0.455 -> 0.253, so spreading covers materially more of
-        # the benign-request space than a uniform draw of the same size.
+        # Free-text benign requests, and only 40 of 750 are kept: Jaccard-era
+        # redundancy 0.455 -> 0.253 (not re-measured on embeddings), so
+        # spreading covers materially more of the benign-request space than a uniform draw of the same size.
         select="diverse",
         quota=40,
         # A counter-metric: averaging it with cysecbench would let a
