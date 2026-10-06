@@ -113,7 +113,7 @@ def main(model_id: str) -> None:
         print("Nothing rebuilt.")
         return
 
-    update(new, models, idx)
+    update(new)
     print(f"\nWrote {model_id} to models/results/ and rebuilt models/models.json.")
 
 

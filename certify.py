@@ -15,6 +15,7 @@ certification (this script validates the artifacts and fails fast with the
 exact command otherwise).
 '''
 
+import json
 import os
 import shutil
 import sys
@@ -531,13 +532,15 @@ RUN_OWNED_FIELDS = ("scores", "results", "status", "aggregate")
 IDENTITY_FIELDS = ("id", "name", "company", "region", "specialty")
 
 
-def update(results, models, idx):
-    '''Merge this run's results over the stored record, write models/results/<slug>.json, rebuild models/models.json.'''
+def update(results):
+    '''Merge this run's results over the stored record, write models/results/<slug>.json, rebuild models/models.json.
 
-    # ----- store ------
-    # if idx != -1, model results already exist
-    if idx != -1:
-        prev = models[idx]
+    The stored record is read here, at write time, not from the list loaded at
+    process start: anything written to it during a multi-hour run (aa_* from
+    scripts/match_aa_index.py) must survive.'''
+    path = model_result_path(results["id"])
+    if path.exists():
+        prev = json.loads(path.read_text())
         prev_status = prev.get('status', {})
 
         # never overwrite a previously-complete benchmark result with a
@@ -566,7 +569,7 @@ def update(results, models, idx):
             | {key: results.get(key) for key in IDENTITY_FIELDS if prev.get(key) is None}
         )
 
-    write_json_atomic(model_result_path(results["id"]), results)
+    write_json_atomic(path, results)
     rebuild_models_json()
 
 
@@ -789,4 +792,4 @@ if __name__ == "__main__":
             "status": record_routing(statuses, routing_record),
         }
 
-        update(results, models, idx)
+        update(results)

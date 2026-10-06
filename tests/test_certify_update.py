@@ -68,6 +68,10 @@ class TestUpdate(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
+    def store(self, *records):
+        for record in records:
+            graders.write_json_atomic(graders.model_result_path(record["id"]), record)
+
     def written(self) -> list:
         return json.loads((self.models_dir / "models.json").read_text())
 
@@ -75,7 +79,8 @@ class TestUpdate(unittest.TestCase):
         stored = [entry("m", {"cbrn": 50.0, "cyber": 60.0, "manipulation": 70.0})]
         rerun = entry("m", {"cbrn": 42.0})
 
-        certify.update(rerun, stored, idx=0)
+        self.store(*stored)
+        certify.update(rerun)
 
         results = self.written()[0]["results"]
         self.assertEqual(sorted(results), ["cbrn", "cyber", "manipulation"])
@@ -91,7 +96,8 @@ class TestUpdate(unittest.TestCase):
         stored = [entry("m", {"cbrn": 0.0, "cyber": 100.0})]
         rerun = entry("m", {"cbrn": 50.0})
 
-        certify.update(rerun, stored, idx=0)
+        self.store(*stored)
+        certify.update(rerun)
 
         self.assertEqual(self.written()[0]["aggregate"]["worst"], 75.0)
         self.assertEqual(self.written()[0]["aggregate"]["tail"], 75.0)
@@ -103,7 +109,8 @@ class TestUpdate(unittest.TestCase):
             statuses={"cbrn": {"status": "partial", "completed_samples": 3}},
         )
 
-        certify.update(partial, stored, idx=0)
+        self.store(*stored)
+        certify.update(partial)
 
         written = self.written()[0]
         self.assertEqual(written["results"]["cbrn"]["aggregate"]["worst"], 90.0)
@@ -113,11 +120,11 @@ class TestUpdate(unittest.TestCase):
     def test_a_new_model_is_appended(self):
         stored = [entry("a", {"cbrn": 50.0})]
         graders.write_json_atomic(graders.model_result_path("a"), stored[0])
-        certify.update(entry("b", {"cbrn": 60.0}), stored, idx=-1)
+        certify.update(entry("b", {"cbrn": 60.0}))
         self.assertEqual([m["id"] for m in self.written()], ["a", "b"])
 
     def test_the_per_model_file_is_the_source_of_truth(self):
-        certify.update(entry("m", {"cbrn": 42.0}), [], idx=-1)
+        certify.update(entry("m", {"cbrn": 42.0}))
         per_model = json.loads((self.models_dir / "results" / "m.json").read_text())
         self.assertEqual(per_model["scores"]["cbrn"], 42.0)
         self.assertEqual(self.written(), [per_model])
@@ -128,8 +135,8 @@ class TestUpdate(unittest.TestCase):
 
     def test_two_models_updated_from_stale_lists_both_survive(self):
         # Two array-job processes each loaded `models` before the other wrote.
-        certify.update(entry("a", {"cbrn": 1.0}), [], idx=-1)
-        certify.update(entry("b", {"cbrn": 2.0}), [], idx=-1)
+        certify.update(entry("a", {"cbrn": 1.0}))
+        certify.update(entry("b", {"cbrn": 2.0}))
         self.assertEqual([m["id"] for m in self.written()], ["a", "b"])
         models, idx = graders.load_models_with_check("b")
         self.assertEqual((len(models), idx), (2, 1))
@@ -140,8 +147,8 @@ class TestUpdate(unittest.TestCase):
         self.assertEqual(path.name, "author_bar_free.json")
 
     def test_rebuild_sorts_by_id_and_is_idempotent(self):
-        certify.update(entry("Zed", {"cbrn": 1.0}), [], idx=-1)
-        certify.update(entry("alpha", {"cbrn": 2.0}), [], idx=-1)
+        certify.update(entry("Zed", {"cbrn": 1.0}))
+        certify.update(entry("alpha", {"cbrn": 2.0}))
         first = (self.models_dir / "models.json").read_bytes()
         graders.rebuild_models_json()
         self.assertEqual((self.models_dir / "models.json").read_bytes(), first)
@@ -165,11 +172,15 @@ class TestUpdate(unittest.TestCase):
 
     def test_unowned_fields_and_identity_survive_a_rerun(self):
         stored = [entry("m", {"cbrn": 50.0})]
-        stored[0].update(name="Custom Name", aa_intelligence_index=55.3, aa_model_match="M")
+        stored[0]["name"] = "Custom Name"
+        self.store(*stored)
+        # match_aa_index.py writes aa_* while the run is in flight
+        stored[0].update(aa_intelligence_index=55.3, aa_model_match="M")
+        self.store(*stored)
         rerun = entry("m", {"cbrn": 42.0})
         rerun["name"] = "cli-name"
 
-        certify.update(rerun, stored, idx=0)
+        certify.update(rerun)
 
         written = self.written()[0]
         self.assertEqual(written["scores"]["cbrn"], 42.0)
@@ -178,7 +189,7 @@ class TestUpdate(unittest.TestCase):
 
     def test_a_partial_run_stores_a_null_score_with_its_tree(self):
         partial = entry("m", {"cbrn": None})
-        certify.update(partial, [], idx=-1)
+        certify.update(partial)
         written = self.written()[0]
         self.assertIsNone(written["scores"]["cbrn"])
         self.assertEqual(written["status"]["cbrn"]["status"], "partial")
