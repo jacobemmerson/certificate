@@ -15,3 +15,6 @@ Live-Human-Rights-Bench/
 analysis/
 # prepare.py caches: embeddings and Hermes screen verdicts (rebuildable)
 datasets/cache/
+
+# certify.py rebuild lock
+models/results/.rebuild.lock

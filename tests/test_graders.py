@@ -6,12 +6,14 @@ attributes), so no model calls or real log files are involved.
 Run: uv run python3 -m unittest discover tests
 '''
 
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 
 from inspect_ai.scorer import Score
 
-from pipeline.utils.graders import aggregate_score, condition_metrics, validate_graders
+from pipeline.utils.graders import aggregate_score, condition_metrics, validate_graders, write_json_atomic
 
 
 def fake_log(task_name: str, samples: list, results: SimpleNamespace | None = None) -> SimpleNamespace:
@@ -303,6 +305,14 @@ class TestAggregateScore(unittest.TestCase):
         reported, scores = aggregate_score([log])
         self.assertEqual(reported, 50.0)
         self.assertEqual(scores["by_cluster"]["legacy_task"], 50.0)
+
+
+class TestWriteJsonAtomic(unittest.TestCase):
+    def test_file_is_world_readable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "x.json"
+            write_json_atomic(path, {})
+            self.assertEqual(path.stat().st_mode & 0o777, 0o644)
 
 
 if __name__ == "__main__":

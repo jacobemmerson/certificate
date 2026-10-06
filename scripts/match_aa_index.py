@@ -21,6 +21,7 @@ import difflib
 import json
 import os
 import re
+import sys
 from pathlib import Path
 
 import requests
@@ -29,7 +30,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 ROOT = Path(__file__).resolve().parents[1]
-MODELS_PATH = ROOT / "models" / "models.json"
+# Run from scripts/, so the repo root is not on the path.
+sys.path.insert(0, str(ROOT))
+
+from pipeline.utils.graders import load_model_results, model_result_path, rebuild_models_json, write_json_atomic
 
 AA_URL = "https://artificialanalysis.ai/api/v2/language/models/free"
 
@@ -173,7 +177,7 @@ def best_matches(model: dict, aa_models: list[dict], top_n: int = 3) -> list[dic
 
 def main() -> None:
     aa_models = fetch_aa_models()
-    models = json.loads(MODELS_PATH.read_text(encoding="utf-8"))
+    models = load_model_results()
 
     report = {}
     print(f"{'id':<22} {'policy':<8} {'index':>7}  matched AA variant")
@@ -202,8 +206,9 @@ def main() -> None:
         idx_str = f"{idx:g}" if idx is not None else "None"
         print(f"{model['id']:<22} {policy:<8} {idx_str:>7}  {resolved['name']}")
 
-    MODELS_PATH.write_text(json.dumps(models, indent=4) + "\n", encoding="utf-8")
-    print(f"\nWrote aa_intelligence_index into {MODELS_PATH}")
+    for model in models:
+        write_json_atomic(model_result_path(model["id"]), model)
+    print(f"\nWrote aa_intelligence_index into {rebuild_models_json()}")
 
     out_path = ROOT / "scripts" / "aa_index_matches.json"
     out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")

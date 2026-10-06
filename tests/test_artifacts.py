@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import certify
 import pipeline.artifacts as artifacts
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
@@ -472,6 +473,50 @@ class TestPromptVersionsAndCli(unittest.TestCase):
             "paraphrase", "register", "past_tense", "multilingual", "framing", "persona", "reconsideration",
         })
         self.assertEqual(PREGENERATED_FAMILIES, ALL_PERTURB_FAMILIES - {"reconsideration"})
+
+
+class TestEstimateCalls(ArtifactStoreTestCase):
+    def test_counts_stored_rows_per_family(self):
+        for sample in self.task.dataset:
+            original = sample.metadata["families"]
+            self.addCleanup(sample.metadata.__setitem__, "families", original)
+            sample.metadata["families"] = [*original, "reconsideration", "scenario"]
+        write_family(self.name, "paraphrase", rewrite_rows(self.ids, k=2), meta={})
+        write_family(self.name, "framing",
+                     [{"id": i, "condition": f"framing_{v}", "query": "q"} for i in self.ids[:2] for v in range(2)],
+                     meta={})
+        write_family(self.name, "scenario", rewrite_rows(self.ids, "scenario", k=2), meta={})
+
+        estimate = certify.estimate_calls(
+            self.benchmarks, families=["paraphrase", "framing", "reconsideration"],
+            k=1, sim_k=2, graders=["a", "b"],
+        )["manipulation"]
+
+        # 3 control + 3 paraphrase (k=1 of 2) + 4 framing + 3 reconsideration + 3 ids x 2 scenarios x 3 turns
+        self.assertEqual(estimate, {"samples": 3, "target": 31, "judge": 62, "classifier": 18})
+        doubled = certify.estimate_calls(
+            self.benchmarks, families=["paraphrase", "framing", "reconsideration"],
+            k=1, sim_k=2, graders=["a", "b"], epochs=2,
+        )["manipulation"]
+        self.assertEqual(doubled, {"samples": 3, "target": 62, "judge": 124, "classifier": 36})
+
+    def test_limit_scales_stored_counts(self):
+        write_family(self.name, "paraphrase", rewrite_rows(self.ids), meta={})
+        estimate = certify.estimate_calls(self.benchmarks, ["paraphrase"], k=1, sim_k=None, graders="a", limit=1)
+        self.assertEqual(estimate["manipulation"], {"samples": 1, "target": 2, "judge": 2, "classifier": 0})
+
+    def test_inapplicable_framing_is_skipped_without_an_artifact(self):
+        generic = Task(
+            dataset=[Sample(input="x", id="a", metadata={"families": ["paraphrase"]})],
+            name="all_generic",
+        )
+        estimate = certify.estimate_calls({"generic": {"tasks": [generic]}}, ["framing"], k=1, sim_k=None, graders="a")
+        self.assertEqual(estimate["generic"], {"samples": 1, "target": 1, "judge": 1, "classifier": 0})
+
+    def test_multi_task_entry_accumulates(self):
+        benchmarks = {"manipulation": {"tasks": [self.task, self.task]}}
+        estimate = certify.estimate_calls(benchmarks, [], k=1, sim_k=None, graders="a")
+        self.assertEqual(estimate["manipulation"], {"samples": 6, "target": 6, "judge": 6, "classifier": 0})
 
 
 if __name__ == "__main__":
