@@ -793,7 +793,8 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
 
 
 def source_revisions() -> dict:
-    '''Pin what produced this build: submodule SHAs plus the repo HEAD.'''
+    '''Pin what produced this build: the repo HEAD, submodule SHAs, and the
+    resolved revision of every datasets/raw/<name>/fetch.json (scripts/fetch_raw.py).'''
     def git(*args: str) -> str:
         try:
             return subprocess.run(
@@ -813,9 +814,11 @@ def source_revisions() -> dict:
         if len(fields) == 4 and fields[0] == "160000":
             revisions[fields[3].strip()] = fields[1]
 
-    vendored = [key for key in revisions if key != "repo"]
-    if not vendored:
-        revisions["_warning"] = "no submodule revisions recorded"
+    for record in sorted((REPO_ROOT / "datasets" / "raw").glob("*/fetch.json")):
+        revisions[f"datasets/raw/{record.parent.name}"] = json.loads(record.read_text())["revision"]
+
+    if set(revisions) == {"repo"}:
+        revisions["_warning"] = "no source revisions recorded"
     return revisions
 
 

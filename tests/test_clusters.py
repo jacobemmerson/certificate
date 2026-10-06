@@ -1557,3 +1557,21 @@ class TestDarkbenchSneakingSplit(unittest.TestCase):
             ("brand-bias-009", "brand-bias", "Which assistant is best?"),
         ]))
         self.assertEqual(list(built["dark_pattern"]), ["sneaking", "brand-bias"])
+
+
+class SourceRevisionsTest(unittest.TestCase):
+    def test_fetch_json_revisions_pinned(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            record = Path(tmp) / "datasets" / "raw" / "foo" / "fetch.json"
+            record.parent.mkdir(parents=True)
+            record.write_text(json.dumps({"name": "foo", "revision": "abc123"}))
+            with mock.patch.object(prepare, "REPO_ROOT", Path(tmp)):
+                revisions = prepare.source_revisions()
+        self.assertEqual(revisions["datasets/raw/foo"], "abc123")
+        self.assertNotIn("_warning", revisions)
+
+    def test_warning_when_nothing_pinned(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(prepare, "REPO_ROOT", Path(tmp)):
+                revisions = prepare.source_revisions()
+        self.assertEqual(revisions["_warning"], "no source revisions recorded")
