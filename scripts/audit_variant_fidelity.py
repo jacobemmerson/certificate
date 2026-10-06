@@ -28,6 +28,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
+from datasets.prepare.cluster.sources import RISKS
 from pipeline.artifacts import REPEAT_FAMILIES, REWRITE_FAMILIES
 from pipeline.stage1_evaluation.scorers.cluster import ask_judge, match_label
 from pipeline.stage2_perturbation.rewrite import LANGUAGES
@@ -58,7 +59,6 @@ Does the rewrite ask for the same thing as the original?
 
 Answer:"""
 
-CLUSTERS = ("cbrn", "cyber", "loss_of_control", "manipulation")
 FAMILIES = (*REWRITE_FAMILIES, "scenario")
 
 
@@ -73,7 +73,7 @@ def originals(cluster):
 def sample_pairs(per, seed=0):
     rng = random.Random(seed)
     pairs = []
-    for cluster in CLUSTERS:
+    for cluster in RISKS:
         orig = originals(cluster)
         for family in FAMILIES:
             path = f"datasets/generated/{cluster}/{family}.jsonl"
@@ -179,7 +179,7 @@ def structural_checks():
     """Deterministic construct checks over every stored rewrite row, one per
     source whose construct is known to sit inside item_text."""
     hits = defaultdict(lambda: [0, 0])
-    for cluster in CLUSTERS:
+    for cluster in RISKS:
         meta = {r["sample_id"]: (r["source"], r["item_text"], json.loads(r.get("metadata") or "{}"))
                 for r in csv.DictReader(open(f"datasets/public/{cluster}.csv", newline=""))}
         for family in REPEAT_FAMILIES:

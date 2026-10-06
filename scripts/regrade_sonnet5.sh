@@ -48,7 +48,7 @@ PROVIDER="Anthropic"
 REGION="US"
 GPT_JUDGE="openrouter/openai/gpt-5.6-luna"
 CLAUDE_JUDGE="openrouter/anthropic/claude-sonnet-4.5"
-RISKS=(cbrn cyber loss_of_control manipulation)
+RISKS=($(uv run python3 -c 'from datasets.prepare.cluster.sources import RISKS; print(*RISKS)'))
 MAX_CONN="${MAX_CONN:-128}"
 
 # Force Inspect's non-interactive display, so an idle SSH pty or a terminal

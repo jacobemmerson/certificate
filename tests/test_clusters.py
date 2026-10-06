@@ -1354,6 +1354,17 @@ class TestRegistry(unittest.TestCase):
                 self.assertIn(source.risk, RISKS)
                 self.assertIn(source.question_type, QUESTION_TYPES)
 
+    def test_risk_matches_defining_module(self):
+        '''RISKS is derived from module names, so a typo'd `risk=` would drop silently.'''
+        import importlib, pkgutil
+        from datasets.prepare.cluster import sources
+        for info in pkgutil.iter_modules(sources.__path__):
+            module = importlib.import_module(f"{sources.__name__}.{info.name}")
+            for source in getattr(module, "SOURCES", []):
+                with self.subTest(source=source.name):
+                    self.assertEqual(source.risk, info.name)
+        self.assertEqual(RISKS, sorted({source.risk for source in SOURCES}))
+
     def test_stratify_fields_are_captured_in_metadata(self):
         '''Stratification silently degrades to one bucket if the field is absent.'''
         for source in SOURCES:

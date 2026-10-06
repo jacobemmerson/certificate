@@ -23,7 +23,7 @@ def init_benchmarks(grader, llamaguard_model: str | None = None):
     A cluster's dataset is a filtered union of several benchmarks under one
     schema (datasets/public/<risk>.csv), so each entry holds a single task
     rather than a list of per-benchmark ones. Risks whose dataset has not been
-    built are skipped — loss_of_control has no sources yet.
+    built are skipped.
 
     `llamaguard_model` is accepted but unused: cluster tasks do not attach
     LlamaGuard. In a mixed cluster it would score likert and mcq rows where it

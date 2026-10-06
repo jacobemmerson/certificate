@@ -35,7 +35,7 @@ from pipeline.stage1_evaluation.screen import attribution_screen
 from pipeline.stage1_evaluation.scorers.cluster import cluster_scorer
 from inspect_ai.solver import chain, generate
 
-RISKS = ["cbrn", "cyber", "loss_of_control", "manipulation"]
+from datasets.prepare.cluster.sources import RISKS
 
 # Columns the prepare step JSON-encodes on the way out.
 _JSON_COLUMNS = (

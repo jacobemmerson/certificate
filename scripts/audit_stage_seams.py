@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from inspect_ai.log import read_eval_log
 
+from datasets.prepare.cluster.sources import RISKS
 from pipeline.artifacts import REWRITE_FAMILIES, artifact_path, load_family
 from pipeline.utils.results import build
 
@@ -63,7 +64,7 @@ def audit_log(path):
 
 def fallback_truncation(k=1):
     out = {}
-    for cluster in ("cbrn", "cyber", "loss_of_control", "manipulation"):
+    for cluster in RISKS:
         for fam in REWRITE_FAMILIES:
             if not artifact_path(cluster, fam).exists():
                 continue
