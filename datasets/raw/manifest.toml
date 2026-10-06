@@ -1,7 +1,8 @@
 # Download manifest: one [[benchmark]] per benchmark in annotations.csv, with where to fetch it.
 # status: registered|vendored (in datasets/<path>), prompt|partial (fetchable), agentic|human_study|unreleased (no prompt set).
-# ids join annotations.csv (column "id").
-# Fetch with scripts/fetch_raw.py (use --dry-run to preview).
+# ids join annotations.csv (column "id"); id "" marks a registered source not in annotations.csv.
+# registered/vendored rows are provenance records for data that lives at `path` today.
+# scripts/fetch_raw.py fetches into datasets/raw/<name>/ (use --dry-run to preview).
 # See datasets/BENCHMARKS.md Part 4.
 #
 # Draft manifest: one [[benchmark]] per annotations.csv row, same order. Generated 2026-10-06.
@@ -144,7 +145,7 @@ host = "none"
 revision = ""
 files = []
 status = "unreleased"
-note = "Shared set (322 MCQ, 101 text-only) given on request to orgs with AI-safety/biosecurity track record: email seth@securebio.org. Once obtained, text-only subset would be 'partial'."
+note = "Shared set (322 MCQ, 101 text-only) given on request to orgs with AI-safety/biosecurity track record: request via SecureBio (contact in the paper). Once obtained, text-only subset would be 'partial'."
 
 [[benchmark]]
 name = "wmdp"
@@ -542,8 +543,8 @@ host = "github"
 repo = "yf-he/InstrumentalEval"
 revision = ""
 files = ["benchmark/*.csv"]
-status = "partial"
-note = "No licence file. All 6 CSVs are single-turn task prompts judged by an LLM (inspect_evals instrumentaleval); the whole benchmark looks prompt-shaped, overturning the 'agentic' ruling."
+status = "prompt"
+note = "No licence file. All 6 CSVs are single-turn task prompts judged by an LLM (inspect_evals instrumentaleval)."
 
 [[benchmark]]
 name = "machiavelli"
@@ -745,3 +746,14 @@ revision = ""
 files = ["safety/*.json", "ethics/*.json", "fairness/*.json", "privacy/*.json", "truthfulness/sycophancy.json"]
 status = "partial"
 note = "Apache-2.0, HF gated (auto-approve). Safety/ethics/fairness/privacy/sycophancy files are single prompts; robustness and hallucination are capability tasks."
+
+[[benchmark]]
+name = "cysecbench"
+id = ""
+host = "github"
+repo = "cysecbench/dataset"
+revision = "ea3868f63961833e33d3e81933dd1024505dabe0"
+files = ["Dataset/Full dataset/cysecbench.csv"]
+status = "registered"
+path = "raw/cyber/CySecBench"
+note = "MIT. Not in annotations.csv; listed because it is a registered source."

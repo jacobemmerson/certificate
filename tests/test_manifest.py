@@ -20,10 +20,12 @@ class ManifestTest(unittest.TestCase):
     def setUpClass(cls):
         cls.rows = load_manifest(MANIFEST_PATH)
 
+    @unittest.skipUnless((REPO_ROOT / "annotations.csv").exists(),
+                         "annotations.csv (annotation export) not in checkout")
     def test_ids_match_annotations(self):
         with open(REPO_ROOT / "annotations.csv", newline="", encoding="utf-8") as handle:
             annotation_ids = {row["id"] for row in csv.DictReader(handle)}
-        ids = [row["id"] for row in self.rows]
+        ids = [row["id"] for row in self.rows if row["id"]]
         self.assertEqual(len(ids), len(set(ids)), "duplicate id")
         self.assertEqual(set(ids), annotation_ids)
 
@@ -38,6 +40,8 @@ class ManifestTest(unittest.TestCase):
             name = row["name"]
             with self.subTest(name=name):
                 self.assertIn(row["status"], STATUSES)
+                if not row["id"]:
+                    self.assertIn(row["status"], ON_DISK_STATUSES)
                 self.assertIn(row["host"], HOSTS)
                 if row["host"] != "none":
                     self.assertTrue(row.get("repo"), "host set but repo empty")
@@ -47,6 +51,7 @@ class ManifestTest(unittest.TestCase):
                 self.assertEqual(row["status"] in ON_DISK_STATUSES, has_path)
                 if has_path:
                     self.assertTrue((REPO_ROOT / "datasets" / row["path"]).is_dir())
+                self.assertIsInstance(row["files"], list)
                 for entry in row["files"]:
                     self.assertIsInstance(entry, str)
                     self.assertTrue(entry)

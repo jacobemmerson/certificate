@@ -128,6 +128,14 @@ class FetchRawTest(unittest.TestCase):
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
             fetch_raw.main(["--manifest", str(self.manifest), "--dry-run"])
 
+    def test_empty_files_skipped(self):
+        self.manifest.write_text(MANIFEST.replace('files = ["*.parquet"]', 'files = []'))
+        out = io.StringIO()
+        with mock.patch.object(fetch_raw, "RAW_DIR", self.tmp / "raw"), contextlib.redirect_stdout(out):
+            fetch_raw.main(["--manifest", str(self.manifest), "--dry-run"])
+        self.assertIn("hub: no files, skipped", out.getvalue())
+        self.assertNotIn("hub ->", out.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

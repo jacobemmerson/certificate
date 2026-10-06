@@ -117,6 +117,9 @@ def main(argv: list[str] | None = None):
         if entry["host"] == "none":
             print(f"{entry['name']}: no host ({entry['status']}), skipped")
             continue
+        if not entry["files"]:
+            print(f"{entry['name']}: no files, skipped")
+            continue
         dest = RAW_DIR / entry["name"]
         if args.dry_run:
             print(f"{entry['name']} -> {dest}: {plan(entry, dest)}")
