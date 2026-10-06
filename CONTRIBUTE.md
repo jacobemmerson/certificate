@@ -209,7 +209,7 @@ uv run python3 -m datasets.prepare.cluster.prepare --risk cyber
 uv run python3 -m unittest discover tests
 
 # cheap smoke run — no model calls at all
-PYTHONPATH=. uv run inspect eval pipeline/stage1_evaluation/evals/clusters.py@cyber \
+PYTHONPATH=. uv run inspect eval pipeline/stage1_evaluation/evals/clusters.py@cluster -T risk=cyber \
     --model mockllm/model -T grader=mockllm/model --limit 5
 
 # real run, 2 samples, results NOT written to models.json

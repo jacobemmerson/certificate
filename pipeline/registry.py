@@ -1,4 +1,4 @@
-from pipeline.stage1_evaluation.evals.clusters import CLUSTER_TASKS, RISKS, available
+from pipeline.stage1_evaluation.evals.clusters import RISKS, available, cluster
 
 from inspect_ai import Task
 
@@ -31,7 +31,7 @@ def init_benchmarks(grader, llamaguard_model: str | None = None):
     than its generic taxonomy. See datasets/BENCHMARKS.md.
     '''
     return {
-        risk: {"tasks": [CLUSTER_TASKS[risk](grader=grader)], "name": risk}
+        risk: {"tasks": [cluster(risk, grader=grader)], "name": risk}
         for risk in RISKS
         if available(risk)
     }
