@@ -109,12 +109,12 @@ def apply_stages(
     Keeps the same benchmark keys/'name' as `benchmarks`, so the result runs
     through the exact same log path as a plain run — a combined --perturb
     --simulate certification is one task run and ONE log, with the stages
-    reported per attack family (safety_<family>) plus a single
-    safety_under_attack roll-up, so the stages compare at equal depth.
+    reported per attack family (safety_<family>) plus the safety_worst and
+    safety_average roll-ups, so the stages compare at equal depth.
 
     All pregenerated families replay fixed variants from datasets/generated/
     (produced once by generate.py — no rewrite/reframing model runs at eval
-    time), using up to `k` stored variants per item for the rewrite families
+    time), using up to `k` stored variants per item for the repeat families
     and up to `sim_k` stored scenarios. Building raises FileNotFoundError if
     the artifacts were never generated; certify.py validates them first
     (pipeline/artifacts.py::validate_artifacts) so the error carries the

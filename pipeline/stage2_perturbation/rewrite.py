@@ -55,7 +55,7 @@ FAMILY_SYSTEM_PROMPTS = {
 }
 
 # The attacker-rewrite roster (spec C1/C3). Must equal
-# datasets/prepare/cluster/schema.py::REWRITE_FAMILIES; tests pin both.
+# datasets/prepare/cluster/schema.py::REWRITE_FAMILIES; tests/test_clusters.py pins them equal.
 REWRITE_FAMILIES = (*FAMILY_SYSTEM_PROMPTS, "multilingual")
 # Families whose `variant` index counts repeats of one prompt (--perturb-k).
 # multilingual's index is the language, so k never truncates it.

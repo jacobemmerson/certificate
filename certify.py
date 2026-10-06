@@ -610,7 +610,7 @@ if __name__ == "__main__":
     # onto the same Task (one control generation, one log), and the wrapped
     # scorers report them under separate metric pools — safety_<family>/stability_under_attack
     # for the perturbation families, safety_scenario for the scenario family, plus a
-    # safety_worst roll-up over every attack pooled. The certification score is the
+    # safety_worst roll-up over every condition, control included. The certification score is the
     # tail of the per-item worst case (see pipeline/utils/results.py).
     run_perturb = bool(args.perturb) and not args.no_perturb
 

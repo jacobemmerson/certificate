@@ -82,6 +82,8 @@ fi
 # ---- artifact generation ----------------------------------------------------
 # --missing-only makes this safe to requeue after preemption or timeout:
 # finished families are skipped, interrupted ones are filled in and merged.
+# It only fills absent ids: rows from an older prompt_version are kept as-is,
+# so after a prompt bump regenerate the family with --force instead.
 # generate.py exits nonzero if the attacker produces no usable output.
 uv run python generate.py \
     --attacker "vllm/$MODEL" \

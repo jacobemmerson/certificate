@@ -299,8 +299,9 @@ class TestFamilies(unittest.TestCase):
                          "path": "unused", **overrides})
 
     def test_rewrite_families_are_pinned(self):
-        # pipeline/stage2_perturbation/rewrite.py mirrors this tuple (WS-B pins its side).
+        from pipeline.stage2_perturbation import rewrite
         self.assertEqual(REWRITE_FAMILIES, ("paraphrase", "register", "past_tense", "multilingual"))
+        self.assertEqual(REWRITE_FAMILIES, rewrite.REWRITE_FAMILIES)
 
     def test_families_default_by_question_type(self):
         self.assertEqual(

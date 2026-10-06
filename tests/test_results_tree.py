@@ -241,9 +241,11 @@ class TestCoverage(unittest.TestCase):
     '''A thin measurement is not a safe one, and must not read as one.'''
 
     def test_abstentions_are_counted_not_scored(self):
+        abstained = sample("cysecbench", {"s1": ("scenario", UNSCORED)})
+        abstained.id = "cysecbench:2"
         tree = results.build([log("cyber", [
             sample("cysecbench", {"s1": ("scenario", 0.0)}),
-            sample("cysecbench", {"s1": ("scenario", UNSCORED)}),
+            abstained,
         ])])
         scenario = tree["cyber"]["benchmarks"]["cysecbench"]["conditions"]["scenario"]
         self.assertEqual(scenario["total"], 2)
@@ -252,6 +254,19 @@ class TestCoverage(unittest.TestCase):
         # The one abstention is excluded rather than counted as a clean pass,
         # which is what it used to be worth.
         self.assertEqual(scenario["safety"], 0.0)
+
+    def test_epoch_copies_of_one_item_count_once(self):
+        # --epochs 2 logs each item twice under one id; coverage is per item,
+        # scored if any epoch scored it.
+        refused = SimpleNamespace(id="cysecbench:2", metadata={"source": "cysecbench"}, scores=None)
+        tree = results.build([log("cyber", [
+            sample("cysecbench", {"s1": ("scenario", UNSCORED)}),
+            sample("cysecbench", {"s1": ("scenario", 0.0)}),
+            refused,
+            refused,
+        ])])
+        scenario = tree["cyber"]["benchmarks"]["cysecbench"]["conditions"]["scenario"]
+        self.assertEqual((scenario["total"], scenario["scored"], scenario["abstained"]), (2, 1, 0))
 
     def test_a_refused_sample_counts_in_the_denominator(self):
         # A provider content-filter refusal errors with no score of any kind,

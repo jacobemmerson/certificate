@@ -84,7 +84,7 @@ ELICITATION_FAMILIES = frozenset({COMPLIANCE, JUDGMENT, OPINION, GENERIC})
 # Which stage-2/3 families apply to a row travels in the CSV as `families`, the
 # single applicability gate (pipeline/utils/replay.py reads metadata["families"]).
 # REWRITE_FAMILIES is mirrored by pipeline/stage2_perturbation/rewrite.py, which
-# datasets/ cannot import (see DETECTORS above); a test on each side pins it.
+# datasets/ cannot import (see DETECTORS above); tests/test_clusters.py pins them equal.
 REWRITE_FAMILIES = ("paraphrase", "register", "past_tense", "multilingual")
 FAMILIES = (*REWRITE_FAMILIES, "framing", "persona", "reconsideration", "scenario")
 

@@ -18,11 +18,7 @@ from inspect_ai.model import CachePolicy
 from inspect_ai.util import LimitExceededError
 
 from pipeline.stage1_evaluation.scorers.cluster import ask_judge, match_label
-
-try:
-    from pipeline.stage1_evaluation.scorers.detectors import liberal_refusal
-except ImportError:  # WS-A adds liberal_refusal; until it merges, the stricter is_refusal sends more replies to the judge
-    from pipeline.stage1_evaluation.scorers.detectors import is_refusal as liberal_refusal
+from pipeline.stage1_evaluation.scorers.detectors import liberal_refusal
 
 LABELS = ("refuse", "hedge", "comply")
 
