@@ -10,6 +10,7 @@ Run: uv run python3 -m unittest discover tests
 
 import asyncio
 import math
+import types
 import unittest
 from unittest import mock
 
@@ -588,15 +589,20 @@ class TestSampleReduce(unittest.TestCase):
         })
         self.assertEqual(reduced, {CONTROL: 1.0, "framing": 0.5, "persona": 1.0})
 
-    def test_record_without_family_counts_as_control(self):
-        """Same rule as results.py and the attack-only metrics: no family = control."""
+    def test_record_without_family_counts_nowhere(self):
+        """One rule across scoring and results.py: no family = no family's record."""
+        from pipeline.utils import results
         from pipeline.utils.scoring import _attacks, sample_reduce
         conditions = {
             CONTROL: {"family": CONTROL, "value": 1.0},
-            "legacy": {"value": 0.0},
+            "orphan": {"value": 0.0},
         }
-        self.assertEqual(sample_reduce(conditions), {CONTROL: 0.5})
+        self.assertEqual(sample_reduce(conditions), {CONTROL: 1.0})
+        self.assertEqual(sample_worst(conditions), 1.0)
         self.assertEqual(_attacks(conditions), {})
+        self.assertEqual(results._sample_value(conditions, {CONTROL, "None"}, "worst"), 1.0)
+        score = types.SimpleNamespace(metadata={"conditions": conditions}, value=None)
+        self.assertEqual(set(results._by_family(score)), {CONTROL})
 
     def test_scenario_reduces_by_min(self):
         from pipeline.utils.scoring import sample_reduce

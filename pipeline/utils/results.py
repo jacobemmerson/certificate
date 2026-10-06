@@ -73,7 +73,8 @@ def _conditions(score: Score) -> dict[str, dict]:
 def _by_family(score: Score) -> dict[str, list[dict]]:
     grouped: dict[str, list[dict]] = defaultdict(list)
     for record in _conditions(score).values():
-        grouped[str(record.get("family") or CONTROL)].append(record)
+        if family := record.get("family"):  # unattributed records count nowhere (scoring.sample_reduce)
+            grouped[str(family)].append(record)
     return grouped
 
 
@@ -85,7 +86,7 @@ def _sample_value(conditions: dict[str, dict], families: set[str], how: str) -> 
     '''
     subset = {
         label: c for label, c in conditions.items()
-        if str(c.get("family") or CONTROL) in families
+        if c.get("family") and str(c["family"]) in families
     }
     return sample_worst(subset) if how == "worst" else sample_average(subset)
 
