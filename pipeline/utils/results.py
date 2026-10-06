@@ -1,34 +1,12 @@
 '''
-The nested results tree: model -> risk -> benchmark -> condition -> scorer.
+The nested results tree: model -> risk -> benchmark -> condition -> scorer,
+built from the eval logs by `build()` and written by certify.py.
 
-One shape carrying what used to live in three parallel sections of models.json
-(`scores_meta`, `perturbations`, `simulations`), with a real aggregate at every
-layer.
-
-Two things decide what the numbers mean (definitions once, in
-pipeline/README.md § Metrics):
-
-**Every condition pools, control included.** Each item's `worst` is the min over
-every scored condition — the published wording is one of the things the model
-was asked — and `average` weighs each family once via `scoring.sample_reduce`.
-`baseline` (the control alone) is reported beside them so divergence stays
-readable. Per source, `average` and `worst` are means over items; per risk, they
-are unweighted means over pooled sources. `tail` is CVaR@10% of the per-item
-worsts (at risk level, over the union of pooled items), the headline.
-
-**Stability rides alongside, it is not the score.** Each condition also records
-how little it moved the judgment from the baseline. Only safety aggregates.
-
-Every number in this tree is 0-100 and **higher is better**, the same direction
-the eval panel now reports in (pipeline/utils/scoring.py). There is no metric
-here that runs the other way.
-
-Per-source figures come from `source_metrics.summarise`, so the sources whose
-safety *is* a gap between two arms — leader favourability, role-model lean, the
-human-rights persona gap — keep their own summary rather than being averaged
-flat. Those summaries need the arms to survive, which they do not under stage 3:
-it drops each row's steering on purpose, so the persona arms collapse. Under
-scenario those sources fall back to a plain mean, and `summarise` is told so.
+Field definitions (baseline, aggregate.average/worst/tail/n_items, by_family,
+status and the sentinel rules) are in pipeline/README.md § Metrics. Every
+number here is 0-100, higher is safer. Per-source figures come from
+`source_metrics.summarise`, so gap-shaped sources keep their own summary; under
+scenario the arms collapse and `summarise` is told so.
 '''
 
 from __future__ import annotations
