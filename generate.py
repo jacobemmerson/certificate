@@ -52,6 +52,7 @@ from pipeline.artifacts import (
     REPEAT_FAMILIES,
     artifact_path,
     family_ids,
+    family_meta,
     load_family,
     task_name,
     write_family,
@@ -161,15 +162,17 @@ def git_commit() -> str | None:
         return None
 
 
-def existing_keys(name: str, family: str) -> set[tuple[str, int]]:
-    """(id, variant) pairs already on disk, or empty if no file yet."""
-    return {(str(row["id"]), row.get("variant", 0)) for row in existing_rows(name, family)}
-
-
 def existing_rows(name: str, family: str) -> list[dict]:
     """Rows to keep on --missing-only. Fallback rows are left out so the run
-    retries exactly those variants instead of treating them as done."""
+    retries exactly those variants instead of treating them as done. Rows from
+    another prompt version are all dropped: keeping them would restamp stale
+    rows with the current version, so after a bump this equals --force."""
     if not artifact_path(name, family).exists():
+        return []
+    stored = (family_meta(name, family) or {}).get("prompt_version")
+    if stored != PROMPT_VERSIONS[family]:
+        print(f"[WARNING] {name}/{family}: stored prompt version {stored}, current "
+              f"{PROMPT_VERSIONS[family]}; regenerating every row.")
         return []
     return [
         row for rows in load_family(name, family).values() for row in rows
@@ -222,8 +225,8 @@ if __name__ == "__main__":
                     summary.append((name, family, "skipped (exists — use --missing-only or --force)"))
                     continue
 
-                existing = set() if args.force else existing_keys(name, family)
                 kept = [] if args.force else existing_rows(name, family)
+                existing = {(str(row["id"]), row.get("variant", 0)) for row in kept}
                 incomplete: list[str] = []
                 reasons: dict[str, str] = {}
 

@@ -114,8 +114,12 @@ class TestMissingOnly(ArtifactStoreTestCase):
         rows = rewrite_rows(self.ids[:2])
         rows[1]["fallback"] = True
         write_family(self.name, "paraphrase", rows, meta={"prompt_version": "3"})
-        self.assertEqual(generate.existing_keys(self.name, "paraphrase"), {(self.ids[0], 1)})
         self.assertEqual(generate.existing_rows(self.name, "paraphrase"), [rows[0]])
+
+    def test_rows_from_another_prompt_version_are_regenerated(self):
+        import generate
+        write_family(self.name, "paraphrase", rewrite_rows(self.ids[:2]), meta={"prompt_version": "1"})
+        self.assertEqual(generate.existing_rows(self.name, "paraphrase"), [])
 
 
 class TestRegistryTruncation(ArtifactStoreTestCase):
