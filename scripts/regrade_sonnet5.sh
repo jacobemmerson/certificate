@@ -52,7 +52,7 @@ RISKS=(cbrn cyber loss_of_control manipulation)
 MAX_CONN="${MAX_CONN:-128}"
 
 # Force Inspect's non-interactive display, so an idle SSH pty or a terminal
-# resize cannot cancel an unattended run (see scripts/small_batch.sh).
+# resize cannot cancel an unattended run.
 export INSPECT_DISPLAY="${INSPECT_DISPLAY:-log}"
 
 # The whole point is to add the gpt judge, so refuse to run unless GRADERS.md
