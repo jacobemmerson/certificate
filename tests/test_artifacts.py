@@ -534,5 +534,18 @@ class TestEstimateCalls(ArtifactStoreTestCase):
         self.assertEqual(estimate["manipulation"], {"samples": 6, "target": 6, "judge": 6, "classifier": 0})
 
 
+
+class TestRequireFamiliesColumn(unittest.TestCase):
+    def test_pre_refactor_csv_refuses_to_start(self):
+        from pipeline.registry import require_families_column
+        task = fixture_task()
+        require_families_column({"manipulation": {"tasks": [task]}})  # current CSV passes
+        task.dataset[1].metadata["families"] = None
+        with self.assertRaises(SystemExit) as ctx:
+            require_families_column({"manipulation": {"tasks": [task]}})
+        self.assertIn("datasets/prepare/cluster/prepare.py", str(ctx.exception.code))
+        self.assertIn("manipulation", str(ctx.exception.code))
+
+
 if __name__ == "__main__":
     unittest.main()

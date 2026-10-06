@@ -37,6 +37,25 @@ def init_benchmarks(grader, llamaguard_model: str | None = None):
     }
 
 
+def require_families_column(benchmarks: dict) -> None:
+    '''
+    Refuse to run on a CSV built before the `families` column. The library
+    reads a missing column as "every family applies" so old logs still
+    reaggregate, but generating or certifying on it would give detection rows
+    rewrites and drop the framing opt-outs. CLI entry points only.
+    '''
+    stale = sorted({
+        key for key, entry in benchmarks.items() for task in entry["tasks"]
+        if any((sample.metadata or {}).get("families") is None for sample in task.dataset)
+    })
+    if stale:
+        raise SystemExit(
+            f"datasets/public/{{{','.join(stale)}}}.csv predate the `families` column. Rebuild them "
+            f"first (datasets/prepare/cluster/prepare.py): "
+            f"uv run python3 -m datasets.prepare.cluster.prepare --risk <risk>"
+        )
+
+
 def _build_task(
     base_task: Task,
     families: list[str],

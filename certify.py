@@ -36,7 +36,7 @@ def display_mode() -> str:
     '''
     return os.environ.get("INSPECT_DISPLAY") or ("full" if sys.stdout.isatty() else "log")
 from pipeline.artifacts import REPEAT_FAMILIES, family_ids, load_family, task_name, validate_artifacts
-from pipeline.registry import init_benchmarks, apply_stages, ALL_PERTURB_FAMILIES
+from pipeline.registry import init_benchmarks, apply_stages, require_families_column, ALL_PERTURB_FAMILIES
 from pipeline.stage3_simulation.classify import DEFAULT_CLASSIFIER
 from pipeline.utils.scoring import SCENARIO
 from pipeline.utils import results as results_tree
@@ -652,6 +652,7 @@ if __name__ == "__main__":
     if tasks_to_skip:
         print(f"Skipping: {', '.join(sorted(tasks_to_skip))}")
         BENCHMARKS = {key: entry for key, entry in BENCHMARKS.items() if key not in tasks_to_skip}
+    require_families_column(BENCHMARKS)
 
     # Inspect treats an empty task list exactly like None: it discovers every
     # @task in the working directory and runs those instead (see

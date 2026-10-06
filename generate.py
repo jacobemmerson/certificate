@@ -60,7 +60,7 @@ from pipeline.artifacts import (
 from inspect_ai.model import get_model
 
 from pipeline.generation import generate_framing, generate_persona, generate_rewrites, generate_scenarios
-from pipeline.registry import PREGENERATED_FAMILIES, init_benchmarks
+from pipeline.registry import PREGENERATED_FAMILIES, init_benchmarks, require_families_column
 from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY
 from pipeline.utils.graders import load_graders
 
@@ -193,6 +193,7 @@ if __name__ == "__main__":
         if unknown:
             print(f"[WARNING] Unknown benchmark keys (ignored): {', '.join(sorted(unknown))}")
         BENCHMARKS = {key: entry for key, entry in BENCHMARKS.items() if key in only}
+    require_families_column(BENCHMARKS)
 
     perturb_families = [] if args.no_perturb else args.perturb
 
