@@ -91,5 +91,5 @@ uv run python generate.py \
     --max-connections 32 \
     --missing-only \
     --perturb-k 1 \
-    --simulate --sim-k 1 \
+    --simulate --sim-k 2 \
     --reasoning
