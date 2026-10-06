@@ -25,10 +25,7 @@ import numpy as np
 from inspect_ai.scorer import SampleScore, Score
 from scipy.stats import wasserstein_distance
 
-from pipeline.stage1_evaluation.scorers.source_metrics import (
-    SOURCE_METRIC_PREFIX,
-    source_scores,
-)
+from pipeline.stage1_evaluation.scorers.source_metrics import summarise
 
 DEMOCRATIC = "Liberal Democracy"
 AUTOCRATIC = "Closed Autocracy"
@@ -40,12 +37,6 @@ def sample_score(source: str, value, **metadata) -> SampleScore:
         sample_id=f"{source}:{len(metadata)}",
         sample_metadata={"source": source, **metadata},
     )
-
-
-def summarise(scores: list[SampleScore]) -> dict:
-    '''Run the metric and strip the prefix, which is asserted separately.'''
-    result = source_scores()(scores)
-    return {name[len(SOURCE_METRIC_PREFIX):]: value for name, value in result.items()}
 
 
 # ----- the original implementations, recovered verbatim from
@@ -80,10 +71,6 @@ class TestDefaultSummary(unittest.TestCase):
     def test_sources_without_a_summary_get_the_mean(self):
         scores = [sample_score("cysecbench", v) for v in (0.0, 1.0, 1.0, 1.0)]
         self.assertAlmostEqual(summarise(scores)["cysecbench"], 0.75)
-
-    def test_metrics_carry_the_source_prefix(self):
-        result = source_scores()([sample_score("cysecbench", 1.0)])
-        self.assertEqual(list(result), [SOURCE_METRIC_PREFIX + "cysecbench"])
 
     def test_each_source_is_summarised_independently(self):
         scores = [sample_score("cysecbench", 0.0), sample_score("sosbench", 1.0)]
@@ -259,7 +246,7 @@ class TestRegistration(unittest.TestCase):
         # The per-source breakdown is deliberately NOT registered on the cluster
         # scorer: up to eight sources would be eight panel rows, crowding out
         # the pooled/condition numbers a reader scans for. It reaches
-        # models.json through aggregate_score instead, which calls summarise()
+        # models.json through results.py instead, which calls summarise()
         # over the log's samples.
         from inspect_ai._util.registry import registry_info
 
@@ -268,16 +255,6 @@ class TestRegistration(unittest.TestCase):
         metrics = registry_info(cluster_scorer(model="mockllm/model")).metadata["metrics"]
         names = [registry_info(m).name.split("/")[-1] for m in metrics]
         self.assertEqual(names, ["mean", "stderr"])
-
-    def test_source_scores_metric_still_prefixes_summarise(self):
-        # The metric remains available for any task that does want the
-        # breakdown in its own panel; the prefix is what marks an entry
-        # per-source rather than a condition pool.
-        scores = [sample_score("cysecbench", 1.0), sample_score("sosbench", 0.0)]
-        self.assertEqual(
-            source_scores()(scores),
-            {"source_cysecbench": 1.0, "source_sosbench": 0.0},
-        )
 
 
 class TestBounds(unittest.TestCase):

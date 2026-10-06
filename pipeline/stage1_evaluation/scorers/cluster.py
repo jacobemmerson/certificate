@@ -73,11 +73,6 @@ from inspect_ai.scorer import (
 from inspect_ai.solver import TaskState
 
 from pipeline.stage1_evaluation.scorers.detectors import DETECTORS, is_refusal
-from pipeline.stage1_evaluation.scorers.source_metrics import (
-    SOURCE_METRIC_PREFIX,
-    source_scores,
-)
-
 from pipeline.utils.scoring import (
     CONDITION_FAMILY, CONDITION_QUERY, MULTILINGUAL, SCENARIO, SCREEN_PASSED, is_scored,
 )

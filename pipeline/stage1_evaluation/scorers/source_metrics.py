@@ -30,7 +30,7 @@ from collections.abc import Callable, Sequence
 from functools import cache
 from statistics import fmean
 
-from inspect_ai.scorer import MetricProtocol, SampleScore, Value, metric
+from inspect_ai.scorer import SampleScore
 from scipy.stats import wasserstein_distance
 
 from pipeline.utils.scoring import is_scored, safety
@@ -264,20 +264,3 @@ def summarise(
             summarised[metric_name] = derived(group)
 
     return {name: value for name, value in summarised.items() if value is not None}
-
-
-@metric
-def source_scores(prefix: str = SOURCE_METRIC_PREFIX) -> MetricProtocol:
-    '''
-    `summarise` as a registered metric, as `{prefix}{source}`.
-
-    Not attached to the cluster scorer — see `summarise`. Kept because it is
-    the natural way for any other task to surface the same breakdown in its own
-    panel, and because the prefix contract is what tells downstream a metric is
-    per-source rather than a condition pool.
-    '''
-
-    def calculate(scores: list[SampleScore]) -> Value:
-        return {prefix + name: value for name, value in summarise(scores).items()}
-
-    return calculate
