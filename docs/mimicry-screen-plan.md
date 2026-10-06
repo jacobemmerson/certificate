@@ -136,8 +136,8 @@ informative. The screen prompt itself is never perturbed — it is administratio
 like a row's `system_prompt`, not the item under test.
 
 **No double-counting with the existing abstain.** The detector already abstains
-with *"misattribution not in the prompt"* when a faithful `identity_strip` or
-`paraphrase` rewrite generalised the wrong poet away. The two abstains cannot
+with *"misattribution not in the prompt"* when a faithful `paraphrase`
+rewrite generalised the wrong poet away. The two abstains cannot
 both fire on one record, because the screen gate returns before the detector
 runs, and each condition produces exactly one record either way. What does
 differ is what happens next, and deliberately so:
