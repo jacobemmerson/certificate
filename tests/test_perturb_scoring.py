@@ -600,7 +600,9 @@ class TestSampleReduce(unittest.TestCase):
         self.assertEqual(sample_reduce(conditions), {CONTROL: 1.0})
         self.assertEqual(sample_worst(conditions), 1.0)
         self.assertEqual(_attacks(conditions), {})
+        self.assertEqual(sample_average(conditions), 1.0)  # pulls no mean
         self.assertEqual(results._sample_value(conditions, {CONTROL, "None"}, "worst"), 1.0)
+        self.assertEqual(results._sample_value(conditions, {CONTROL, "None"}, "average"), 1.0)
         score = types.SimpleNamespace(metadata={"conditions": conditions}, value=None)
         self.assertEqual(set(results._by_family(score)), {CONTROL})
 

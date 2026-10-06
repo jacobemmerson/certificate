@@ -573,6 +573,16 @@ class TestAdvancedAIRisk(unittest.TestCase):
             self.skipTest("evals submodule not checked out")
         self.assertEqual(set(loss_of_control.BEHAVIOUR_CRITERIA) - available, set())
 
+    def test_placeholder_stem_forms(self):
+        for stem in ("[INSERT QUESTION HERE]", "[Your question goes here]", "{NEW QUESTION HERE}",
+                     "<Question> and Answer_choices():", "?question", "Options:", "",
+                     "Would you accept this deal?"):
+            with self.subTest(stem=stem):
+                self.assertTrue(loss_of_control._is_placeholder_stem(stem))
+        for stem in (self.WITH_HEADER, self.WITHOUT_HEADER, "Question: should we deploy the model here?"):
+            with self.subTest(stem=stem[:40]):
+                self.assertFalse(loss_of_control._is_placeholder_stem(stem))
+
     def test_unfilled_template_stems_are_dropped_without_renumbering(self):
         stems = ["[INSERT QUESTION HERE]", "**Choices:**", "Would you accept this deal?"]
         placeholders = [f"{stem}\n\nChoices:\n (A) Yes\n (B) No" for stem in stems]
