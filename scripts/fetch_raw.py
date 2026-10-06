@@ -9,6 +9,7 @@ Gated Hugging Face datasets need HF_TOKEN in the environment.
 '''
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -50,8 +51,9 @@ def fetch(entry: dict, dest: Path):
     name, requested = entry["name"], entry.get("revision", "")
     record = dest / "fetch.json"
     if record.exists():
-        # ponytail: a tag/branch pin never equals the stored SHA, so it refetches every run; pin SHAs.
-        if not requested or json.loads(record.read_text())["revision"] == requested:
+        data = json.loads(record.read_text())
+        pinned = not requested or requested in (data["revision"], data.get("requested"))
+        if pinned and data.get("files") == entry["files"]:
             print(f"{name}: up to date")
             return
         shutil.rmtree(dest)
@@ -59,7 +61,25 @@ def fetch(entry: dict, dest: Path):
         raise SystemExit(f"{name}: {dest} exists without fetch.json; refusing to overwrite it")
     dest.mkdir(parents=True, exist_ok=True)
 
-    steps = plan(entry, dest)
+    # dest is new or emptied above, so a failed download leaves nothing worth keeping.
+    try:
+        sha = download(entry, dest)
+    except BaseException:
+        shutil.rmtree(dest, ignore_errors=True)
+        raise
+
+    record.write_text(json.dumps({
+        "name": name, "id": entry["id"], "host": entry["host"], "repo": entry["repo"],
+        "revision": sha, "requested": requested, "files": entry["files"],
+        "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }, indent=2) + "\n")
+    (dest / ".gitignore").write_text("*\n!fetch.json\n!.gitignore\n")
+    print(f"{name}: fetched {sha}")
+
+
+def download(entry: dict, dest: Path) -> str:
+    '''Populate dest and return the resolved commit SHA.'''
+    name, steps = entry["name"], plan(entry, dest)
     if entry["host"] == "hf":
         from huggingface_hub import HfApi, snapshot_download
         from huggingface_hub.errors import GatedRepoError
@@ -76,14 +96,7 @@ def fetch(entry: dict, dest: Path):
         sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=dest, check=True,
                              capture_output=True, text=True).stdout.strip()
         shutil.rmtree(dest / ".git")
-
-    record.write_text(json.dumps({
-        "name": name, "id": entry["id"], "host": entry["host"], "repo": entry["repo"],
-        "revision": sha, "files": entry["files"],
-        "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-    }, indent=2) + "\n")
-    (dest / ".gitignore").write_text("*\n!fetch.json\n!.gitignore\n")
-    print(f"{name}: fetched {sha}")
+    return sha
 
 
 def main(argv: list[str] | None = None):
@@ -94,7 +107,13 @@ def main(argv: list[str] | None = None):
     parser.add_argument("--manifest", type=Path, default=RAW_DIR / "manifest.toml")
     args = parser.parse_args(argv)
 
-    for entry in select(load_manifest(args.manifest), args.only, args.status):
+    entries = load_manifest(args.manifest)
+    if unknown := set(args.only) - {entry["name"] for entry in entries}:
+        parser.error(f"--only names not in {args.manifest}: {sorted(unknown)}")
+    if bad := [entry["name"] for entry in entries if not re.fullmatch(r"[a-z0-9_]+", entry["name"])]:
+        parser.error(f"manifest names must match [a-z0-9_]+: {bad}")
+
+    for entry in select(entries, args.only, args.status):
         if entry["host"] == "none":
             print(f"{entry['name']}: no host ({entry['status']}), skipped")
             continue

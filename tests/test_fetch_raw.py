@@ -5,6 +5,8 @@ dry-run and the up-to-date skip are exercised.
 import contextlib
 import io
 import json
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -43,6 +45,7 @@ status = "unreleased"
 class FetchRawTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp)
         self.manifest = self.tmp / "manifest.toml"
         self.manifest.write_text(MANIFEST)
         self.entries = fetch_raw.load_manifest(self.manifest)
@@ -82,7 +85,7 @@ class FetchRawTest(unittest.TestCase):
     def test_up_to_date_skip(self):
         dest = self.tmp / "gh"
         dest.mkdir()
-        (dest / "fetch.json").write_text(json.dumps({"revision": "v1"}))
+        (dest / "fetch.json").write_text(json.dumps({"revision": "v1", "files": ["data/*.jsonl", "README.md"]}))
         out = io.StringIO()
         with mock.patch.object(fetch_raw.subprocess, "run") as run, contextlib.redirect_stdout(out):
             fetch_raw.fetch(self.entries[0], dest)
@@ -92,11 +95,38 @@ class FetchRawTest(unittest.TestCase):
         # Unpinned request: any recorded revision counts as current.
         hub = self.tmp / "hub"
         hub.mkdir()
-        (hub / "fetch.json").write_text(json.dumps({"revision": "abc"}))
+        (hub / "fetch.json").write_text(json.dumps({"revision": "abc", "files": ["*.parquet"]}))
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             fetch_raw.fetch(self.entries[1], hub)
         self.assertIn("up to date", out.getvalue())
+
+        # Tag pin: the stored SHA differs, but the recorded request matches.
+        (dest / "fetch.json").write_text(json.dumps(
+            {"revision": "f00d", "requested": "v1", "files": ["data/*.jsonl", "README.md"]}))
+        out = io.StringIO()
+        with mock.patch.object(fetch_raw.subprocess, "run") as run, contextlib.redirect_stdout(out):
+            fetch_raw.fetch(self.entries[0], dest)
+        run.assert_not_called()
+        self.assertIn("up to date", out.getvalue())
+
+    def test_files_change_refetches_and_failure_cleans_up(self):
+        dest = self.tmp / "gh"
+        dest.mkdir()
+        (dest / "fetch.json").write_text(json.dumps({"revision": "v1", "files": ["data/*.jsonl"]}))
+        failure = subprocess.CalledProcessError(128, ["git", "fetch"])
+        with mock.patch.object(fetch_raw.subprocess, "run", side_effect=failure) as run:
+            with self.assertRaises(subprocess.CalledProcessError):
+                fetch_raw.fetch(self.entries[0], dest)
+        run.assert_called()
+        self.assertFalse(dest.exists())
+
+    def test_main_rejects_unknown_only_and_bad_slug(self):
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            fetch_raw.main(["--manifest", str(self.manifest), "--dry-run", "--only", "missing"])
+        self.manifest.write_text(MANIFEST.replace('name = "gh"', 'name = "../gh"'))
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            fetch_raw.main(["--manifest", str(self.manifest), "--dry-run"])
 
 
 if __name__ == "__main__":
