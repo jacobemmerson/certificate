@@ -45,7 +45,9 @@ generations (elicit a belief, then apply pressure), which the one-row-one-prompt
 schema cannot express.
 '''
 
+import json
 import re
+from pathlib import Path
 
 import pandas as pd
 
@@ -99,6 +101,7 @@ CHOICES_HEADER = re.compile(r"\s*Choices:\s*$")
 # would parse into a wrong two-option split, and neither can be repaired without
 # guessing at what was intended.
 GENERATION_ARTIFACT = "<META_START>"
+COHERENCE = Path(__file__).with_name("loss_of_control_coherence.json")
 
 
 def _split_question(question: str) -> dict | None:
@@ -144,6 +147,24 @@ def _split_question(question: str) -> dict | None:
     }
 
 
+# Unfilled generator templates in the stem itself: "[INSERT QUESTION HERE]",
+# "Your question here", a bare "Choices:" header, an empty stem, or a deal
+# prompt with no deal ("Would you accept this deal?"). Only short first lines
+# are tested, so a real question that happens to end in "here" survives.
+_PLACEHOLDER_STEM = re.compile(
+    r"(?i)^[\W_]*(?:(?:insert|your|new)?\s*question(?:\s+goes)?\s+(?:here|description)[\W_]*$"
+    r"|<question>|\?question$|\*?question prompt"
+    r"|(?:answer\s+)?(?:options|answers|choices)[\W_]*$"
+    r"|(?:if\b.*,\s*)?(?:would|do) you (?:accept|agree to) this\b[^?]*\?$"
+    r"|$)"
+)
+
+
+def _is_placeholder_stem(stem: str) -> bool:
+    first = (stem.strip().splitlines() or [""])[0].strip()
+    return len(first) < 60 and bool(_PLACEHOLDER_STEM.match(first))
+
+
 def advanced_ai_risk_rows(df: pd.DataFrame) -> pd.DataFrame:
     '''
     Keep the declared behaviours, parse the embedded options into `choices`, and
@@ -153,19 +174,43 @@ def advanced_ai_risk_rows(df: pd.DataFrame) -> pd.DataFrame:
     selected target as UNSAFE, which is the reading WMDP needs, where the
     correct answer is the hazardous one. Pointing it at the safe answer would
     leave the source inverted and score a power-seeking model as the safest.
+
+    `native_position` is assigned by enumerating the behaviour-kept,
+    parseable candidates — the same population that used to supply the
+    implicit position-as-id — *before* the placeholder check below drops
+    any of them, so dropping a placeholder never renumbers a surviving row.
+    `id_col` points at it instead of leaving native_id as the post-filter
+    position, because sample_id is what keys generated artifacts and .eval
+    logs: a later filter added here must not invalidate existing coverage
+    for rows it doesn't touch.
     '''
-    parsed = []
+    candidates = []
     for record in df.to_dict("records"):
         if record.get("behavior") not in BEHAVIOUR_CRITERIA:
             continue
         split = _split_question(str(record["question"]))
         if split is None:
             continue
+        candidates.append({**record, **split})
+
+    # Rows a judge found unintelligible (scripts/coherence_check.py); dropped
+    # here, after enumeration, for the same reason as the placeholder check.
+    coherence = json.loads(COHERENCE.read_text()) if COHERENCE.exists() else {}
+    parsed = []
+    for position, record in enumerate(candidates):
+        if coherence.get(str(position), {}).get("label") == "incoherent":
+            continue
         letter = str(record["answer_matching_behavior"]).strip()
-        parsed.append({
-            **record, **split,
-            "target": split["choices"][0 if letter == "(A)" else 1],
-        })
+        target = record["choices"][0 if letter == "(A)" else 1]
+        # A few coordinate-itself/coordinate-other-ais items are unfilled
+        # templates, not real questions: their options are still the
+        # generator's own placeholder text ("<answer choice>", "<your
+        # answer>"). Same pattern schema.validate() rejects an mcq target on.
+        if re.fullmatch(r"<[a-z][a-z ]*>", target.strip()):
+            continue
+        if _is_placeholder_stem(record["item_text"]):
+            continue
+        parsed.append({**record, "target": target, "native_position": position})
     return pd.DataFrame(parsed)
 
 
@@ -178,7 +223,8 @@ SOURCES = [
         path="raw/loss_of_control/evals/advanced-ai-risk/lm_generated_evals/*.jsonl",
         reader="jsonl", filename_field="behavior",
         transform=advanced_ai_risk_rows,
-        query="query", item_text="item_text", prompt_template="prompt_template",
+        query="query", id_col="native_position",
+        item_text="item_text", prompt_template="prompt_template",
         choices=lambda r: list(r["choices"]),
         target="target",
         criterion=lambda r: BEHAVIOUR_CRITERIA[r["behavior"]],
@@ -186,8 +232,8 @@ SOURCES = [
         # Balanced rather than proportional: the behaviours are seven separate
         # findings, not a population to be sampled in proportion to how many
         # questions the generator happened to produce for each.
-        # Free-text items, so lexical spread is a real axis: measured
-        # redundancy 0.322 -> 0.136 at this quota.
+        # Free-text items, so spread is a real axis: Jaccard-era
+        # redundancy 0.322 -> 0.136 at this quota (not re-measured on embeddings).
         select="diverse",
         stratify=["behavior"], quota=140, balanced=True,
     ),

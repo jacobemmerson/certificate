@@ -3,7 +3,7 @@ Generates the fixed perturbation/simulation artifacts that certify.py replays.
 
 This is the attacker-model half of stages 2 and 3, run ONCE per artifact
 refresh instead of once per evaluated model: every rewrite-family variant
-(paraphrase, register, identity_strip), every deterministic framing wrapper,
+(paraphrase, register, past_tense, multilingual), every deterministic framing/persona wrapper,
 and every stage-3 scenario reframing is generated here and persisted to
 datasets/generated/<task_name>/<family>.jsonl (see pipeline/artifacts.py and
 datasets/generated/README.md). certify.py then evaluates every target model
@@ -19,19 +19,14 @@ independent artifact file.
 Usage:
     uv run python generate.py                          # all families, all clusters
     uv run python generate.py --only cyber --perturb paraphrase framing --perturb-k 1
-    uv run python generate.py --only cyber --simulate --sim-k 1
+    uv run python generate.py --only cyber --simulate --sim-k 2
     uv run python generate.py --missing-only           # fill gaps (e.g. failed reframings)
     uv run python generate.py --force                  # regenerate everything from scratch
 
-Local HuggingFace attackers (e.g. on a slurm node) go through inspect's hf/
-and vllm/ providers; -M forwards model args to get_model():
+The attacker is any inspect API provider, or a vLLM server already running
+(vLLM is not in the project env; scripts/generate_hermes_slurm.sh serves it via
+uvx). -M forwards model args to get_model():
 
-    # vllm launches the server itself on the allocated GPUs
-    uv run python generate.py --simulate \
-        --attacker vllm/NousResearch/Hermes-4-405B-FP8 \
-        -M tensor_parallel_size=8
-
-    # or point at a vLLM server already running (e.g. a separate slurm job)
     uv run python generate.py --simulate \
         --attacker vllm/NousResearch/Hermes-4-405B-FP8 \
         --model-base-url http://$VLLM_NODE:8000/v1
@@ -52,18 +47,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from pipeline.artifacts import (
+    DETERMINISTIC_FAMILIES,
     PROMPT_VERSIONS,
-    REWRITE_FAMILIES,
+    REPEAT_FAMILIES,
     artifact_path,
-    framing_applies,
+    family_ids,
+    family_meta,
     load_family,
     task_name,
     write_family,
 )
 from inspect_ai.model import get_model
 
-from pipeline.generation import generate_framing, generate_rewrites, generate_scenarios
-from pipeline.registry import PREGENERATED_FAMILIES, init_benchmarks
+from pipeline.generation import generate_framing, generate_persona, generate_rewrites, generate_scenarios
+from pipeline.registry import PREGENERATED_FAMILIES, init_benchmarks, require_families_column
 from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY
 from pipeline.utils.graders import load_graders
 
@@ -73,7 +70,7 @@ def parse():
     args.add_argument(
         "--attacker", "-a", required=False, default="openrouter/nousresearch/hermes-4-70b",
         help="Rewrite/reframing model for the generative families (default: openrouter/nousresearch/hermes-4-70b). "
-             "Any inspect provider works, including local HuggingFace models via hf/<repo> or vllm/<repo>."
+             "Any inspect API provider, or vllm/<repo> pointed at a running vLLM server via --model-base-url."
     )
     args.add_argument(
         "-M", dest="model_args", required=False, action="append", default=[], metavar="KEY=VALUE",
@@ -102,15 +99,16 @@ def parse():
     )
     args.add_argument(
         "--perturb-k", required=False, type=int, default=1,
-        help="Variants per item for the rewrite families (paraphrase, register, identity_strip); default=1."
+        help="Variants per item for the repeat rewrite families (paraphrase, register, past_tense); default=1."
     )
     args.add_argument(
         "--simulate", required=False, action="store_true",
-        help="Also generate stage-3 scenario reframings (scenario.jsonl)."
+        help="Also generate stage-3 scenario trees (scenario.jsonl, prompt v4)."
     )
     args.add_argument(
-        "--sim-k", required=False, type=int, default=1,
-        help="Reframed scenarios per item under --simulate; default=1."
+        "--sim-k", required=False, type=int, default=2,
+        help="Scenario trees per item under --simulate; default=2. Variant 2 is prompted to use a "
+             "different deployment (role, sector, asker) from variant 1."
     )
     args.add_argument(
         "--reasoning", required=False, action="store_true",
@@ -164,21 +162,22 @@ def git_commit() -> str | None:
         return None
 
 
-def existing_keys(name: str, family: str) -> set[tuple[str, int]]:
-    """(id, variant) pairs already on disk, or empty if no file yet."""
-    if not artifact_path(name, family).exists():
-        return set()
-    return {
-        (sample_id, row.get("variant", 0))
-        for sample_id, rows in load_family(name, family).items()
-        for row in rows
-    }
-
-
 def existing_rows(name: str, family: str) -> list[dict]:
+    """Rows to keep on --missing-only. Fallback rows are left out so the run
+    retries exactly those variants instead of treating them as done. Rows from
+    another prompt version are all dropped: keeping them would restamp stale
+    rows with the current version, so after a bump this equals --force."""
     if not artifact_path(name, family).exists():
         return []
-    return [row for rows in load_family(name, family).values() for row in rows]
+    stored = (family_meta(name, family) or {}).get("prompt_version")
+    if stored != PROMPT_VERSIONS[family]:
+        print(f"[WARNING] {name}/{family}: stored prompt version {stored}, current "
+              f"{PROMPT_VERSIONS[family]}; regenerating every row.")
+        return []
+    return [
+        row for rows in load_family(name, family).values() for row in rows
+        if not row.get("fallback")
+    ]
 
 
 if __name__ == "__main__":
@@ -194,6 +193,7 @@ if __name__ == "__main__":
         if unknown:
             print(f"[WARNING] Unknown benchmark keys (ignored): {', '.join(sorted(unknown))}")
         BENCHMARKS = {key: entry for key, entry in BENCHMARKS.items() if key in only}
+    require_families_column(BENCHMARKS)
 
     perturb_families = [] if args.no_perturb else args.perturb
 
@@ -213,9 +213,10 @@ if __name__ == "__main__":
                 samples = samples[: args.limit]
 
             # (family, k) pairs to produce for this task
-            wanted = [(f, args.perturb_k) for f in perturb_families if f in REWRITE_FAMILIES]
-            if "framing" in perturb_families and framing_applies(task):
-                wanted.append(("framing", 1))
+            wanted = [
+                (f, args.perturb_k if f in REPEAT_FAMILIES else 1)
+                for f in perturb_families if family_ids(task, f)
+            ]
             if args.simulate:
                 wanted.append((SCENARIO_FAMILY, args.sim_k))
 
@@ -225,18 +226,22 @@ if __name__ == "__main__":
                     summary.append((name, family, "skipped (exists — use --missing-only or --force)"))
                     continue
 
-                existing = set() if args.force else existing_keys(name, family)
                 kept = [] if args.force else existing_rows(name, family)
+                existing = {(str(row["id"]), row.get("variant", 0)) for row in kept}
                 incomplete: list[str] = []
                 reasons: dict[str, str] = {}
 
-                if family == "framing":
-                    # deterministic — cheap to rebuild wholesale every time
-                    rows = generate_framing(samples)
+                if family in DETERMINISTIC_FAMILIES:
+                    # template-built — cheap to rebuild wholesale every time
+                    rows = generate_framing(samples) if family == "framing" else generate_persona(samples)
                     kept = []
                 elif family == SCENARIO_FAMILY:
                     rows, incomplete, reasons = asyncio.run(generate_scenarios(
                         samples, attacker, k, existing=existing,
+                        previous_systems={
+                            r["id"]: r["system"] for r in kept
+                            if r.get("variant") == 1 and not r.get("fallback")
+                        },
                         max_connections=args.max_connections,
                         reasoning=args.reasoning,
                     ))
@@ -253,7 +258,7 @@ if __name__ == "__main__":
                 # complete artifact that --missing-only would then skip.
                 attempted = len(rows) or len(incomplete)
                 usable = sum(1 for r in rows if not r.get("fallback"))
-                if family != "framing" and attempted and not usable:
+                if family not in DETERMINISTIC_FAMILIES and attempted and not usable:
                     summary.append((name, family,
                                     f"FAILED — 0/{attempted} usable attacker outputs; nothing written"))
                     continue
@@ -267,7 +272,7 @@ if __name__ == "__main__":
                 write_family(name, family, all_rows, meta={
                     "task": name,
                     "family": family,
-                    "generator_model": None if family == "framing" else args.attacker,
+                    "generator_model": None if family in DETERMINISTIC_FAMILIES else args.attacker,
                     "reasoning": bool(args.reasoning and family == SCENARIO_FAMILY),
                     "prompt_version": PROMPT_VERSIONS[family],
                     "k": k,

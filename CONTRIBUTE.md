@@ -12,8 +12,9 @@ entry in `datasets/prepare/cluster/sources/<risk>.py`, plus data under
 > **If you have contributed here before**, the old flow (write a task file,
 > register it in `pipeline/registry.py`, add a `PerturbAdapter`) is gone. Those
 > three registries collapsed into data columns; see
-> [datasets/CLUSTERING.md](datasets/CLUSTERING.md) for why. `pipeline/registry.py`
-> now builds one task per risk and needs no edit.
+> [datasets/BENCHMARKS.md](datasets/BENCHMARKS.md) § "One canonical schema per
+> cluster" for why. `pipeline/registry.py` now builds one task per risk and
+> needs no edit.
 
 **Tip:** a benchmark with clear inputs, a stated scoring rule, and a published
 judge prompt takes about twenty minutes. One whose evaluation you have to infer
@@ -71,6 +72,16 @@ Useful fields when the shape is awkward:
 | `group_key` | rows only meaningful as a set — the quota then counts groups, not rows |
 | `balanced` | even allocation per stratum instead of proportional |
 | `distinct_on` | fields whose differing values mean "different items, however similar the text" |
+| `judge_style="classifier"` | the original judge emits a bare label, not reasoning |
+| `role="diagnostic"` | the benchmark measures something other than the cluster construct |
+| `pool="<name>"` | several sources measure one construct and should enter the cluster mean once |
+| `summary=` | a name from `source_metrics.SUMMARIES`, when a plain mean is the wrong aggregate |
+| `ask=` | the closing instruction, so stage 2 can never reword it away |
+| `must_survive=` | a string a rewrite must keep (an output token, a name) |
+| `families=` | the perturbation families that apply, as a tuple of names; default derived from `question_type` and `elicitation_family` (`detection` rows get only `reconsideration` and `scenario`; `persona` applies only to `graded`/`mcq` rows with no `system_prompt` of their own). See `pipeline/README.md § Families`. |
+| `screen=` | `True`/`False` to force the Hermes answerability screen on or off; default `None` = screened iff `graded`/`mcq` with a `compliance` or `generic` elicitation. Opinion- and judgment-shaped sources are not screened: a refusal there is a position, not a zero-variance item. |
+| `select=` | `"uniform"` (default, hash-stable order) or `"diverse"` (farthest-point on embeddings) when a stratum is larger than its allotment; see `datasets/BENCHMARKS.md § Sampling`. Opt in only with a measured redundancy gain (through `stratified_sample`): templated sources barely move, and `tests/test_clusters.py::TestSelection` pins selection stability. |
+| `tau=` | per-source cosine near-dedup threshold, overriding `COSINE_TAU` |
 
 **`distinct_on` is the one people miss.** Dedup keys on the prompt text, so any
 source whose rows share a user turn — the scenario lives in a system prompt, or
@@ -83,13 +94,13 @@ your build reports a suspiciously large `exact` drop, this is why.
 `question_type` is the whole dispatch mechanism — five values, because there are
 five scoring shapes in the suite, not one per benchmark.
 
-| `question_type` | Scored by | Use when |
-|---|---|---|
-| `graded` | judge picks one of `categories`; `scale_map` converts | free-text response judged against a rubric |
-| `mcq` | response matched against `target` | the benchmark supplies options |
-| `likert` | deterministic parse of the model's own scale answer | fixed scale + JSON contract |
-| `extraction` | entity extraction, then classification | the finding is about *what* the response named |
-| `detection` | the benchmark's own deterministic detector, no judge | **the benchmark doesn't use a judge** |
+| `question_type` | Control and perturbed | Under a scenario | Use when |
+|---|---|---|---|
+| `graded` | an LLM judge picks one of the sample's `categories`; `scale_map` converts | the same | free text against a rubric, including plain refusal as the two-category case |
+| `mcq` | the response is matched against `target` | open-MCQ judge reads for `target`'s substance | the benchmark supplies options |
+| `likert` | the model picks from the scale itself; `scale_map` converts, no model call | judged against the source's ordinal fallback | fixed scale + JSON contract |
+| `extraction` | entity extraction plus classification | judged fallback | the finding is about *what* was named |
+| `detection` | the benchmark's own deterministic detector (`detectors.py`) | judged fallback | **the benchmark uses no judge** |
 
 **`target` means "the option whose selection is the failure"**, not "the correct
 answer". For WMDP the two coincide — answering correctly demonstrates hazardous
@@ -159,7 +170,7 @@ Divergence is allowed — some are unavoidable (logprobs unavailable through a
 router) and some are deliberate (we average judges rather than majority-voting).
 Undocumented divergence is not.
 
-## 6. Perturbation split — only if the prompt has a rigid wrapper
+## 6. Perturbation split and families
 
 **The common case needs nothing.** If the whole prompt is safe to reword, leave
 `item_text` and `prompt_template` unset and every perturbation family applies
@@ -179,11 +190,14 @@ query` is enforced by `validate()`: if the template cannot rebuild the query, a
 perturbed run silently sends the target something other than what the control was
 scored on.
 
-`elicitation_family` picks which framing templates apply — `compliance` ("do X"),
-`judgment` ("is this acceptable?"), `opinion` ("rate your agreement"), or
-`generic`. **If none fits, use `generic`**, which skips the framing family and
-leaves the others running. That is the fail-safe: a wrong wrapper breaks
-content-equivalence, so the default is skip, not guess.
+`elicitation_family` (`compliance` "do X", `judgment` "is this acceptable?",
+`opinion` "rate your agreement", `generic`) decides whether `framing` applies
+(`compliance` only) and whether the screen runs. If none fits, use `generic`:
+framing is skipped, the other families still run. To exclude a family
+explicitly, set `families=`; a `detection` source gets only `reconsideration`
+and `scenario` by default because its signal is inside the text. New families
+must pass the keep/kill gate in `pipeline/README.md § Families` before they
+ship.
 
 ## 7. Build, test, run
 
@@ -203,48 +217,58 @@ uv run python3 certify.py -m <target-model> -g <grader-model> --only cyber --lim
 ```
 
 Check the build report before anything else: `loaded` / `exact` / `near` /
-`cross` / `kept` per source. A large `exact` drop means missing `distinct_on`
-(step 2); a large `near` drop means your source is templated and wants a higher
-`tau` or a `distinct_on` on the varying term. Any `cross` drop means your source
+`cross` / `screen` / `kept` per source. A large `exact` drop means missing
+`distinct_on` (step 2). A large `near` drop means your source is templated and
+wants `distinct_on` on the varying term (cosine ≥ `COSINE_TAU` is the trigger;
+the pairs are in `<risk>.dropped.jsonl`). Any `cross` drop means your source
 ships prompts an earlier source in the same cluster already ships — worth
-checking whether it is vendoring another benchmark before you tune anything. Dropped pairs are written to
-`datasets/public/<risk>.dropped.jsonl` so the threshold is reviewable rather
-than trusted.
+checking whether it is vendoring another benchmark before you tune anything. A
+`screen` drop above half the candidates means the source's prompts are mostly
+refused by an open model; raise `SCREEN_FACTOR` or reconsider the source rather
+than shrink the quota. `<risk>.dropped.jsonl` tags every record with its `tier`
+(`near`, `exact_cross_source`, `screen`), so the thresholds are reviewable
+rather than trusted.
 
-`--only` takes **risk names** now (`--only cyber`), not benchmark keys. Your
-benchmark appears in the results panel as `source_<your_benchmark>` and in
-`models/models.json` under `by_source`.
+`prepare.py` exits 2 when an embedding or screen cache is missing and prints
+the command to run; the full three-pass sequence is in
+`datasets/BENCHMARKS.md § Sampling`.
+
+`--only` takes risk names. Your benchmark appears in
+`models/results/<model_id>.json` under `results.<risk>.benchmarks.<your_benchmark>`.
 
 ## 8. Scoring conventions
 
-- The cluster score is the **mean of its per-source scores**, so sample count is
-  weight. Quotas are load-bearing; `tests/test_clusters.py` fails any cluster
-  where one slice exceeds 40%.
-- A source that measures something other than alignment belongs in
-  `DIAGNOSTIC_SOURCES` (`pipeline/utils/graders.py`) — reported per-source but
-  excluded from the pooled number. `wmdp` (capability absence) and
-  `cyber_false_refusal` (a counter-metric) are the two.
+- Quotas are load-bearing: the headline tail pools every item of a risk's pooled
+  sources, so sample count is weight there. `tests/test_clusters.py` fails any
+  cluster where one source holds over 40% of rows (for a one-source cluster, one
+  value of its first `stratify` key). Definitions: `pipeline/README.md § Metrics`.
+- A source that measures something other than alignment declares
+  `role="diagnostic"` on its `Source(...)`, reported per-source but excluded
+  from the pooled number. `wmdp` (capability absence), `cyber_false_refusal`
+  (a counter-metric) and `injecagent` (agentic tool misuse) are the three.
 - If your benchmark's finding is a property of a *distribution* rather than a
   mean — a gap between groups, a spread across arms — add a summary to
   `SUMMARIES` in `pipeline/stage1_evaluation/scorers/source_metrics.py`. It must
-  still land in [0, 1], higher = safer.
-- Under `--perturb` / `--simulate`, scorers are wrapped automatically: the
-  reported per-sample value becomes the worst outcome across control and every
-  condition, with `harm_propensity` / `stability` added to the results panel.
-  Generate the artifacts first:
+  still land in [0, 1], higher = safer. This and a new pool's derived metric
+  (`POOL_DERIVED`, same file) are the only two additions to a source that are
+  still a `pipeline/` edit; naming an existing summary or pool is not.
+- Under `--perturb` / `--simulate` the scorer is wrapped automatically and the
+  reported per-item value is the worst over control and every condition.
+  Definitions: `pipeline/README.md § Metrics`. Generate artifacts first:
 
   ```bash
-  uv run python3 generate.py --only cyber --perturb paraphrase --perturb-k 1
+  uv run python3 generate.py --only cyber --perturb paraphrase
   ```
 
 ## Where things live
 
 | | |
 |---|---|
-| `datasets/CLUSTERING.md` | the schema, and why the registries collapsed into it |
-| `datasets/BENCHMARKS.md` | every benchmark, its counts, and how it is scored vs. its original |
+| `datasets/BENCHMARKS.md` | the schema and why the registries collapsed into it; every benchmark, its counts, and how it is scored vs. its original |
 | `datasets/prepare/cluster/schema.py` | `Source`, `Row`, `validate()` — the contract |
 | `datasets/prepare/cluster/sources/` | one module per risk; this is where you add yours |
 | `pipeline/stage1_evaluation/scorers/cluster.py` | the dispatching scorer and judge prompts |
 | `pipeline/stage1_evaluation/scorers/detectors.py` | ported deterministic detectors |
+| `pipeline/README.md` | stages, families, scenario tree, metric definitions |
+| `datasets/BENCHMARKS.md § Sampling` | dedup, screen, strata |
 | `GRADERS.md` | the judge ensemble |

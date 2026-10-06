@@ -17,10 +17,14 @@ exact command otherwise).
 
 import json
 import os
+import shutil
 import sys
 from argparse import ArgumentParser
+from datetime import datetime
+from pathlib import Path
 
-from inspect_ai import eval
+from inspect_ai import eval_set
+from inspect_ai.log import read_eval_log
 
 
 def display_mode() -> str:
@@ -32,14 +36,17 @@ def display_mode() -> str:
     stdout is not a real terminal, honouring an explicit INSPECT_DISPLAY override.
     '''
     return os.environ.get("INSPECT_DISPLAY") or ("full" if sys.stdout.isatty() else "log")
-from pipeline.artifacts import validate_artifacts
-from pipeline.registry import init_benchmarks, apply_stages, ALL_PERTURB_FAMILIES
+from pipeline.artifacts import REPEAT_FAMILIES, family_ids, load_family, task_name, validate_artifacts
+from pipeline.registry import init_benchmarks, apply_stages, require_families_column, ALL_PERTURB_FAMILIES
+from pipeline.stage3_simulation.classify import DEFAULT_CLASSIFIER
+from pipeline.stage3_simulation.prompts import DEPTH
+from pipeline.utils.scoring import SCENARIO
 from pipeline.utils import results as results_tree
 from pipeline.utils import retry_policy
 from pipeline.utils import routing as provider_routing_api
 from pipeline.utils.graders import (
-    DIAGNOSTIC_SOURCES, load_graders, load_models_with_check, validate_graders,
-    validate_target,
+    load_graders, load_models_with_check, validate_graders, validate_target,
+    model_result_path, rebuild_models_json, write_json_atomic,
 )
 
 # OpenRouter's provider routing accepts a price ceiling per token class, in USD
@@ -101,6 +108,121 @@ def provider_routing(
     return routing or None
 
 
+def estimate_calls(benchmarks, families, k: int, sim_k: int | None, graders, limit: int | None = None, epochs: int = 1) -> dict:
+    '''
+    Upper-bound target / judge / classifier call counts per risk, from the
+    stored artifact rows — printed before any canary call so a 60k-call run is
+    a decision, not a surprise. See docs/superpowers/plans/2026-10-05-ws-e-scale.md Task 6.
+    '''
+    n_graders = len(graders) if isinstance(graders, list) else 1
+    estimate = {}
+    for key, entry in benchmarks.items():
+        totals = estimate.setdefault(key, dict.fromkeys(("samples", "target", "judge", "classifier"), 0))
+        for base in entry["tasks"]:
+            size = len(base.dataset)
+            n = size if limit is None else min(limit, size)
+            share = n / size if size else 0.0
+            target, classifier = n, 0
+            for family in families or []:
+                applicable = family_ids(base, family)
+                if not applicable:
+                    continue
+                if family == "reconsideration":
+                    target += round(share * len(applicable))
+                    continue
+                stored = sum(
+                    min(k, len([r for r in v if not r.get("fallback")])) if family in REPEAT_FAMILIES else len(v)
+                    for i, v in load_family(task_name(base), family).items() if i in applicable
+                )
+                target += round(share * stored)
+            if sim_k is not None:
+                applicable = family_ids(base, SCENARIO)
+                trees = sum(
+                    min(sim_k, len(v)) for i, v in load_family(task_name(base), SCENARIO).items() if i in applicable
+                )
+                walked = round(share * trees)
+                target += DEPTH * walked
+                classifier = (DEPTH - 1) * walked  # the last turn is never classified
+            # ponytail: judge counts every target call x graders; detection rows are
+            # regex-scored, so this is an upper bound — subtract per-source shapes if it matters
+            for column, value in zip(totals, (n, target * epochs, target * n_graders * epochs, classifier * epochs)):
+                totals[column] += value
+    return estimate
+
+
+LIMIT_SHUFFLE_SEED = 1
+
+
+def run_dir(model_id: str, run_id: str, limit: int | None) -> Path:
+    '''
+    logs/<model>/<run_id>, or logs/<model>/<run_id>-limitN under --limit: a
+    limit is not part of eval_set's task identity, so a 3-sample success log in
+    `current` would otherwise be reused as the full run's result.
+    '''
+    suffix = f"-limit{limit}" if limit else ""
+    return Path("logs") / model_id / f"{run_id}{suffix}"
+
+
+def move_aside(path: Path) -> Path | None:
+    '''--rerun: keep the old run dir next to the new one under a timestamp.'''
+    if not path.exists():
+        return None
+    target = path.with_name(f"{path.name}-{datetime.now():%Y%m%dT%H%M%S}")
+    shutil.move(str(path), str(target))
+    return target
+
+
+def start_eval(tasks: list, model: str, model_args: dict, log_dir: Path, args) -> list:
+    '''
+    eval_set over one run dir resumes the matching log per task: a `success`
+    log is skipped and an unfinished one re-runs only its missing samples, so
+    a preempted or killed run resumes where it stopped. Logs of other tasks
+    (clusters already scored, or outside --only) and of older configurations
+    are left alone; a task whose configuration changed re-runs in full.
+    Skipped tasks come back as header-only logs (no samples); the results tree
+    needs samples, so those are re-read.
+    '''
+    _, logs = eval_set(
+        tasks,
+        log_dir=str(log_dir),
+        log_dir_allow_dirty=True,
+        retry_attempts=3,
+        retry_wait=60,
+        model=model,
+        model_args=model_args,
+        continue_on_fail=True,
+        # tolerate scattered sample-level errors (e.g. an unparseable
+        # OpenRouter response that slips past retries) instead of failing
+        # the whole task — only fail if >10% of samples error
+        fail_on_error=0.1,
+        epochs=args.epochs,
+        # a fixed seed, not True: a resumed --limit run must select the
+        # same subset or eval_set discards the previous log
+        sample_shuffle=LIMIT_SHUFFLE_SEED if args.limit else None,
+        limit=args.limit,
+        max_connections=args.max_connections,
+        max_retries=args.max_retries,
+        attempt_timeout=args.attempt_timeout,
+        timeout=args.timeout,
+        working_limit=args.working_limit,
+        display=display_mode(),
+        # Eval-level cache benefits judge/grader calls (the bulk of API
+        # traffic under --perturb) and retries. The replay/reconsideration
+        # solvers opt out explicitly (cache=False in
+        # pipeline/utils/replay.py): their target calls
+        # replay identical prompts across epochs and must stay independent
+        # generations, so inheriting this would collapse them.
+        cache=True,
+    )
+    reused = []
+    for log in logs:
+        if not log.samples:
+            print(f"[resume] reused finished log for {log.eval.task} from {log_dir} (--rerun or a new --run-id to regenerate)")
+            log = read_eval_log(log.location)
+        reused.append(log)
+    return reused
+
+
 def parse():
     
     args = ArgumentParser()
@@ -123,10 +245,19 @@ def parse():
         "--specialty", "-s", required=False, default=None, help="What the model has been tuned or designated to do (i.e. coding, math, etc)."
     )
     args.add_argument(
-        "--epochs", "-e", required=False, default=1, help="The number of turns to generate a response per sample and average over."
+        "--epochs", "-e", required=False, type=int, default=1, help="The number of turns to generate a response per sample and average over."
     )
     args.add_argument(
-        "--rerun", required=False, action='store_true', help="Reruns all results regardless of whether they are present in an existing file."
+        "--rerun", required=False, action='store_true',
+        help="Rerun every requested risk even if it already has results, and move the run's "
+             "log directory (logs/MODEL/RUN_ID) aside under a timestamp first, so the resume "
+             "logic cannot pick up its old logs."
+    )
+    args.add_argument(
+        "--run-id", required=False, default="current",
+        help="Name of the log directory under logs/MODEL/ this run writes to and resumes from "
+             "(default: current). A finished task in it is skipped and an unfinished one "
+             "re-runs only its missing samples; a --limit run uses RUN_ID-limitN."
     )
     args.add_argument(
         "--llamaguard", required=False, default="openrouter/meta-llama/llama-guard-4-12b",
@@ -139,15 +270,14 @@ def parse():
     args.add_argument(
         "--only", "-o", required=False, nargs="+", metavar="RISK",
         help="Run only these systemic-risk clusters (e.g. --only cyber manipulation). "
-             "Other existing results are preserved."
+             "Other existing results are preserved. A finished log in the run dir is reused, not re-run."
     )
     args.add_argument(
-        "--perturb", required=False, nargs="+", default=ALL_PERTURB_FAMILIES, choices=sorted(ALL_PERTURB_FAMILIES),
+        "--perturb", required=False, nargs="+", default=sorted(ALL_PERTURB_FAMILIES), choices=sorted(ALL_PERTURB_FAMILIES),
         metavar="FAMILY",
-        help="Run surface-perturbation reliability auditing (see pipeline/stage2_perturbation/) for these families "
-             "(e.g. --perturb paraphrase reconsideration) on top of every benchmark in --only "
-             "(or all benchmarks if --only is omitted). All by default. Replays the pregenerated "
-             "variants from datasets/generated/ (run generate.py first); reconsideration runs live."
+        help="Run surface-perturbation auditing for these families (paraphrase register past_tense "
+             "multilingual framing persona reconsideration; default: all). Replays datasets/generated/ "
+             "(run generate.py first); reconsideration runs live."
     )
     args.add_argument(
         "--no-perturb", required=False, action='store_true',
@@ -157,20 +287,28 @@ def parse():
     args.add_argument(
         "--perturb-k", required=False, type=int, default=1,
         help="Use up to this many stored variants per item for the rewrite families "
-             "(paraphrase, register, identity_strip); default=1. Must not exceed the k the "
+             "(paraphrase, register, past_tense); default=1. Must not exceed the k the "
              "artifacts were generated with."
     )
     args.add_argument(
         "--simulate", required=False, action='store_true',
         help="Run stage-3 scenario simulation (see pipeline/stage3_simulation/) on top of every "
-             "benchmark in --only (or all benchmarks if --only is omitted): the target is re-run "
-             "on the pregenerated deployment-scenario reframings from datasets/generated/ "
+             "benchmark in --only (or all benchmarks if --only is omitted): the target walks the "
+             "pregenerated deployment-scenario trees (up to 3 turns; branch chosen by --sim-classifier) "
+             "from datasets/generated/ "
              "(run generate.py --simulate first). Composes with --perturb in one run/one log: "
-             "the panel reports safety_scenario/stability_scenario next to stage 2's safety_perturbed/stability."
+             "the panel reports safety_scenario next to stage 2's safety_<family>/stability_under_attack."
     )
     args.add_argument(
-        "--sim-k", required=False, type=int, default=1,
-        help="Use up to this many stored scenarios per item under --simulate; default=1."
+        "--sim-k", required=False, type=int, default=2,
+        help="Use up to this many stored scenario trees per item under --simulate; default=2."
+    )
+    args.add_argument(
+        "--sim-classifier", required=False, default=DEFAULT_CLASSIFIER,
+        help="Model that labels each target reply refuse/hedge/comply to choose the next stored "
+             "turn under --simulate (pipeline/stage3_simulation/classify.py). Regex-prefiltered, "
+             "disk-cached with no expiry, canaried with the graders. "
+             f"Default: {DEFAULT_CLASSIFIER}."
     )
     args.add_argument(
         "--max-connections", required=False, type=int, default=100,
@@ -275,7 +413,7 @@ def refusal_record(evaluations) -> dict:
     }
 
 
-def check_status(evaluations):
+def check_status(evaluations, run_id: str | None = None):
     '''
     Summarise a benchmark's EvalLogs into a status record:
     success (every task log succeeded), partial (some did), or failed —
@@ -290,6 +428,10 @@ def check_status(evaluations):
     empty assistant message for all 562 manipulation samples and the run was
     recorded as `success 562/562`, so the empty count is tallied here and
     demotes the status exactly as errors do.
+
+    Also sums each log's stats.model_usage into "usage" (per model name,
+    tokens and total_cost — null when the provider reports no price) and
+    records the run_id the logs came from.
     '''
     ok = sum(1 for log in evaluations if log.status == "success")
     # log.results is None on an errored task, so counting only from it
@@ -333,12 +475,24 @@ def check_status(evaluations):
         print(f"[WARNING] provider refused {refusals['provider_refused']} sample(s) "
               f"on content policy ({sources})")
 
+    usage: dict[str, dict] = {}
+    for log in evaluations:
+        model_usage = getattr(getattr(log, "stats", None), "model_usage", None) or {}
+        for model, used in model_usage.items():
+            tally = usage.setdefault(model, {"input_tokens": 0, "output_tokens": 0, "total_cost": None})
+            tally["input_tokens"] += used.input_tokens
+            tally["output_tokens"] += used.output_tokens
+            if used.total_cost is not None:
+                tally["total_cost"] = (tally["total_cost"] or 0.0) + used.total_cost
+
     return {
         "status": status,
         "completed_samples": completed,
         "total_samples": total,
         "empty_completions": empty,
         "refusals": refusals,
+        "usage": usage,
+        "run_id": run_id,
     }
 
 
@@ -362,60 +516,61 @@ def record_routing(statuses: dict, endpoints: list[dict] | None) -> dict:
 
 # ----- Updates models/models.json -----
 
-def update(results, models, idx):
-    '''
-    Summarises results and updates models/models.json
-    '''
+def completed_risks(entry: dict) -> set[str]:
+    '''Risks a rerun may skip: status success, a non-null headline, and a
+    current-schema tree (pre-refactor records have no aggregate `tail`, so their
+    headline means something else and must be recomputed).'''
+    return {
+        risk for risk, status in (entry.get('status') or {}).items()
+        if status.get('status') == 'success'
+        and entry.get('scores', {}).get(risk) is not None
+        and "tail" in (((entry.get('results') or {}).get(risk) or {}).get('aggregate') or {})
+    }
 
-    if models: # store previous only if previous results exist
-        with open('models/models_previous.json', 'w') as f: # store as a safety net
-            json.dump(models, f, indent=4)
 
-    # ----- store ------
-    # if idx != -1, model results already exist
-    if idx != -1:
-        prev = models[idx]
+RUN_OWNED_FIELDS = ("scores", "results", "status", "aggregate")
+IDENTITY_FIELDS = ("id", "name", "company", "region", "specialty")
+
+
+def update(results):
+    '''Merge this run's results over the stored record, write models/results/<slug>.json, rebuild models/models.json.
+
+    The stored record is read here, at write time, not from the list loaded at
+    process start: anything written to it during a multi-hour run (aa_* from
+    scripts/match_aa_index.py) must survive.'''
+    path = model_result_path(results["id"])
+    if path.exists():
+        prev = json.loads(path.read_text())
         prev_status = prev.get('status', {})
 
         # never overwrite a previously-complete benchmark result with a
         # partial/failed rerun — drop the demoted rerun and keep the old one
         for benchmark, status in list(results.get('status', {}).items()):
-            previously_complete = (
-                benchmark in prev.get('scores', {})
-                and prev_status.get(benchmark, {}).get('status', 'success') == 'success'
-            )
-            if status.get('status') != 'success' and previously_complete:
+            if status.get('status') != 'success' and benchmark in completed_risks(prev):
                 print(f"[WARNING] {benchmark}: rerun was {status.get('status')}; keeping previous complete result")
                 results['scores'].pop(benchmark, None)
                 results['results'].pop(benchmark, None)
                 results['status'].pop(benchmark, None)
-                results.get('partial_scores', {}).pop(benchmark, None)
 
         # take values from overlapping keys from the new results (right side of pipe operator)
         results['scores'] = prev.get('scores', {}) | results['scores']
         results['results'] = prev.get('results', {}) | results.get('results', {})
         results['status'] = prev_status | results.get('status', {})
-        results['partial_scores'] = (
-            prev.get('partial_scores', {}) | results.get('partial_scores', {})
-        )
         # Recomputed after the merge, so a --only rerun reports across every
         # risk the model has, not just the ones this run touched.
         results['aggregate'] = results_tree.model_aggregate(results['results'])
-        models[idx] = results
-    else:
-        # add new entry
-        models.append(results)
 
-    # A benchmark that has a complete score has no use for the partial figure
-    # it supersedes: two numbers for one benchmark read as equally current.
-    for benchmark in results.get('scores', {}):
-        results.get('partial_scores', {}).pop(benchmark, None)
-    if not results.get('partial_scores'):
-        results.pop('partial_scores', None)
+        # Start from the stored record so keys this run does not own
+        # (aa_* from scripts/match_aa_index.py, hand edits) survive; identity
+        # comes from the CLI only where the record has none.
+        results = (
+            prev
+            | {key: results[key] for key in RUN_OWNED_FIELDS}
+            | {key: results.get(key) for key in IDENTITY_FIELDS if prev.get(key) is None}
+        )
 
-    # write models file back
-    with open('models/models.json', 'w') as f:
-        json.dump(models, f, indent=4)
+    write_json_atomic(path, results)
+    rebuild_models_json()
 
 
 # ----- main ------
@@ -431,7 +586,11 @@ if __name__ == "__main__":
 
     grader = args.grader if args.grader else load_graders()
     model_id = args.model.split("/")[-1]
-    log_dir = f"logs/{model_id}"
+    log_dir = run_dir(model_id, args.run_id, args.limit)
+    if args.rerun:
+        moved = move_aside(log_dir)
+        if moved:
+            print(f"--rerun: moved previous logs to {moved}")
 
     print(f"Model: {model_id}")
     print(f"Grader(s): {grader}")
@@ -470,10 +629,10 @@ if __name__ == "__main__":
 
     # Stage 2 and stage 3 compose in one run: both layer condition families
     # onto the same Task (one control generation, one log), and the wrapped
-    # scorers report them under separate metric pools — safety_perturbed/stability for
-    # the perturbation families, safety_scenario/stability_scenario for the
-    # scenario family. The certification score is the worst condition across
-    # every enabled family (see pipeline/utils/scoring.py).
+    # scorers report them under separate metric pools — safety_<family>/stability_under_attack
+    # for the perturbation families, safety_scenario for the scenario family, plus a
+    # safety_worst roll-up over every condition, control included. The certification score is the
+    # tail of the per-item worst case (see pipeline/utils/results.py).
     run_perturb = bool(args.perturb) and not args.no_perturb
 
     # check for existing model results
@@ -491,12 +650,13 @@ if __name__ == "__main__":
         if unknown:
             print(f"[WARNING] Unknown benchmark keys (ignored): {', '.join(sorted(unknown))}")
     elif idx != -1 and not args.rerun:
-        # default: skip benchmarks that already have results
-        tasks_to_skip = set(models[idx]['scores'].keys())
+        # default: skip risks that already certified cleanly
+        tasks_to_skip = completed_risks(models[idx])
 
     if tasks_to_skip:
         print(f"Skipping: {', '.join(sorted(tasks_to_skip))}")
         BENCHMARKS = {key: entry for key, entry in BENCHMARKS.items() if key not in tasks_to_skip}
+    require_families_column(BENCHMARKS)
 
     # Inspect treats an empty task list exactly like None: it discovers every
     # @task in the working directory and runs those instead (see
@@ -509,12 +669,11 @@ if __name__ == "__main__":
         sys.exit(0)
 
     # Fail fast — before any eval spends money — on the three things that make
-    # a whole run worthless: an unusable judge (every sample errors on scoring,
-    # or worse, silently abstains into a perfect score), a target that answers
-    # with nothing (the same failure one layer up), and missing artifacts.
-    validate_graders(grader)
-    validate_target(args.model, model_args)
-
+    # a whole run worthless: missing artifacts (checked first, offline), an
+    # unusable judge (every sample errors on scoring, or worse, silently
+    # abstains into a perfect score), and a target that answers with nothing
+    # (the same failure one layer up). The call estimate prints before the
+    # two network canaries.
     validate_artifacts(
         BENCHMARKS,
         families=args.perturb if run_perturb else None,
@@ -523,6 +682,27 @@ if __name__ == "__main__":
         sim_k=args.sim_k,
         limit=args.limit,
     )
+
+    estimate = estimate_calls(
+        BENCHMARKS,
+        families=args.perturb if run_perturb else [],
+        k=args.perturb_k,
+        sim_k=args.sim_k if args.simulate else None,
+        graders=grader,
+        limit=args.limit,
+        epochs=args.epochs,
+    )
+    print(f"\n{'risk':<18}{'samples':>8}{'target':>9}{'judge':>9}{'classifier':>11}")
+    for risk, calls in estimate.items():
+        print(f"{risk:<18}{calls['samples']:>8}{calls['target']:>9}{calls['judge']:>9}{calls['classifier']:>11}")
+    totals = {column: sum(calls[column] for calls in estimate.values()) for column in ("samples", "target", "judge", "classifier")}
+    print(f"{'total':<18}{totals['samples']:>8}{totals['target']:>9}{totals['judge']:>9}{totals['classifier']:>11}  (upper bounds)\n")
+
+    graders_to_check = list(grader) if isinstance(grader, list) else [grader]
+    if args.simulate:
+        graders_to_check.append(args.sim_classifier)
+    validate_graders(graders_to_check)
+    validate_target(args.model, model_args)
 
     if run_perturb or args.simulate:
         # Attaches one replay solver per enabled condition family (stage-2
@@ -536,36 +716,7 @@ if __name__ == "__main__":
             families=args.perturb if run_perturb else [],
             k=args.perturb_k,
             sim_k=args.sim_k if args.simulate else None,
-        )
-
-    def start_eval(tasks: list):
-        return eval(
-            tasks,
-            model=args.model,
-            model_args=model_args,
-            log_dir=log_dir,
-            continue_on_fail=True,
-            retry_on_error=2,
-            # tolerate scattered sample-level errors (e.g. an unparseable
-            # OpenRouter response that slips past retries) instead of failing
-            # the whole task — only fail if >10% of samples error
-            fail_on_error=0.1,
-            epochs=args.epochs,
-            sample_shuffle=bool(args.limit),
-            limit=args.limit,
-            max_connections=args.max_connections,
-            max_retries=args.max_retries,
-            attempt_timeout=args.attempt_timeout,
-            timeout=args.timeout,
-            working_limit=args.working_limit,
-            display=display_mode(),
-            # Eval-level cache benefits judge/grader calls (the bulk of API
-            # traffic under --perturb) and retries. The replay/reconsideration
-            # solvers opt out explicitly (cache=False in
-            # pipeline/utils/replay.py): their target calls
-            # replay identical prompts across epochs and must stay independent
-            # generations, so inheriting this would collapse them.
-            cache=True,
+            sim_classifier=args.sim_classifier,
         )
 
     # ----- run -----
@@ -581,7 +732,7 @@ if __name__ == "__main__":
 
     all_tasks = [task for entry in BENCHMARKS.values() for task in entry["tasks"]]
     try:
-        logs = start_eval(all_tasks) or []
+        logs = start_eval(all_tasks, args.model, model_args, log_dir, args)
     except Exception as e:
         print(f"[ERROR] evaluation failed: {e}")
         logs = []
@@ -596,9 +747,10 @@ if __name__ == "__main__":
         if not res:
             statuses.setdefault(benchmark, {"status": "failed", "error": "no log produced"})
             print(f"[ERROR] {benchmark}: no log produced")
+            scores[benchmark] = None
             continue
 
-        statuses[benchmark] = check_status(res)
+        statuses[benchmark] = check_status(res, run_id=args.run_id)
         if statuses[benchmark]['status'] != 'success':
             print(f"[WARNING] {benchmark}: run was {statuses[benchmark]['status']} "
                   f"({statuses[benchmark]['completed_samples']}/{statuses[benchmark]['total_samples']} samples)")
@@ -615,16 +767,15 @@ if __name__ == "__main__":
         # One tree per risk: every condition of every benchmark comes out of the
         # same log (pipeline/registry.py::apply_stages), so the builder splits
         # them by family itself rather than needing the run sliced up here.
-        tree = results_tree.build(res, DIAGNOSTIC_SOURCES)
+        tree = results_tree.build(res)
         results_by_risk.update(tree)
 
-        # The flat headline stays: certify.py's own skip logic reads
-        # `scores.keys()` to decide what a rerun can leave alone, and a reader
-        # wants one number per risk without walking the tree.
+        # The flat headline: the tail (CVaR@10% of per-item worsts, spec §4.2).
+        # A run that did not finish cleanly publishes its tree but no headline;
+        # completed_risks() reads `scores` to decide what a rerun can skip.
         aggregate = (tree.get(entry["name"], {}).get("aggregate") or {})
         scores[benchmark] = (
-            aggregate.get("worst")
-            if aggregate.get("worst") is not None else -1
+            aggregate.get("tail") if statuses[benchmark]["status"] == "success" else None
         )
 
     if (not args.limit):
@@ -641,4 +792,4 @@ if __name__ == "__main__":
             "status": record_routing(statuses, routing_record),
         }
 
-        update(results, models, idx)
+        update(results)

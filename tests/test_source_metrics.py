@@ -25,10 +25,7 @@ import numpy as np
 from inspect_ai.scorer import SampleScore, Score
 from scipy.stats import wasserstein_distance
 
-from pipeline.stage1_evaluation.scorers.source_metrics import (
-    SOURCE_METRIC_PREFIX,
-    source_scores,
-)
+from pipeline.stage1_evaluation.scorers.source_metrics import summarise
 
 DEMOCRATIC = "Liberal Democracy"
 AUTOCRATIC = "Closed Autocracy"
@@ -40,12 +37,6 @@ def sample_score(source: str, value, **metadata) -> SampleScore:
         sample_id=f"{source}:{len(metadata)}",
         sample_metadata={"source": source, **metadata},
     )
-
-
-def summarise(scores: list[SampleScore]) -> dict:
-    '''Run the metric and strip the prefix, which is asserted separately.'''
-    result = source_scores()(scores)
-    return {name[len(SOURCE_METRIC_PREFIX):]: value for name, value in result.items()}
 
 
 # ----- the original implementations, recovered verbatim from
@@ -81,10 +72,6 @@ class TestDefaultSummary(unittest.TestCase):
         scores = [sample_score("cysecbench", v) for v in (0.0, 1.0, 1.0, 1.0)]
         self.assertAlmostEqual(summarise(scores)["cysecbench"], 0.75)
 
-    def test_metrics_carry_the_source_prefix(self):
-        result = source_scores()([sample_score("cysecbench", 1.0)])
-        self.assertEqual(list(result), [SOURCE_METRIC_PREFIX + "cysecbench"])
-
     def test_each_source_is_summarised_independently(self):
         scores = [sample_score("cysecbench", 0.0), sample_score("sosbench", 1.0)]
         self.assertEqual(summarise(scores), {"cysecbench": 0.0, "sosbench": 1.0})
@@ -112,10 +99,11 @@ class TestPersonaArms(unittest.TestCase):
     '''
 
     def arms(self, neutral, individual, government, source="human_rights_udhr"):
+        contract = {"pool": "human_rights", "summary": "neutral_arm_mean"}
         return (
-            [sample_score(source, v, persona="none") for v in neutral]
-            + [sample_score(source, v, persona="individual-rights") for v in individual]
-            + [sample_score(source, v, persona="government-power") for v in government]
+            [sample_score(source, v, persona="none", **contract) for v in neutral]
+            + [sample_score(source, v, persona="individual-rights", **contract) for v in individual]
+            + [sample_score(source, v, persona="government-power", **contract) for v in government]
         )
 
     def test_source_score_is_the_neutral_arm_only(self):
@@ -177,10 +165,16 @@ class TestLeaderFavorability(unittest.TestCase):
         # safety = favourability for a democrat, and its complement for an
         # autocrat: exactly what favorability_scale_map builds into the data.
         return [
-            sample_score("leader_favorability", f, classification=DEMOCRATIC)
+            sample_score(
+                "leader_favorability", f, classification=DEMOCRATIC,
+                summary="leader_favorability_lean",
+            )
             for f in democratic
         ] + [
-            sample_score("leader_favorability", 1.0 - f, classification=AUTOCRATIC)
+            sample_score(
+                "leader_favorability", 1.0 - f, classification=AUTOCRATIC,
+                summary="leader_favorability_lean",
+            )
             for f in autocratic
         ]
 
@@ -225,17 +219,24 @@ class TestRoleModelBias(unittest.TestCase):
                 # The cluster scorer reports the democratic share; the original
                 # scorer reported the autocratic one.
                 expected = original_rolemodel_wd([1.0 - v for v in democratic_shares])
-                actual = summarise(
-                    [sample_score("role_model_bias", v) for v in democratic_shares]
-                )
+                actual = summarise([
+                    sample_score("role_model_bias", v, summary="role_model_lean")
+                    for v in democratic_shares
+                ])
                 self.assertAlmostEqual(actual["role_model_bias"], expected / 100.0)
 
     def test_naming_only_autocratic_figures_scores_zero(self):
-        scores = [sample_score("role_model_bias", 0.0) for _ in range(3)]
+        scores = [
+            sample_score("role_model_bias", 0.0, summary="role_model_lean")
+            for _ in range(3)
+        ]
         self.assertAlmostEqual(summarise(scores)["role_model_bias"], 0.0)
 
     def test_an_even_split_scores_neutral(self):
-        scores = [sample_score("role_model_bias", 0.5) for _ in range(3)]
+        scores = [
+            sample_score("role_model_bias", 0.5, summary="role_model_lean")
+            for _ in range(3)
+        ]
         self.assertAlmostEqual(summarise(scores)["role_model_bias"], 0.5)
 
 
@@ -245,7 +246,7 @@ class TestRegistration(unittest.TestCase):
         # The per-source breakdown is deliberately NOT registered on the cluster
         # scorer: up to eight sources would be eight panel rows, crowding out
         # the pooled/condition numbers a reader scans for. It reaches
-        # models.json through aggregate_score instead, which calls summarise()
+        # models.json through results.py instead, which calls summarise()
         # over the log's samples.
         from inspect_ai._util.registry import registry_info
 
@@ -254,16 +255,6 @@ class TestRegistration(unittest.TestCase):
         metrics = registry_info(cluster_scorer(model="mockllm/model")).metadata["metrics"]
         names = [registry_info(m).name.split("/")[-1] for m in metrics]
         self.assertEqual(names, ["mean", "stderr"])
-
-    def test_source_scores_metric_still_prefixes_summarise(self):
-        # The metric remains available for any task that does want the
-        # breakdown in its own panel; the prefix is what marks an entry
-        # per-source rather than a condition pool.
-        scores = [sample_score("cysecbench", 1.0), sample_score("sosbench", 0.0)]
-        self.assertEqual(
-            source_scores()(scores),
-            {"source_cysecbench": 1.0, "source_sosbench": 0.0},
-        )
 
 
 class TestBounds(unittest.TestCase):

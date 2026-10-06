@@ -31,8 +31,9 @@ from inspect_ai.dataset import Sample
 from inspect_ai.model import ChatMessageSystem, ChatMessageUser
 
 from pipeline.stage1_evaluation.evals.common import DATASETS_DIR, csv_samples
+from pipeline.stage1_evaluation.screen import attribution_screen
 from pipeline.stage1_evaluation.scorers.cluster import cluster_scorer
-from inspect_ai.solver import generate
+from inspect_ai.solver import chain, generate
 
 RISKS = ["cbrn", "cyber", "loss_of_control", "manipulation"]
 
@@ -89,6 +90,13 @@ def _to_sample(row: dict) -> Sample:
             "item_text": row["item_text"],
             "prompt_template": row["prompt_template"],
             "elicitation_family": row["elicitation_family"],
+            "judge_style": row.get("judge_style") or "reasoned",
+            "role": row.get("role") or "pooled",
+            "pool": row.get("pool") or "",
+            "summary": row.get("summary") or "mean",
+            # The single stage-2/3 applicability gate (pipeline/utils/replay.py).
+            # None for a CSV built before the column existed: every family applies.
+            "families": json.loads(row["families"]) if row.get("families") else None,
         },
     )
 
@@ -105,7 +113,9 @@ def available(risk: str) -> bool:
 def _cluster_task(risk: str, grader: str | list[str]) -> Task:
     return Task(
         dataset=cluster_dataset(risk),
-        solver=generate(),
+        # A source whose benchmark screens on a prerequisite gets that screen
+        # first; every other row passes straight through (screen.py).
+        solver=chain(attribution_screen(), generate()),
         scorer=cluster_scorer(model=grader),
         name=risk,
     )

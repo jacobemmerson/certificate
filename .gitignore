@@ -11,3 +11,10 @@ Live-Human-Rights-Bench/
 
 # huggingface_hub download bookkeeping inside vendored datasets
 .cache/huggingface/
+# local analysis scratch (reports, rater exports)
+analysis/
+# prepare.py caches: embeddings and Hermes screen verdicts (rebuildable)
+datasets/cache/
+
+# certify.py rebuild lock
+models/results/.rebuild.lock

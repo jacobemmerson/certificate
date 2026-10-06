@@ -12,10 +12,8 @@ dependencies = [
     "inspect-ai==0.3.246",
     "openai>=2.45.0",
     "anthropic>=0.116.0",
-    # models / inference — the adversarial-attack extras (litellm[proxy],
-    # vllm) live on the adversarial-attacks branch, not here
-    "torch>=2.4.0",
-    "transformers>=5",
+    # inference libraries are deliberately absent: vLLM runs via uvx, embeddings via
+    # `uv run --no-project --with sentence-transformers` (scripts/embed_items.py)
     "huggingface-hub",
     # analysis / plotting
     "requests",

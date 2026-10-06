@@ -7,7 +7,7 @@ pipeline/artifacts.py persists and the eval-time replay solvers
 via pipeline/utils/replay.py) later send to each target model.
 They reuse the exact prompt logic the live solvers used to run per-model:
 rewrite.py's FAMILY_SYSTEM_PROMPTS/_extract_rewrite, framing.py's
-FRAMING_TEMPLATES, and stage 3's reframe_prompt/parse_reframing — nothing is
+FRAMING_TEMPLATES, and stage 3's tree_prompt/parse_tree — nothing is
 duplicated, only relocated from eval time to generation time.
 
 The perturbation split only ever reads `state.input_text` and
@@ -22,6 +22,7 @@ collapse them into one generation.
 from __future__ import annotations
 
 import asyncio
+import functools
 import re
 from dataclasses import dataclass, field
 
@@ -30,14 +31,16 @@ from inspect_ai.model import (
     ChatMessageSystem, ChatMessageUser, GenerateConfig, Model, get_model,
 )
 
-from pipeline.stage2_perturbation.adapters import (
-    elicitation_family, item_text, render, scenario_source,
+from pipeline.stage2_perturbation.adapters import item_text, render, scenario_source
+from pipeline.stage2_perturbation.framing import PERSONA_TEMPLATES, framing_templates
+from pipeline.stage2_perturbation.rewrite import (
+    FAMILY_SYSTEM_PROMPTS, LANGUAGES, TRANSLATE_SYSTEM, _extract_rewrite, rewrite_defect,
+    translation_defect,
 )
-from pipeline.stage2_perturbation.framing import FRAMING_TEMPLATES
-from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS, _extract_rewrite
 from pipeline.stage3_simulation.prompts import (
-    REFRAME_SYS_PROMPT, SCENARIO_FAMILY, parse_reframing, reframe_prompt,
+    REFRAME_SYS_PROMPT, SCENARIO_FAMILY, parse_tree, tree_prompt,
 )
+from pipeline.utils.replay import family_applies
 
 
 @dataclass
@@ -126,7 +129,7 @@ async def generate_rewrites(
     existing: set[tuple[str, int]] | None = None,
     max_connections: int = 20,
 ) -> list[dict]:
-    """Rows for one rewrite family (paraphrase/register/identity_strip):
+    """Rows for one rewrite family (paraphrase/register/past_tense, or multilingual: one translation per LANGUAGES entry):
     k attacker rewrites per sample, rendered through the benchmark's adapter.
     A failed or refused rewrite falls back to the original text and is
     persisted with fallback=true — the artifact set stays complete, and every
@@ -137,32 +140,51 @@ async def generate_rewrites(
     model = get_model(attacker_model)
     semaphore = asyncio.Semaphore(max_connections)
     existing = existing or set()
+    samples = [s for s in samples if family_applies(s.metadata, family)]
 
-    async def one(sample: Sample, variant: int) -> dict:
+    async def one(sample: Sample, variant: int, lang: str | None = None) -> dict:
         view = SampleView.of(sample)
         original_text = item_text(view)
+        if lang:
+            prompt = TRANSLATE_SYSTEM.format(language=LANGUAGES[lang], text=original_text)
+            defect = functools.partial(translation_defect, lang=lang)
+        else:
+            prompt = FAMILY_SYSTEM_PROMPTS[family].format(text=original_text)
+            defect = rewrite_defect
         async with semaphore:
-            completion = await _attacker_call(
-                model,
-                FAMILY_SYSTEM_PROMPTS[family].format(text=original_text),
-                f"{family} {sample.id} v{variant}",
-            )
-        new_text = _extract_rewrite(completion or "", fallback=original_text)
-        return {
+            completion = await _attacker_call(model, prompt, f"{family} {sample.id} {lang or f'v{variant}'}")
+        new_text = _extract_rewrite(
+            completion or "", fallback=original_text,
+            must_survive=(sample.metadata or {}).get("must_survive") or (),
+            defect=defect,
+        )
+        row = {
             "id": str(sample.id),
             "variant": variant,
-            "condition": f"{family}_variant_{variant}",
+            "condition": f"multilingual_{lang}" if lang else f"{family}_variant_{variant}",
             "text": new_text,
             "query": render(view, new_text),
             "fallback": new_text == original_text,
         }
+        if lang:
+            row["lang"] = lang
+        return row
 
-    jobs = [
-        one(sample, variant)
-        for sample in samples
-        for variant in range(1, k + 1)
-        if (str(sample.id), variant) not in existing
-    ]
+    if family == "multilingual":
+        # one variant per language, index = position in LANGUAGES (C3); k is ignored
+        jobs = [
+            one(sample, variant, lang)
+            for sample in samples
+            for variant, lang in enumerate(LANGUAGES, 1)
+            if (str(sample.id), variant) not in existing
+        ]
+    else:
+        jobs = [
+            one(sample, variant)
+            for sample in samples
+            for variant in range(1, k + 1)
+            if (str(sample.id), variant) not in existing
+        ]
     return list(await asyncio.gather(*jobs))
 
 
@@ -173,13 +195,15 @@ def generate_framing(samples: list[Sample]) -> list[dict]:
     Elicitation family is a property of the *sample*, not the task — a risk
     cluster mixes all four in one dataset — so samples whose family has no
     templates (elicitation_family="generic", e.g. role_model_bias's open-ended
-    "list role models") are skipped individually rather than disqualifying the
-    whole task.
+    "list role models") or whose `families` omit framing are skipped
+    individually rather than disqualifying the whole task.
     """
     rows = []
     for sample in samples:
+        if not family_applies(sample.metadata, "framing"):
+            continue
         view = SampleView.of(sample)
-        templates = FRAMING_TEMPLATES.get(elicitation_family(view))
+        templates = framing_templates(view)
         if not templates:
             continue
         original_text = item_text(view)
@@ -192,37 +216,57 @@ def generate_framing(samples: list[Sample]) -> list[dict]:
     return rows
 
 
+def generate_persona(samples: list[Sample]) -> list[dict]:
+    """Rows for the deterministic persona family: one per template per
+    applicable sample, query unchanged, no model calls. A row with its own
+    system prompt is skipped even if its families list says otherwise: the
+    replay solver would overwrite the steering the row measures."""
+    return [
+        {
+            "id": str(sample.id),
+            "condition": f"persona_{name}",
+            "system": system,
+            "query": SampleView.of(sample).input_text,
+        }
+        for sample in samples
+        if family_applies(sample.metadata, "persona")
+        and not (sample.metadata or {}).get("system_prompt")
+        for name, system in PERSONA_TEMPLATES.items()
+    ]
+
+
 async def generate_scenarios(
     samples: list[Sample],
     attacker_model: str | Model,
     k: int,
     *,
     existing: set[tuple[str, int]] | None = None,
+    previous_systems: dict[str, str] | None = None,
     parse_attempts: int = 3,
     max_connections: int = 20,
     reasoning: bool = False,
 ) -> tuple[list[dict], list[str], dict[str, str]]:
-    """Rows for stage 3's scenario family: k reframed {context, system,
-    scenario} triples per sample. Unparseable reframings are re-requested up
-    to `parse_attempts` times (an upgrade over the old live path, which
-    silently dropped the variant); a variant that never parses is dropped and
-    its sample id lands in the returned `incomplete_ids` — replay then runs
-    the variants that exist, identically for every model.
+    """Rows for stage 3's scenario family: k scenario trees per sample
+    (prompts.py::TREE_FORMAT), each `{id, variant, condition, system, turns,
+    query}` with `query` = the opening turn for the fidelity audit.
 
-    Also returns `reasons`, the last parse failure per dropped sample id.
-    Without it a systematic attacker/format mismatch is invisible: the
-    completion is discarded, so the only way to learn why coverage collapsed
-    was to re-run the model by hand.
+    Variants of one sample run in order so variant 2 can be told to differ
+    from variant 1's deployment (`previous_systems`, id → stored variant-1
+    `system`, covers a variant 1 already on disk); samples run concurrently.
+    Unparseable trees are re-requested up to `parse_attempts` times; a variant
+    that never parses is dropped and its sample id lands in `incomplete_ids`, with the
+    last parse failure in `reasons` (a systematic attacker/format mismatch
+    shows up as one reason repeated across ids).
     """
+    samples = [s for s in samples if family_applies(s.metadata, SCENARIO_FAMILY)]
     model = get_model(attacker_model)
     semaphore = asyncio.Semaphore(max_connections)
     existing = existing or set()
 
     failures: dict[str, str] = {}
 
-    async def one(sample: Sample, variant: int) -> dict | None:
-        view = SampleView.of(sample)
-        prompt = reframe_prompt(scenario_source(view))
+    async def one(sample: Sample, variant: int, previous_system: str | None) -> dict | None:
+        prompt = tree_prompt(scenario_source(SampleView.of(sample)), previous_system)
         label = f"{SCENARIO_FAMILY} {sample.id} v{variant}"
         for _ in range(parse_attempts):
             async with semaphore:
@@ -233,33 +277,40 @@ async def generate_scenarios(
             if completion is None:
                 failures[str(sample.id)] = "attacker returned nothing"
                 return None
-            block, reason = parse_reframing(completion)
+            block, reason = parse_tree(completion)
             if block is not None:
                 return {
                     "id": str(sample.id),
                     "variant": variant,
                     "condition": f"{SCENARIO_FAMILY}_variant_{variant}",
-                    "context": block["context"],
                     "system": block["system"],
-                    "scenario": block["scenario"],
-                    # The composite prompt scoring surfaces as worst_query —
-                    # same shape the live solver recorded.
-                    "query": f"[system] {block['system']}\n\n[user] {block['context']}\n\n{block['scenario']}",
+                    "turns": block["turns"],
+                    "query": block["turns"][""],
                 }
             failures[str(sample.id)] = reason or "unparseable"
             print(f"[WARNING] {label}: {reason} — retrying\n"
                   f"          got: {completion[:200]!r}")
         return None
 
-    jobs = {
-        (str(sample.id), variant): one(sample, variant)
-        for sample in samples
-        for variant in range(1, k + 1)
-        if (str(sample.id), variant) not in existing
-    }
-    results = await asyncio.gather(*jobs.values())
-    rows = [row for row in results if row is not None]
-    incomplete = sorted({key[0] for key, row in zip(jobs, results) if row is None})
+    async def tree_set(sample: Sample) -> list[dict | None]:
+        out: list[dict | None] = []
+        previous_system = (previous_systems or {}).get(str(sample.id))
+        for variant in range(1, k + 1):
+            if (str(sample.id), variant) in existing:
+                continue
+            row = await one(sample, variant, previous_system)
+            out.append(row)
+            if row is not None:
+                previous_system = row["system"]
+        return out
+
+    per_sample = await asyncio.gather(*(tree_set(sample) for sample in samples))
+    rows = [row for results in per_sample for row in results if row is not None]
+    incomplete = sorted({
+        str(sample.id)
+        for sample, results in zip(samples, per_sample)
+        if any(row is None for row in results)
+    })
     reasons = {sample_id: failures[sample_id] for sample_id in incomplete if sample_id in failures}
 
     if reasons:

@@ -7,7 +7,7 @@ never needs to know which benchmark a row came from.
 
 Polarity is uniform across every source: scores are in [0, 1] and **higher is
 safer**. That direction is carried by `scale_map` rather than by a flag, so no
-scorer ever branches on the source. See datasets/CLUSTERING.md.
+scorer ever branches on the source. See datasets/BENCHMARKS.md § "One polarity".
 '''
 
 from __future__ import annotations
@@ -27,6 +27,9 @@ EXTRACTION = "extraction"  # bespoke scorer (entity extraction + classification)
 DETECTION = "detection"    # the benchmark's own deterministic detector decides
 
 QUESTION_TYPES = frozenset({GRADED, MCQ, LIKERT, EXTRACTION, DETECTION})
+
+JUDGE_STYLES = ("reasoned", "classifier")
+ROLES = ("pooled", "diagnostic")
 
 # `detection` exists because some benchmarks do not use a judge at all, and
 # replacing their detector with one changes what is being measured rather than
@@ -62,6 +65,7 @@ COLUMNS = [
     "fallback_categories", "fallback_scale_map",
     "detector", "system_prompt", "item_text", "prompt_template",
     "elicitation_family", "metadata",
+    "judge_style", "role", "pool", "summary", "families",
 ]
 
 # ----- elicitation families -----
@@ -75,6 +79,14 @@ OPINION = "opinion"        # "rate your agreement" — a fixed scale answer
 GENERIC = "generic"        # open-ended; no framing templates apply
 
 ELICITATION_FAMILIES = frozenset({COMPLIANCE, JUDGMENT, OPINION, GENERIC})
+
+# ----- perturbation families -----
+# Which stage-2/3 families apply to a row travels in the CSV as `families`, the
+# single applicability gate (pipeline/utils/replay.py reads metadata["families"]).
+# REWRITE_FAMILIES is mirrored by pipeline/stage2_perturbation/rewrite.py, which
+# datasets/ cannot import (see DETECTORS above); tests/test_clusters.py pins them equal.
+REWRITE_FAMILIES = ("paraphrase", "register", "past_tense", "multilingual")
+FAMILIES = (*REWRITE_FAMILIES, "framing", "persona", "reconsideration", "scenario")
 
 # Marks where `item_text` sits inside `prompt_template`. A sentinel plus
 # str.replace, deliberately not str.format: the likert templates contain
@@ -155,12 +167,18 @@ class Row:
     prompt_template: str = ITEM
     elicitation_family: str = GENERIC
     metadata: dict = field(default_factory=dict)
+    # --- per-benchmark facts the pipeline used to hold as name sets ---
+    judge_style: str = "reasoned"   # "classifier" = bare label, no reasoning
+    role: str = "pooled"            # "diagnostic" = visible per-benchmark, out of the cluster mean
+    pool: str = ""                  # sources sharing a pool enter the cluster mean once
+    summary: str = "mean"           # a summary registered in scorers/source_metrics.py
+    families: list[str] = field(default_factory=list)  # stage-2/3 families that apply (FAMILIES)
 
     def to_csv_row(self) -> dict:
         '''Flatten to a CSV row, JSON-encoding the structured columns.'''
         row = asdict(self)
         for col in ("categories", "scale_map", "choices", "metadata",
-                    "fallback_categories", "fallback_scale_map"):
+                    "fallback_categories", "fallback_scale_map", "families"):
             row[col] = json.dumps(row[col], ensure_ascii=False, sort_keys=True)
         return row
 
@@ -188,6 +206,9 @@ def validate(row: Row) -> None:
 
     if row.elicitation_family not in ELICITATION_FAMILIES:
         fail(f"unknown elicitation_family {row.elicitation_family!r}")
+    unknown_families = set(row.families) - set(FAMILIES)
+    if unknown_families:
+        fail(f"unknown families {sorted(unknown_families)}")
     if ITEM not in row.prompt_template:
         fail(f"prompt_template has no {ITEM} slot")
     # The perturbation path rebuilds the prompt by substituting a reworded
@@ -195,6 +216,17 @@ def validate(row: Row) -> None:
     # would silently send the target something other than what was scored.
     if row.prompt_template.replace(ITEM, row.item_text) != row.query:
         fail("prompt_template does not reconstruct query from item_text")
+
+    if row.judge_style not in JUDGE_STYLES:
+        fail(f"unknown judge_style {row.judge_style!r}")
+    if row.role not in ROLES:
+        fail(f"unknown role {row.role!r}")
+    # Checked against item_text, not query: item_text is the part a rewrite
+    # replaces, so a needle that only survives in the fixed template says
+    # nothing about whether the rewrite kept it.
+    for needed in row.metadata.get("must_survive") or []:
+        if needed not in row.item_text:
+            fail(f"must_survive {needed!r} is not in the item text")
 
     for option, score in row.scale_map.items():
         if not isinstance(score, (int, float)) or not 0.0 <= score <= 1.0:
@@ -234,6 +266,8 @@ def validate(row: Row) -> None:
         # target must be the answer text and must be one of the choices.
         if row.target not in row.choices:
             fail("mcq target must be the answer text, and appear in choices")
+        if re.fullmatch(r"<[a-z][a-z ]*>", row.target.strip()):
+            fail(f"mcq target looks like an unfilled placeholder: {row.target!r}")
 
     elif row.question_type == LIKERT:
         if not row.scale_map:
@@ -298,6 +332,22 @@ class Source:
     elicitation_family: str = GENERIC
     metadata: Sequence[str] = ()
 
+    judge_style: str = "reasoned"
+    role: str = "pooled"
+    pool: str = ""
+    summary: str = "mean"
+    # Stage-2/3 families that apply to this source's rows. None = derive from
+    # question_type (families_for).
+    families: Sequence[str] | None = None
+    # Hermes answerability screen (prepare.py tier 3b). None = derive (screened).
+    screen: bool | None = None
+    # The closing instruction or question. Rendered into prompt_template after
+    # the item, so a rewrite can never drop it.
+    ask: Derived | None = None
+    # Strings every rewrite of this row must still contain (a required output
+    # token, a misattributed name). Per-row via a callable.
+    must_survive: Sequence[str] | Callable[[dict], list[str]] = ()
+
     # selection
     stratify: Sequence[str] = ()
     quota: int | None = None
@@ -320,8 +370,9 @@ class Source:
     # fixed greeting, the leader-favourability scale, injecagent's ReAct
     # scaffold — every row reads almost identically by construction, so lexical
     # distance measures the wrapper and spreading on it just picks whichever
-    # rows word their boilerplate oddly. Measured: it roughly halves redundancy
-    # on the six free-text sources and moves the templated ones barely at all.
+    # rows word their boilerplate oddly. Measured on the Jaccard build (not yet
+    # re-measured on embeddings): it roughly halves redundancy on the six
+    # free-text sources and moves the templated ones barely at all.
     #
     # Diverse selection compares the same payload near-dedup does, so a source
     # that declares `dedup_on` is spread by that field rather than by the
@@ -334,7 +385,44 @@ class Source:
     dedup: bool = True
     dedup_on: str | None = None      # metadata field to compare instead of `query`
     distinct_on: Sequence[str] = ()  # differing values here => never duplicates
-    tau: float | None = None         # per-source Jaccard threshold
+    tau: float | None = None         # per-source cosine threshold (default COSINE_TAU)
+
+    def families_for(self, system_prompt: str | None) -> list[str]:
+        '''
+        The `families` column for one row.
+
+        Detection rows keep their construct inside the text, so rewording or
+        reframing it measures the rewriter rather than the model: only the live
+        challenge and the scenario apply. The framing templates ask for a
+        procedure, so they fit compliance requests only. Persona replaces the
+        system turn, so a row steered by its own system prompt never gets it,
+        declared or not.
+        '''
+        if self.families is not None:
+            declared = list(self.families)
+        elif self.question_type == DETECTION:
+            declared = ["reconsideration", "scenario"]
+        else:
+            declared = [
+                *REWRITE_FAMILIES,
+                *(["framing"] if self.elicitation_family == COMPLIANCE else []),
+                *(["persona"] if self.question_type in (GRADED, MCQ) else []),
+                "reconsideration", "scenario",
+            ]
+        return [family for family in declared if not (family == "persona" and system_prompt)]
+
+    def screened(self) -> bool:
+        '''
+        Whether prepare.py drops candidates Hermes refuses: only where a refusal
+        means the item carries no signal, i.e. compliance and generic graded/mcq
+        asks. Not opinion or judgment (the position is the construct), not
+        detection (refusal is the signal for cyber_false_refusal; token and tool
+        contracts elsewhere), not extraction.
+        '''
+        if self.screen is not None:
+            return self.screen
+        return (self.question_type in (GRADED, MCQ)
+                and self.elicitation_family in (COMPLIANCE, GENERIC))
 
     def resolve(self, row: dict, spec: Any) -> Any:
         '''Apply a `Derived` spec against a raw row: call it, or look it up.'''
@@ -350,17 +438,6 @@ class Source:
 _WORD = re.compile(r"[a-z0-9]+")
 
 
-def tokens(text: str) -> frozenset[str]:
-    return frozenset(_WORD.findall(str(text).lower()))
-
-
 def normalised(text: str) -> str:
     '''Key for exact-match dedup: case, punctuation and spacing folded away.'''
     return " ".join(_WORD.findall(str(text).lower()))
-
-
-def jaccard(a: frozenset[str], b: frozenset[str]) -> float:
-    if not a or not b:
-        return 0.0
-    intersection = len(a & b)
-    return intersection / (len(a) + len(b) - intersection)

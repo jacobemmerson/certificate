@@ -1,7 +1,7 @@
 """The on-disk store for pregenerated perturbation/simulation artifacts.
 
-Stage 2's rewrite families (paraphrase, register, identity_strip), the
-deterministic framing family, and stage 3's scenario reframings are generated
+Stage 2's rewrite families (paraphrase, register, past_tense, multilingual), the
+deterministic framing and persona families, and stage 3's scenario reframings are generated
 *once* by `generate.py` (running the attacker model) and persisted under
 `datasets/generated/<task_name>/<family>.jsonl` — see
 datasets/generated/README.md for the schema. At eval time, certify.py replays
@@ -22,16 +22,14 @@ from pathlib import Path
 from inspect_ai import Task
 from inspect_ai._util.registry import registry_info
 
-from pipeline.stage2_perturbation.adapters import elicitation_family
-from pipeline.stage2_perturbation.framing import FRAMING_TEMPLATES, FRAMING_VERSION
-from pipeline.stage2_perturbation.rewrite import FAMILY_SYSTEM_PROMPTS, REWRITE_PROMPT_VERSION
+from pipeline.stage2_perturbation.framing import FRAMING_VERSION, PERSONA_VERSION
+from pipeline.stage2_perturbation.rewrite import REPEAT_FAMILIES, REWRITE_FAMILIES, REWRITE_PROMPT_VERSION
 from pipeline.stage3_simulation.prompts import PROMPT_VERSION as SCENARIO_PROMPT_VERSION
-from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY
+from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY, TREE_PATHS
+from pipeline.utils.replay import family_applies
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GENERATED_DIR = REPO_ROOT / "datasets" / "generated"
-
-REWRITE_FAMILIES = tuple(sorted(FAMILY_SYSTEM_PROMPTS))  # identity_strip, paraphrase, register
 
 # Current prompt/template version per family — compared against each artifact's
 # meta sidecar so a stale artifact set produces a loud warning (never a silent
@@ -39,8 +37,12 @@ REWRITE_FAMILIES = tuple(sorted(FAMILY_SYSTEM_PROMPTS))  # identity_strip, parap
 PROMPT_VERSIONS = {
     **{family: REWRITE_PROMPT_VERSION for family in REWRITE_FAMILIES},
     "framing": FRAMING_VERSION,
+    "persona": PERSONA_VERSION,
     SCENARIO_FAMILY: SCENARIO_PROMPT_VERSION,
 }
+
+# Template-built families: no attacker, rebuilt wholesale on every generate run.
+DETERMINISTIC_FAMILIES = ("framing", "persona")
 
 
 def task_name(base_task: Task) -> str:
@@ -96,6 +98,20 @@ def load_family(task: str, family: str) -> dict[str, list[dict]]:
     return by_id
 
 
+def scenario_row_defects(row: dict) -> list[str]:
+    """Why a stored scenario tree is unusable by the solver: no `system`, or a
+    TREE_PATHS key missing/blank. Empty when the row is complete."""
+    defects = []
+    if not str(row.get("system") or "").strip():
+        defects.append("system")
+    turns = row.get("turns") or {}
+    defects += [
+        f"turns[{path or 'opening'!r}]" for path in TREE_PATHS
+        if not str(turns.get(path) or "").strip()
+    ]
+    return defects
+
+
 def family_meta(task: str, family: str) -> dict | None:
     path = meta_path(task, family)
     if not path.exists():
@@ -108,23 +124,10 @@ def sample_ids(task: Task) -> list[str]:
     return [str(sample.id) for sample in task.dataset]
 
 
-def framing_ids(task: Task) -> set[str]:
-    """Sample ids in this task that framing templates actually apply to.
-
-    Elicitation family is per-sample (a cluster mixes several), so framing
-    covers a subset — generate_framing skips the rest, and coverage checks
-    must expect the same subset rather than the whole dataset.
-    """
-    return {
-        str(sample.id)
-        for sample in task.dataset
-        if FRAMING_TEMPLATES.get(elicitation_family(sample))
-    }
-
-
-def framing_applies(task: Task) -> bool:
-    """Whether any sample in this task has framing templates at all."""
-    return bool(framing_ids(task))
+def family_ids(task: Task, family: str) -> set[str]:
+    """Sample ids `family` applies to — the one coverage set generation,
+    validation and registry.py all use (spec §2.1)."""
+    return {str(s.id) for s in task.dataset if family_applies(s.metadata, family)}
 
 
 def validate_artifacts(
@@ -138,13 +141,12 @@ def validate_artifacts(
     """Fail fast (before any eval runs) unless every task in `benchmarks` has
     a complete artifact file for every requested pregenerated family.
 
-    Per family: rewrite families must cover every dataset sample id with at
-    least `perturb_k` variants; framing must cover every id it *applies* to
-    (elicitation family is per-sample — see framing_ids); scenario must have a file,
-    but ids with fewer than `sim_k` variants only warn — generation drops
-    unparseable reframings, mirroring the old live behavior, and replay just
-    runs what exists (identically for every model). `reconsideration` is
-    live-only and never validated. Prompt-version mismatches warn, not fail.
+    Per family: every id the family applies to (family_ids) must be covered —
+    rewrite families with at least `perturb_k` variants, the rest with one;
+    scenario with at least `sim_k` complete trees (`system` + every TREE_PATHS
+    turn), strictly: a short or orphaned tree fails preflight. Tree shape and
+    orphan scenario ids are errors even under `limit`. `reconsideration` is
+    live-only and never validated. A stored prompt-version mismatch fails (spec §2.5), warns under `limit`.
 
     When `limit` is set the run is a non-saved smoke test, so coverage
     shortfalls are downgraded to warnings for every family (the file must still
@@ -155,15 +157,18 @@ def validate_artifacts(
     errors: list[str] = []
     for key, entry in benchmarks.items():
         for task in entry["tasks"]:
-            name = task_name(task)
             ids = set(sample_ids(task))
             checks: list[tuple[str, int, bool]] = []  # (family, min_k, strict)
-            strict_rewrite = not limit
-            checks += [(f, perturb_k, strict_rewrite) for f in requested if f in REWRITE_FAMILIES]
-            if "framing" in requested and framing_applies(task):
-                checks.append(("framing", 1, strict_rewrite))
+            strict = not limit
+            checks += [
+                (f, perturb_k if f in REPEAT_FAMILIES else 1, strict)
+                for f in requested if family_ids(task, f)
+            ]
             if simulate:
-                checks.append((SCENARIO_FAMILY, sim_k, False))
+                checks.append((SCENARIO_FAMILY, sim_k, strict))
+            if not checks:
+                continue
+            name = task_name(task)
 
             for family, min_k, strict in checks:
                 cmd = f"uv run python generate.py --only {key} " + (
@@ -174,15 +179,36 @@ def validate_artifacts(
                     errors.append(f"Missing artifacts for {name}/{family} ({path}). Run: {cmd}")
                     continue
 
-                # Framing is the one family with per-sample applicability: a
-                # cluster mixes elicitation families, and samples whose family
-                # has no templates are skipped by generate_framing. Expecting
-                # full coverage would fail every cluster that contains one.
-                expected = framing_ids(task) if family == "framing" else ids
+                expected = family_ids(task, family)
 
                 by_id = load_family(name, family)
-                missing = expected - set(by_id)
-                short = {i for i in expected & set(by_id) if len(by_id[i]) < min_k}
+                orphans = sorted(set(by_id) - ids)
+                if orphans and (strict or family == SCENARIO_FAMILY):
+                    errors.append(
+                        f"{name}/{family}: {len(orphans)} orphan id(s) not in the dataset "
+                        f"(e.g. {orphans[:3]}). Regenerate: {cmd} --force"
+                    )
+                real = {i: [r for r in rows if not r.get("fallback")] for i, rows in by_id.items()}
+                if family == SCENARIO_FAMILY:
+                    for sample_id, rows in real.items():
+                        for row in rows:
+                            defects = scenario_row_defects(row)
+                            if defects:
+                                errors.append(
+                                    f"{name}/{family}: row {sample_id} v{row.get('variant')} "
+                                    f"is missing {', '.join(defects)}. Regenerate: {cmd} --force"
+                                )
+                # Coordinator ruling (WS-B item 17): an id whose rows are all
+                # fallbacks after --missing-only retries is covered; replay
+                # records it as a `missing` condition, i.e. an abstention.
+                # Scenario stays strict: a tree that never parses blocks preflight.
+                covered = set(by_id) if family != SCENARIO_FAMILY else {i for i, rows in real.items() if rows}
+                fallback_only = (expected & set(by_id)) - {i for i, rows in real.items() if rows}
+                if fallback_only and family != SCENARIO_FAMILY:
+                    print(f"[WARNING] {name}/{family}: {len(fallback_only)} id(s) fallback-only "
+                          f"(scored as missing). Retry: {cmd} --missing-only")
+                missing = expected - covered
+                short = {i for i in expected & set(real) if 0 < len(real[i]) < min_k}
                 if missing or short:
                     detail = (
                         f"{name}/{family}: {len(missing)} sample(s) missing, "
@@ -196,11 +222,15 @@ def validate_artifacts(
                 meta = family_meta(name, family)
                 stored_version = (meta or {}).get("prompt_version")
                 if stored_version and stored_version != PROMPT_VERSIONS[family]:
-                    print(
-                        f"[WARNING] {name}/{family}: artifacts were generated with prompt version "
-                        f"{stored_version}, current code is {PROMPT_VERSIONS[family]} — "
-                        f"regenerate with --force to refresh."
+                    detail = (
+                        f"{name}/{family}: artifacts were generated with prompt version "
+                        f"{stored_version}, current code is {PROMPT_VERSIONS[family]}. "
+                        f"Regenerate: {cmd} --force"
                     )
+                    if strict:  # spec §2.5: freshness is a preflight check
+                        errors.append(detail)
+                    else:
+                        print(f"[WARNING] {detail}")
                 if meta and meta.get("partial"):
                     print(f"[WARNING] {name}/{family}: artifacts are marked partial (generated with --limit).")
 

@@ -11,14 +11,12 @@ samples that scored, with coverage (pipeline/utils/results.py::_coverage) foldin
 the refusals into the denominator so the partial figure is self-describing rather
 than hidden behind a 100% computed only over the prompts that got through.
 
-It only re-derives clusters that never certified cleanly (status != success, or
-absent from `scores`); a cluster that ran complete is already correct and left
+It only re-derives clusters that never certified cleanly (not in
+certify.completed_risks); a cluster that ran complete is already correct and left
 untouched. Every other field is preserved — including aa_intelligence_index /
-aa_model_match — and update() recomputes the headline across all four risks and
-clears the now-superseded partial_scores.
+aa_model_match — and update() recomputes the headline across all four risks.
 
-Runs offline; touches no model or judge. update() writes a models_previous.json
-backup before it saves.
+Runs offline; touches no model or judge.
 
 Usage:
     uv run python3 scripts/reaggregate_from_logs.py gpt-5.6-sol
@@ -33,9 +31,9 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from inspect_ai.log import read_eval_log
 
-from certify import check_status, update
+from certify import check_status, completed_risks, update
 from pipeline.utils import results as results_tree
-from pipeline.utils.graders import DIAGNOSTIC_SOURCES, load_models_with_check
+from pipeline.utils.graders import load_models_with_check
 
 
 def latest_log_per_cluster(model_id: str) -> dict[str, object]:
@@ -45,7 +43,9 @@ def latest_log_per_cluster(model_id: str) -> dict[str, object]:
     the lexically greatest name is the newest run — the one models.json reflects.
     """
     newest: dict[str, tuple[str, object]] = {}
-    for path in sorted((REPO_ROOT / "logs" / model_id).glob("*.eval")):
+    for path in sorted((REPO_ROOT / "logs" / model_id).rglob("*.eval")):
+        if "-limit" in path.parent.name:
+            continue
         log = read_eval_log(str(path))
         task = str(log.eval.task)
         if task not in newest or path.name > newest[task][0]:
@@ -79,11 +79,7 @@ def main(model_id: str) -> None:
     if not logs:
         raise SystemExit(f"no logs under logs/{model_id}")
 
-    incomplete = [
-        risk for risk in logs
-        if prev_status.get(risk, {}).get("status") != "success"
-        or risk not in prev.get("scores", {})
-    ]
+    incomplete = [risk for risk in logs if risk not in completed_risks(prev)]
     if not incomplete:
         print(f"{model_id}: every cluster already complete — nothing to do.")
         return
@@ -92,7 +88,7 @@ def main(model_id: str) -> None:
     # are rebuilt, and update() merges them back over the complete ones.
     new = {**prev, "scores": {}, "results": {}, "status": {}}
     for risk in incomplete:
-        tree = results_tree.build([logs[risk]], DIAGNOSTIC_SOURCES)
+        tree = results_tree.build([logs[risk]])
         subtree = tree.get(risk)
         if not subtree:
             print(f"[skip] {risk}: log produced no scorable samples")
@@ -105,10 +101,10 @@ def main(model_id: str) -> None:
 
         agg = subtree.get("aggregate") or {}
         new["results"][risk] = subtree
-        new["scores"][risk] = agg.get("worst") if agg.get("worst") is not None else -1
+        new["scores"][risk] = agg.get("tail") if status["status"] == "success" else None
         new["status"][risk] = status
         print(
-            f"[ok] {risk}: worst={agg.get('worst')} status={status['status']} "
+            f"[ok] {risk}: tail={agg.get('tail')} status={status['status']} "
             f"({status['completed_samples']}/{status['total_samples']} answered)\n"
             f"      coverage: {_benchmark_coverage(subtree)}"
         )
@@ -117,8 +113,8 @@ def main(model_id: str) -> None:
         print("Nothing rebuilt.")
         return
 
-    update(new, models, idx)
-    print(f"\nWrote {model_id} to models/models.json (backup: models/models_previous.json).")
+    update(new)
+    print(f"\nWrote {model_id} to models/results/ and rebuilt models/models.json.")
 
 
 if __name__ == "__main__":

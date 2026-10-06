@@ -6,7 +6,7 @@ own cluster; what is left is behavioural. CySecBench asks for attacks directly,
 and `cyber_false_refusal` asks the same model to do benign security work.
 
 `cyber_false_refusal` is a diagnostic rather than a component of the pooled
-cluster score (see datasets/CLUSTERING.md): it is a counter-metric, and pooling
+cluster score (see datasets/BENCHMARKS.md): it is a counter-metric, and pooling
 it with cysecbench would let a blanket-refusing model average out to a mid-range
 number that conceals both halves.
 '''
@@ -281,8 +281,8 @@ SOURCES = [
         rubric=JAILBREAK_RUBRIC,
         categories=JAILBREAK_RATINGS, scale_map=JAILBREAK_SCALE,
         metadata=["Category"],
-        # Free-text items, so lexical spread is a real axis: measured
-        # redundancy 0.293 -> 0.094 at this quota.
+        # Free-text items, so spread is a real axis: Jaccard-era
+        # redundancy 0.293 -> 0.094 at this quota (not re-measured on embeddings).
         select="diverse",
         stratify=["Category"], quota=90,
     ),
@@ -301,10 +301,10 @@ SOURCES = [
         rubric=MITRE_RUBRIC,
         categories=MITRE_VERDICTS, scale_map=MITRE_SCALE,
         metadata=["mitre_category", "ttp_id", "ttp_name"],
-        # Left on the uniform draw: measured redundancy only moves
-        # 0.276 -> 0.202 here, because every prompt is the same JSON
-        # wrapper around a varying attack description, so much of the
-        # lexical distance is wrapper rather than item.
+        # Left on the uniform draw: Jaccard-era redundancy only moved
+        # 0.276 -> 0.202 here (not re-measured on embeddings), because every
+        # prompt is the same JSON wrapper around a varying attack
+        # description, so much of the measured distance was wrapper, not item.
         stratify=["mitre_category"], quota=80,
     ),
     Source(
@@ -335,11 +335,15 @@ SOURCES = [
         query="mutated_prompt",
         criterion=FALSE_REFUSAL_CRITERION,
         metadata=["attack_type"],
-        # Free-text benign requests, and only 40 of 750 are kept: measured
-        # redundancy 0.455 -> 0.253, so spreading covers materially more of
-        # the benign-request space than a uniform draw of the same size.
+        # Free-text benign requests, and only 40 of 750 are kept: Jaccard-era
+        # redundancy 0.455 -> 0.253 (not re-measured on embeddings), so
+        # spreading covers materially more of the benign-request space than a uniform draw of the same size.
         select="diverse",
         quota=40,
+        # A counter-metric: averaging it with cysecbench would let a
+        # blanket-refusing model cancel out to mid-range and conceal both
+        # halves. Visible per-benchmark, kept out of the cluster mean.
+        role="diagnostic",
     ),
     Source(
         name="injecagent", risk="cyber", question_type=DETECTION,
@@ -357,5 +361,9 @@ SOURCES = [
         metadata=["attack", "Attack Type", "attacker_tools", "user_tool",
                   "attacker_instruction"],
         stratify=["Attack Type"], quota=50,
+        # Susceptibility, not intent: the model is asked to do something benign
+        # while an attacker tries to redirect it. Pooling it with cysecbench
+        # mixes refusing a harmful request with resisting a hijack.
+        role="diagnostic",
     ),
 ]

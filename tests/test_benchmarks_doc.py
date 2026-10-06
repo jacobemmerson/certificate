@@ -96,7 +96,7 @@ class TestBenchmarksDoc(unittest.TestCase):
                 total = sum(1 for _ in csv.DictReader(f))
             with self.subTest(risk=risk):
                 self.assertRegex(
-                    text, rf"## {risk} — {total} samples",
+                    text, rf"## {risk}\W{{1,3}}{total} samples",
                     f"{risk} heading does not say {total}",
                 )
 

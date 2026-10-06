@@ -2,13 +2,14 @@ from pipeline.stage1_evaluation.evals.clusters import CLUSTER_TASKS, RISKS, avai
 
 from inspect_ai import Task
 
-from pipeline.artifacts import framing_applies, load_family, task_name
-from pipeline.stage2_perturbation.solvers import REPLAY_SOLVERS, framing, reconsideration
+from pipeline.artifacts import REPEAT_FAMILIES, REWRITE_FAMILIES, family_ids, load_family, task_name
+from pipeline.stage2_perturbation.solvers import REPLAY_SOLVERS, reconsideration
+from pipeline.stage3_simulation.classify import DEFAULT_CLASSIFIER
 from pipeline.stage3_simulation.solvers import scenario
 from pipeline.utils.replay import truncated
 from pipeline.utils.scoring import SCENARIO, scoring_step, wrap_scorers
 
-ALL_PERTURB_FAMILIES = {"paraphrase", "register", "identity_strip", "framing", "reconsideration"}
+ALL_PERTURB_FAMILIES = {*REWRITE_FAMILIES, "framing", "persona", "reconsideration"}
 
 # The families generate.py pregenerates to datasets/generated/ and certify.py
 # replays. reconsideration is the one live-only family: it challenges the
@@ -27,7 +28,7 @@ def init_benchmarks(grader, llamaguard_model: str | None = None):
     `llamaguard_model` is accepted but unused: cluster tasks do not attach
     LlamaGuard. In a mixed cluster it would score likert and mcq rows where it
     means nothing, and each row's own `criterion` is strictly more specific
-    than its generic taxonomy. See datasets/CLUSTERING.md.
+    than its generic taxonomy. See datasets/BENCHMARKS.md.
     '''
     return {
         risk: {"tasks": [CLUSTER_TASKS[risk](grader=grader)], "name": risk}
@@ -36,11 +37,31 @@ def init_benchmarks(grader, llamaguard_model: str | None = None):
     }
 
 
+def require_families_column(benchmarks: dict) -> None:
+    '''
+    Refuse to run on a CSV built before the `families` column. The library
+    reads a missing column as "every family applies" so old logs still
+    reaggregate, but generating or certifying on it would give detection rows
+    rewrites and drop the framing opt-outs. CLI entry points only.
+    '''
+    stale = sorted({
+        key for key, entry in benchmarks.items() for task in entry["tasks"]
+        if any((sample.metadata or {}).get("families") is None for sample in task.dataset)
+    })
+    if stale:
+        raise SystemExit(
+            f"datasets/public/{{{','.join(stale)}}}.csv predate the `families` column. Rebuild them "
+            f"first (datasets/prepare/cluster/prepare.py): "
+            f"uv run python3 -m datasets.prepare.cluster.prepare --risk <risk>"
+        )
+
+
 def _build_task(
     base_task: Task,
     families: list[str],
     k: int,
     sim_k: int | None = None,
+    sim_classifier: str = DEFAULT_CLASSIFIER,
 ) -> Task:
     """Return base_task with one replay solver appended per requested,
     applicable condition family — the stage-2 families from
@@ -50,32 +71,34 @@ def _build_task(
     wrapped one-per-base-judge (pipeline/utils/scoring.py::wrap_scorers).
 
     Returns base_task unchanged if nothing applies (e.g. only "framing" was
-    requested against a benchmark whose elicitation_family has no registered
-    framing templates, and sim_k is None).
+    requested and no sample's `families` includes it, and sim_k is None).
     """
     name = task_name(base_task)
 
     solver_chain = [base_task.solver]
     applied: list[str] = []
     for family, replay_solver in REPLAY_SOLVERS.items():
-        if family in families:
-            solver_chain.append(replay_solver(truncated(load_family(name, family), k)))
+        if family in families and family_ids(base_task, family):
+            rows = load_family(name, family)
+            if family in REPEAT_FAMILIES:
+                rows = truncated(rows, k)
+            solver_chain.append(replay_solver(rows))
             applied.append(family)
-    if "framing" in families and framing_applies(base_task):
-        solver_chain.append(framing(load_family(name, "framing")))
-        applied.append("framing")
     if "reconsideration" in families:
         solver_chain.append(reconsideration())
         applied.append("reconsideration")
     if sim_k is not None:
-        solver_chain.append(scenario(truncated(load_family(name, SCENARIO), sim_k)))
+        solver_chain.append(scenario(truncated(load_family(name, SCENARIO), sim_k), sim_classifier))
         applied.append(SCENARIO)
 
     if not applied:
         return base_task  # no requested family applies to this benchmark
 
     solver_chain.append(scoring_step("generate", base_task.scorer))
-    solver_chain += [scoring_step(family, base_task.scorer) for family in applied]
+    solver_chain += [
+        scoring_step(family, base_task.scorer, source="simulations" if family == SCENARIO else "perturbations")
+        for family in applied
+    ]
 
     return Task(
         dataset=base_task.dataset,
@@ -90,6 +113,7 @@ def apply_stages(
     families: list[str] | None = None,
     k: int = 1,
     sim_k: int | None = None,
+    sim_classifier: str = DEFAULT_CLASSIFIER,
 ):
     '''
     Attach stage-2 surface-perturbation auditing (`families`) and/or stage-3
@@ -104,12 +128,12 @@ def apply_stages(
     Keeps the same benchmark keys/'name' as `benchmarks`, so the result runs
     through the exact same log path as a plain run — a combined --perturb
     --simulate certification is one task run and ONE log, with the stages
-    reported per attack family (safety_<family>) plus a single
-    safety_under_attack roll-up, so the stages compare at equal depth.
+    reported per attack family (safety_<family>) plus the safety_worst and
+    safety_average roll-ups, so the stages compare at equal depth.
 
     All pregenerated families replay fixed variants from datasets/generated/
     (produced once by generate.py — no rewrite/reframing model runs at eval
-    time), using up to `k` stored variants per item for the rewrite families
+    time), using up to `k` stored variants per item for the repeat families
     and up to `sim_k` stored scenarios. Building raises FileNotFoundError if
     the artifacts were never generated; certify.py validates them first
     (pipeline/artifacts.py::validate_artifacts) so the error carries the
@@ -122,7 +146,7 @@ def apply_stages(
 
     return {
         key: {
-            'tasks': [_build_task(t, families, k, sim_k=sim_k) for t in entry['tasks']],
+            'tasks': [_build_task(t, families, k, sim_k=sim_k, sim_classifier=sim_classifier) for t in entry['tasks']],
             'name': entry['name'],
         }
         for key, entry in benchmarks.items()
