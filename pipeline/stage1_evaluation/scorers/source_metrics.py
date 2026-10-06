@@ -35,11 +35,6 @@ from scipy.stats import wasserstein_distance
 
 from pipeline.utils.scoring import is_scored, safety
 
-# Nothing reads this today: it prefixed the per-source panel metrics, removed
-# with source_scores. Kept so any per-source metric re-added to the panel stays
-# distinguishable from the condition-pool metrics (safety_<family>, ...).
-SOURCE_METRIC_PREFIX = "source_"
-
 # A summary returns None when its inputs cannot support it — no scored samples,
 # or a missing arm. The metric then omits the entry entirely rather than
 # emitting NaN, which would propagate into the cluster aggregate.

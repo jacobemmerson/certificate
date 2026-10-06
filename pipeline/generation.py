@@ -258,6 +258,7 @@ async def generate_scenarios(
     last parse failure in `reasons` (a systematic attacker/format mismatch
     shows up as one reason repeated across ids).
     """
+    samples = [s for s in samples if family_applies(s.metadata, SCENARIO_FAMILY)]
     model = get_model(attacker_model)
     semaphore = asyncio.Semaphore(max_connections)
     existing = existing or set()

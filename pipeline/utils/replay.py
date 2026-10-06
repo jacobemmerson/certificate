@@ -3,7 +3,8 @@
 
 Both stages replay pregenerated artifact rows (datasets/generated/, see
 pipeline/artifacts.py) against the target model and record the results into
-`state.metadata["perturbations"][family]`, where the shared scoring spine
+`state.metadata["perturbations"][family]` (stage 2) or
+`state.metadata["simulations"][family]` (stage 3), where the shared scoring spine
 (pipeline/utils/scoring.py) picks them up. The stage-specific parts — which
 families exist and how a stored row becomes the message list sent to the
 target — live in each stage's own solvers.py; everything here is

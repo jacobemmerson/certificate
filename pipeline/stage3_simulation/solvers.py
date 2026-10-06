@@ -29,7 +29,7 @@ from inspect_ai.solver import Generate, Solver, TaskState, solver
 
 from pipeline.stage3_simulation.classify import classify
 from pipeline.stage3_simulation.prompts import DEPTH, SCENARIO_FAMILY
-from pipeline.utils.replay import generate_variant
+from pipeline.utils.replay import family_applies, generate_variant
 
 
 def render_transcript(messages: list) -> str:
@@ -78,8 +78,7 @@ async def _walk(state: TaskState, generate: Generate, row: dict, classifier_mode
 @solver
 def scenario(variants_by_id: dict[str, list[dict]], classifier_model: str) -> Solver:
     async def solve(state: TaskState, generate: Generate) -> TaskState:
-        families = state.metadata.get("families")
-        if families is not None and SCENARIO_FAMILY not in families:
+        if not family_applies(state.metadata, SCENARIO_FAMILY):
             return state
         stored = variants_by_id.get(str(state.sample_id))
         if stored is None:
