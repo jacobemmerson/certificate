@@ -143,9 +143,12 @@ class TestRegistryTruncation(ArtifactStoreTestCase):
         self.assertEqual(len(replayed["paraphrase"][self.ids[0]]), 1)
 
 
+PARAPHRASE_VERSION = artifacts.PROMPT_VERSIONS["paraphrase"]
+
+
 class TestValidateArtifacts(ArtifactStoreTestCase):
     def test_complete_rewrite_family_passes(self):
-        write_family(self.name, "paraphrase", rewrite_rows(self.ids), meta={"prompt_version": "1"})
+        write_family(self.name, "paraphrase", rewrite_rows(self.ids), meta={"prompt_version": PARAPHRASE_VERSION})
         validate_artifacts(self.benchmarks, families=["paraphrase"], simulate=False)
 
     def test_missing_file_fails_with_generate_command(self):
@@ -154,28 +157,36 @@ class TestValidateArtifacts(ArtifactStoreTestCase):
         self.assertIn("--only manipulation --perturb paraphrase", str(ctx.exception))
 
     def test_missing_sample_fails(self):
-        write_family(self.name, "paraphrase", rewrite_rows(self.ids[1:]), meta={"prompt_version": "1"})
+        write_family(self.name, "paraphrase", rewrite_rows(self.ids[1:]), meta={"prompt_version": PARAPHRASE_VERSION})
         with self.assertRaises(FileNotFoundError) as ctx:
             validate_artifacts(self.benchmarks, families=["paraphrase"], simulate=False)
         self.assertIn("--missing-only", str(ctx.exception))
 
-    def test_all_fallback_sample_counts_as_missing(self):
+    def test_all_fallback_sample_is_covered_with_a_warning(self):
+        """Coordinator ruling (WS-B item 17): replay scores it as `missing`."""
         rows = rewrite_rows(self.ids)
         rows[0]["fallback"] = True
-        write_family(self.name, "paraphrase", rows, meta={"prompt_version": "1"})
+        write_family(self.name, "paraphrase", rows, meta={"prompt_version": PARAPHRASE_VERSION})
+        with mock.patch("builtins.print") as printed:
+            validate_artifacts(self.benchmarks, families=["paraphrase"], simulate=False)
+        self.assertIn("1 id(s) fallback-only", " ".join(str(c.args[0]) for c in printed.call_args_list))
+
+    def test_stale_prompt_version_fails_unless_limited(self):
+        write_family(self.name, "paraphrase", rewrite_rows(self.ids), meta={"prompt_version": "0"})
         with self.assertRaises(FileNotFoundError) as ctx:
             validate_artifacts(self.benchmarks, families=["paraphrase"], simulate=False)
-        self.assertIn("1 sample(s) missing", str(ctx.exception))
+        self.assertIn("prompt version 0", str(ctx.exception))
+        validate_artifacts(self.benchmarks, families=["paraphrase"], simulate=False, limit=2)
 
     def test_k_exceeding_stored_variants_fails(self):
-        write_family(self.name, "paraphrase", rewrite_rows(self.ids, k=1), meta={"prompt_version": "1"})
+        write_family(self.name, "paraphrase", rewrite_rows(self.ids, k=1), meta={"prompt_version": PARAPHRASE_VERSION})
         with self.assertRaises(FileNotFoundError):
             validate_artifacts(self.benchmarks, families=["paraphrase"], simulate=False, perturb_k=2)
 
     def test_limit_relaxes_rewrite_coverage_to_warning(self):
         # partial artifacts (generate.py --limit) must pass a certify --limit
         # smoke run — coverage shortfalls warn instead of failing...
-        write_family(self.name, "paraphrase", rewrite_rows(self.ids[:1]), meta={"prompt_version": "1"})
+        write_family(self.name, "paraphrase", rewrite_rows(self.ids[:1]), meta={"prompt_version": PARAPHRASE_VERSION})
         validate_artifacts(self.benchmarks, families=["paraphrase"], simulate=False, limit=2)
 
     def test_limit_still_requires_the_file_to_exist(self):
@@ -203,7 +214,7 @@ class TestValidateArtifacts(ArtifactStoreTestCase):
     def test_orphan_ids_fail_validation(self):
         '''The 51 loss_of_control orphans: rows for ids no longer in the CSV.'''
         rows = rewrite_rows(self.ids + ["gone"])
-        write_family(self.name, "paraphrase", rows, meta={"prompt_version": "1"})
+        write_family(self.name, "paraphrase", rows, meta={"prompt_version": PARAPHRASE_VERSION})
         with self.assertRaises(FileNotFoundError) as ctx:
             validate_artifacts(self.benchmarks, families=["paraphrase"], simulate=False)
         self.assertIn("1 orphan", str(ctx.exception))

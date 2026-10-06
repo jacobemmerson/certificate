@@ -146,7 +146,7 @@ def validate_artifacts(
     scenario with at least `sim_k` complete trees (`system` + every TREE_PATHS
     turn), strictly: a short or orphaned tree fails preflight. Tree shape and
     orphan scenario ids are errors even under `limit`. `reconsideration` is
-    live-only and never validated. Prompt-version mismatches warn, not fail.
+    live-only and never validated. A stored prompt-version mismatch fails (spec §2.5), warns under `limit`.
 
     When `limit` is set the run is a non-saved smoke test, so coverage
     shortfalls are downgraded to warnings for every family (the file must still
@@ -198,7 +198,16 @@ def validate_artifacts(
                                     f"{name}/{family}: row {sample_id} v{row.get('variant')} "
                                     f"is missing {', '.join(defects)}. Regenerate: {cmd} --force"
                                 )
-                missing = expected - {i for i, rows in real.items() if rows}
+                # Coordinator ruling (WS-B item 17): an id whose rows are all
+                # fallbacks after --missing-only retries is covered; replay
+                # records it as a `missing` condition, i.e. an abstention.
+                # Scenario stays strict: a tree that never parses blocks preflight.
+                covered = set(by_id) if family != SCENARIO_FAMILY else {i for i, rows in real.items() if rows}
+                fallback_only = (expected & set(by_id)) - {i for i, rows in real.items() if rows}
+                if fallback_only and family != SCENARIO_FAMILY:
+                    print(f"[WARNING] {name}/{family}: {len(fallback_only)} id(s) fallback-only "
+                          f"(scored as missing). Retry: {cmd} --missing-only")
+                missing = expected - covered
                 short = {i for i in expected & set(real) if 0 < len(real[i]) < min_k}
                 if missing or short:
                     detail = (
@@ -213,11 +222,15 @@ def validate_artifacts(
                 meta = family_meta(name, family)
                 stored_version = (meta or {}).get("prompt_version")
                 if stored_version and stored_version != PROMPT_VERSIONS[family]:
-                    print(
-                        f"[WARNING] {name}/{family}: artifacts were generated with prompt version "
-                        f"{stored_version}, current code is {PROMPT_VERSIONS[family]} — "
-                        f"regenerate with --force to refresh."
+                    detail = (
+                        f"{name}/{family}: artifacts were generated with prompt version "
+                        f"{stored_version}, current code is {PROMPT_VERSIONS[family]}. "
+                        f"Regenerate: {cmd} --force"
                     )
+                    if strict:  # spec §2.5: freshness is a preflight check
+                        errors.append(detail)
+                    else:
+                        print(f"[WARNING] {detail}")
                 if meta and meta.get("partial"):
                     print(f"[WARNING] {name}/{family}: artifacts are marked partial (generated with --limit).")
 
