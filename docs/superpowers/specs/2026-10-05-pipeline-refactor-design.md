@@ -246,7 +246,7 @@ preflight, not warn).
 | `aggregate.worst` | mean over items of per-item `worst`; **now includes control** (resolves scoring.py vs results.py) |
 | `aggregate.tail` | **CVaR@10%** = mean of the lowest ⌈0.1·n⌉ per-item `worst` values (n ≤ 10 → this is the min; no separate fallback needed) |
 | `aggregate.n_items` | items with a scored worst |
-| `by_family.<f>` | `{safety, stability, resilience, scored, abstained, total}` as today, `safety` via `sample_reduce` |
+| `by_family.<f>` | per source: `conditions.<f>` = `{safety, stability, scored, abstained, total, scorers}` as today, `safety` via `sample_reduce`; per risk: `by_family.<f>` is the scalar safety (C4) |
 Source: as above. Risk: `average`/`worst` = unweighted mean over pooled non-diagnostic sources
 (unchanged); **`tail` = CVaR@10% over the union of per-item mins** of those sources (the true tail
 of the risk's item distribution, not a mean of per-source tails). Distributional gap sources
