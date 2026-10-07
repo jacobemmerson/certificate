@@ -214,6 +214,8 @@ def advanced_ai_risk_rows(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(parsed)
 
 
+BUDGET = 140   # loss_of_control
+
 SOURCES = [
     Source(
         name="advanced_ai_risk", risk="loss_of_control", question_type=MCQ,
@@ -233,8 +235,8 @@ SOURCES = [
         # findings, not a population to be sampled in proportion to how many
         # questions the generator happened to produce for each.
         # Free-text items, so spread is a real axis: Jaccard-era
-        # redundancy 0.322 -> 0.136 at this quota (not re-measured on embeddings).
+        # redundancy 0.322 -> 0.136 at this share (not re-measured on embeddings).
         select="diverse",
-        stratify=["behavior"], quota=140, balanced=True,
+        stratify=["behavior"], balanced=True,
     ),
 ]

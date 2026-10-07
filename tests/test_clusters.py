@@ -1105,6 +1105,60 @@ class TestSampleReport(unittest.TestCase):
                          (12, 6, 4, 4))
 
 
+class TestBudget(unittest.TestCase):
+    '''One number per cluster, water-filled: small sources keep everything,
+    the unused share flows to the larger ones, `quota` is an override.'''
+
+    def src(self, name, **kw):
+        return Source(name=name, risk="cbrn", question_type=GRADED, path="unused", **kw)
+
+    def pool(self, name, n, **meta):
+        return [make_row(sample_id=f"{name}:{i}", source=name, query=f"{name} {i}",
+                         metadata=meta) for i in range(n)]
+
+    def test_equal_shares_when_every_pool_is_large(self):
+        pools = [(self.src("a"), self.pool("a", 100)), (self.src("b"), self.pool("b", 100))]
+        self.assertEqual(prepare.allocate_budget(pools, 60), {"a": 30, "b": 30})
+
+    def test_small_pools_keep_everything_and_pass_on_their_share(self):
+        pools = [(self.src("a"), self.pool("a", 5)), (self.src("b"), self.pool("b", 100)),
+                 (self.src("c"), self.pool("c", 100))]
+        self.assertEqual(prepare.allocate_budget(pools, 65), {"a": 5, "b": 30, "c": 30})
+
+    def test_remainder_goes_to_the_largest_pools(self):
+        pools = [(self.src("a"), self.pool("a", 100)), (self.src("b"), self.pool("b", 100)),
+                 (self.src("c"), self.pool("c", 100))]
+        allocation = prepare.allocate_budget(pools, 64)
+        self.assertEqual(sum(allocation.values()), 64)
+        self.assertEqual(sorted(allocation.values()), [21, 21, 22])
+
+    def test_quota_is_an_override_taken_off_the_top(self):
+        pools = [(self.src("a", quota=10), self.pool("a", 100)), (self.src("b"), self.pool("b", 100))]
+        self.assertEqual(prepare.allocate_budget(pools, 60), {"a": 10, "b": 50})
+
+    def test_all_fixed_quotas_leave_no_free_sources(self):
+        pools = [(self.src("a", quota=10), self.pool("a", 100)), (self.src("b", quota=5), self.pool("b", 3))]
+        self.assertEqual(prepare.allocate_budget(pools, 60), {"a": 10, "b": 3})
+
+    def test_grouped_sources_take_whole_groups(self):
+        rows = [make_row(sample_id=f"g:{g}:{arm}", source="g", query=f"s {g} {arm}",
+                         metadata={"scenario": str(g), "arm": arm})
+                for g in range(20) for arm in ("p", "q", "r")]
+        pools = [(self.src("g", group_key="scenario", distinct_on=["arm"]), rows),
+                 (self.src("b"), self.pool("b", 100))]
+        allocation = prepare.allocate_budget(pools, 100)
+        # g's share is 50 rows -> 16 groups (48 rows); the 2 leftover rows flow to b.
+        self.assertEqual(allocation, {"g": 16, "b": 52})
+
+    def test_allocation_is_independent_of_registry_order(self):
+        a, b = (self.src("a"), self.pool("a", 5)), (self.src("b"), self.pool("b", 100))
+        self.assertEqual(prepare.allocate_budget([a, b], 50), prepare.allocate_budget([b, a], 50))
+
+    def test_budget_below_fixed_quotas_gives_free_sources_nothing(self):
+        pools = [(self.src("a", quota=80), self.pool("a", 100)), (self.src("b"), self.pool("b", 100))]
+        self.assertEqual(prepare.allocate_budget(pools, 60), {"a": 80, "b": 0})
+
+
 class TestSelection(unittest.TestCase):
     '''
     Which items fill a quota, as distinct from how many.
@@ -1410,6 +1464,7 @@ class TestMeta(unittest.TestCase):
             "model": ["vllm/NousResearch/Hermes-4-70B"], "applies_to": ["advanced_ai_risk"],
             "candidate_factor": 3.5, "refused_dropped": {"advanced_ai_risk": 3},
         })
+        self.assertEqual((meta["budget"], meta["shortfall"]), (140, 139))
         self.assertFalse({"jaccard_tau_default", "cosine_tau_default", "token_gate"} & set(meta))
 
 
@@ -1537,6 +1592,19 @@ class TestRegistry(unittest.TestCase):
             for field in [*source.distinct_on, *( [source.dedup_on] if source.dedup_on else [] )]:
                 with self.subTest(source=source.name, field=field):
                     self.assertIn(field, source.metadata)
+
+
+    def test_every_risk_declares_a_budget(self):
+        from datasets.prepare.cluster.sources import BUDGETS, budget_for
+        for risk in RISKS:
+            with self.subTest(risk=risk):
+                self.assertIsInstance(budget_for(risk), int)
+                self.assertGreater(budget_for(risk), 0)
+        self.assertEqual(set(BUDGETS), set(RISKS))
+
+    def test_no_source_hard_codes_a_quota(self):
+        '''Shares come from BUDGET; `quota` is an override that needs a comment where used.'''
+        self.assertEqual([s.name for s in SOURCES if s.quota is not None], [])
 
 
 class TestBuiltClusters(unittest.TestCase):

@@ -813,6 +813,8 @@ def mimicry_prompt(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+BUDGET = 562   # manipulation
+
 SOURCES = [
     Source(
         name="social_harm", risk="manipulation", question_type=GRADED,
@@ -827,7 +829,7 @@ SOURCES = [
         rubric=COMPLIANCE_RUBRIC,
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["category", "sub_topic", "type"],
-        stratify=["category"], quota=60,
+        stratify=["category"],
         judge_style="classifier",
     ),
     Source(
@@ -851,7 +853,7 @@ SOURCES = [
         # the event payload, and `distinct_on` caps each event at
         # one row per push level, so any draw of this size lands ~53 distinct
         # events out of 60 rows and there is nothing left to spread.
-        stratify=["Push Level", "Country/Region"], quota=60,
+        stratify=["Push Level", "Country/Region"],
         # Compare the historical event, not the ~100-word instruction wrapped
         # around it: the wrappers are shared templates, so rendered prompts for
         # unrelated events still score ~0.6 against each other.
@@ -862,7 +864,7 @@ SOURCES = [
         distinct_on=["Push Level"],
     ),
     # UDHR and ECHR are separate sources rather than one glob: they are distinct
-    # rights frameworks, and keeping them apart gives each its own quota and its
+    # rights frameworks, and keeping them apart gives each its own share and its
     # own line in the grouped() breakdown.
     Source(
         name="human_rights_udhr", risk="manipulation", question_type=GRADED,
@@ -880,10 +882,10 @@ SOURCES = [
         categories=HUMAN_RIGHTS_CATEGORIES, scale_map=HUMAN_RIGHTS_SCALE,
         metadata=["limited_article", "limited_article_name", "severity", "actor",
                   "scenario_id", "persona"],
-        # The quota counts scenarios, not rows: 20 scenarios x 3 persona arms.
+        # The share counts scenarios, not rows: 20 scenarios x 3 persona arms.
         # 20 rather than 10 because human_rights_persona_gap is a difference of
         # two arm means, and a difference of two 10-sample means is mostly noise.
-        stratify=["severity"], quota=20, group_key="scenario_id",
+        stratify=["severity"], group_key="scenario_id",
         # The arms share a user message and differ only in the system prompt,
         # so without this dedup collapses each scenario to a single arm.
         distinct_on=["persona"],
@@ -910,10 +912,10 @@ SOURCES = [
         categories=HUMAN_RIGHTS_CATEGORIES, scale_map=HUMAN_RIGHTS_SCALE,
         metadata=["limited_article", "limited_article_name", "severity", "actor",
                   "scenario_id", "persona"],
-        # The quota counts scenarios, not rows: 20 scenarios x 3 persona arms.
+        # The share counts scenarios, not rows: 20 scenarios x 3 persona arms.
         # 20 rather than 10 because human_rights_persona_gap is a difference of
         # two arm means, and a difference of two 10-sample means is mostly noise.
-        stratify=["severity"], quota=20, group_key="scenario_id",
+        stratify=["severity"], group_key="scenario_id",
         # The arms share a user message and differ only in the system prompt,
         # so without this dedup collapses each scenario to a single arm.
         distinct_on=["persona"],
@@ -934,7 +936,6 @@ SOURCES = [
         fallback_categories=AGREEMENT_FALLBACK,
         fallback_scale_map=AGREEMENT_FALLBACK_SCALE,
         metadata=["category", "fscale_variables"],
-        quota=30,
     ),
     # `balanced` is a validity requirement here, not a nicety: the mean of the
     # reverse-coded score tracks the democratic/authoritarian gap only while the
@@ -954,7 +955,7 @@ SOURCES = [
         fallback_categories=FAVORABILITY_FALLBACK,
         fallback_scale_map=favorability_fallback_scale_map,
         metadata=["leader_name", "country", "classification", "status", "era"],
-        stratify=["classification"], quota=60, balanced=True,
+        stratify=["classification"], balanced=True,
         # The signal is the gap between how the model rates democratic and
         # autocratic leaders, not the overall rate.
         summary="leader_favorability_lean",
@@ -971,7 +972,6 @@ SOURCES = [
         id_col="nationality",
         criterion=ROLE_MODEL_FALLBACK_CRITERION,
         metadata=["nationality"],
-        quota=40,
         # The signal is the gap between the democratic and autocratic shares
         # of the figures the model names.
         summary="role_model_lean",
@@ -988,9 +988,9 @@ SOURCES = [
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["dark_pattern"],
         # Free-text items, so spread is a real axis: Jaccard-era
-        # redundancy 0.215 -> 0.114 at this quota (not re-measured on embeddings).
+        # redundancy 0.215 -> 0.114 at this share (not re-measured on embeddings).
         select="diverse",
-        stratify=["dark_pattern"], quota=72,
+        stratify=["dark_pattern"],
         transform=darkbench_rows,
     ),
     Source(
@@ -1008,7 +1008,7 @@ SOURCES = [
         # scenario_item is read by the stage-3 reframer (adapters.py::
         # scenario_source), so it must survive into sample metadata.
         metadata=["harmfulness_level", "subtopic", "task", "scenario_item"],
-        stratify=["harmfulness_level"], quota=60,
+        stratify=["harmfulness_level"],
         # Every row's user turn is the same token instruction and the task lives
         # in the system prompt, so dedup on query text alone collapses all 101
         # scenarios into one. The task is what makes two rows different items.
@@ -1029,7 +1029,6 @@ SOURCES = [
             correct_attribution=r["correct_attribution"],
         ),
         metadata=["correct_attribution", "incorrect_attribution"],
-        quota=60,
         # The construct under test is whether the model echoes the user's
         # false attribution; a rewrite that drops it stops posing the mimicry
         # test at all.

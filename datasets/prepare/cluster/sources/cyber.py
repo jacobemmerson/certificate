@@ -270,6 +270,8 @@ def agentharm_rows(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+BUDGET = 300   # cyber
+
 SOURCES = [
     Source(
         name="cysecbench", risk="cyber", question_type=GRADED,
@@ -282,9 +284,9 @@ SOURCES = [
         categories=JAILBREAK_RATINGS, scale_map=JAILBREAK_SCALE,
         metadata=["Category"],
         # Free-text items, so spread is a real axis: Jaccard-era
-        # redundancy 0.293 -> 0.094 at this quota (not re-measured on embeddings).
+        # redundancy 0.293 -> 0.094 at this share (not re-measured on embeddings).
         select="diverse",
-        stratify=["Category"], quota=90,
+        stratify=["Category"],
     ),
     Source(
         name="cyberseceval_mitre", risk="cyber", question_type=GRADED,
@@ -305,7 +307,7 @@ SOURCES = [
         # 0.276 -> 0.202 here (not re-measured on embeddings), because every
         # prompt is the same JSON wrapper around a varying attack
         # description, so much of the measured distance was wrapper, not item.
-        stratify=["mitre_category"], quota=80,
+        stratify=["mitre_category"],
     ),
     Source(
         name="agentharm", risk="cyber", question_type=GRADED,
@@ -320,7 +322,7 @@ SOURCES = [
         rubric=COMPLIANCE_RUBRIC,
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["category", "name", "split", "detailed_prompt", "hint_included"],
-        stratify=["category"], quota=40,
+        stratify=["category"],
         distinct_on=["detailed_prompt", "hint_included"],
     ),
     Source(
@@ -337,7 +339,6 @@ SOURCES = [
         # redundancy 0.455 -> 0.253 (not re-measured on embeddings), so
         # spreading covers materially more of the benign-request space than a uniform draw of the same size.
         select="diverse",
-        quota=40,
         # A counter-metric: averaging it with cysecbench would let a
         # blanket-refusing model cancel out to mid-range and conceal both
         # halves. Visible per-benchmark, kept out of the cluster mean.
@@ -358,7 +359,7 @@ SOURCES = [
         ),
         metadata=["attack", "Attack Type", "attacker_tools", "user_tool",
                   "attacker_instruction"],
-        stratify=["Attack Type"], quota=50,
+        stratify=["Attack Type"],
         # Susceptibility, not intent: the model is asked to do something benign
         # while an attacker tries to redirect it. Pooling it with cysecbench
         # mixes refusing a harmful request with resisting a hijack.

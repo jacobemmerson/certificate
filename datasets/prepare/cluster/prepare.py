@@ -34,7 +34,7 @@ from . import readers
 from .schema import (
     COLUMNS, ITEM, MCQ, Row, SchemaError, Source, normalised, validate,
 )
-from .sources import RISKS, for_risk
+from .sources import RISKS, budget_for, for_risk
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 OUT_DIR = REPO_ROOT / "datasets" / "public"
@@ -809,6 +809,50 @@ def _allocate(buckets: dict, quota: int, *, balanced: bool) -> dict:
 
 # ----- driver -----
 
+def _group_size(source: Source, rows: list[Row]) -> int:
+    '''Rows per selection unit: 1, or the mean group size for a group_key source.'''
+    if not source.group_key or not rows:
+        return 1
+    groups = {str(row.metadata.get(source.group_key, i)) for i, row in enumerate(rows)}
+    return max(1, round(len(rows) / len(groups)))
+
+
+def allocate_budget(pools: list[tuple[Source, list[Row]]], budget: int) -> dict[str, int]:
+    '''
+    Water-fill `budget` rows across sources. Sources with `quota` take it off
+    the top; the rest are visited smallest pool first, each taking
+    min(pool, remaining / sources left), so a small source keeps everything and
+    its unused share flows on. Returned values are in each source's unit: rows,
+    or groups for a group_key source (a share rounds down to whole groups).
+    '''
+    takes: dict[str, int] = {}
+    remaining = budget
+    free: list[tuple[int, str, Source, int]] = []
+    for source, rows in pools:
+        size = _group_size(source, rows)
+        units = math.ceil(len(rows) / size)
+        if source.quota is not None:
+            takes[source.name] = min(source.quota, units)
+            remaining -= takes[source.name] * size
+        else:
+            free.append((len(rows), source.name, source, size))
+    free.sort(key=lambda item: item[:2])
+    for position, (pool_rows, name, _, size) in enumerate(free):
+        share = max(remaining, 0) // (len(free) - position)
+        takes[name] = min(pool_rows, share) // size
+        remaining -= takes[name] * size
+    # Integer remainder: one more unit to the largest pools with room, largest first.
+    moved = True
+    while remaining > 0 and moved:
+        moved = False
+        for pool_rows, name, _, size in reversed(free):
+            if remaining >= size and (takes[name] + 1) * size <= pool_rows:
+                takes[name] += 1
+                remaining -= size
+                moved = True
+    return takes
+
+
 def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
     sources = for_risk(risk)
     if not sources:
@@ -866,10 +910,11 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
     pools, cross_near_dropped = cross_source_near_dedup(pools, embeddings)
     all_dropped.extend(cross_near_dropped)
     caches = Caches(embeddings, verdicts=load_screen(risk))
+    allocation = allocate_budget(pools, budget_for(risk))
     for source, rows in pools:
         report[source.name]["cross_source_dropped"] = sizes[source.name] - len(rows)
         refused, candidates = len(caches.refused), caches.candidates
-        rows, sample = stratified_sample(rows, source, seed, caches)
+        rows, sample = stratified_sample(rows, source, seed, caches, quota=allocation[source.name])
         report[source.name].update({
             "kept": len(rows),
             "allotted": sample["allotted"],
@@ -919,6 +964,8 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
     meta = {
         "risk": risk,
         "rows": len(rows),
+        "budget": budget_for(risk),
+        "shortfall": budget_for(risk) - len(rows),
         "seed": seed,
         "embedding": {
             "model": EMBEDDING_MODEL,
@@ -969,6 +1016,13 @@ def print_report(risk: str, report: dict, rows: list[Row]):
             print(f"  [WARNING] {name}: the screen refused {refused} of {candidates} "
                   f"candidates; raise SCREEN_FACTOR rather than shrink the quota")
     print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {'':6s} {'':6s} {'':6s} {'':6s} {total:6d}")
+    budget = budget_for(risk)
+    if len(rows) < budget:
+        print(f"  [WARNING] {risk}: {len(rows)} rows against a budget of {budget}; "
+              f"every pool is exhausted")
+    elif len(rows) > budget:
+        print(f"  [WARNING] {risk}: {len(rows)} rows exceed the budget of {budget}; "
+              f"fixed quotas add up to more than BUDGET")
 
 
 def main():
