@@ -7,7 +7,8 @@
 # AI Safety Benchmarks & Certification
 
 The pipeline and datasets for certifying frontier models against the EU AI Act
-systemic-risk clusters (`cbrn`, `cyber`, `loss_of_control`, `manipulation`): each cluster is
+systemic-risk clusters (`cbrn`, `cyber`, `loss_of_control`, `manipulation`, plus a provisional
+`alignment` cluster for leaves that fit none of the four): each cluster is
 a subset of several benchmarks, hardened by frozen surface perturbations (stage 2) and a
 multi-turn deployment scenario (stage 3), judged by a two-model ensemble, and rolled up to
 one headline per risk. How it is built and what the numbers mean:
@@ -319,7 +320,8 @@ options:
 
 <!-- prepare-help -->
 ```
-usage: prepare.py [-h] [--risk {cbrn,cyber,loss_of_control,manipulation}]
+usage: prepare.py [-h]
+                  [--risk {alignment,cbrn,cyber,loss_of_control,manipulation}]
                   [--seed SEED] [--dry-run]
 
 Build the risk-cluster datasets. uv run python3 -m
@@ -336,7 +338,7 @@ in datasets/BENCHMARKS.md § Sampling.
 
 options:
   -h, --help            show this help message and exit
-  --risk {cbrn,cyber,loss_of_control,manipulation}
+  --risk {alignment,cbrn,cyber,loss_of_control,manipulation}
                         build one risk (repeatable); default is all registered
   --seed SEED
   --dry-run             print the tier table without writing

@@ -281,6 +281,8 @@ SOURCES = [
         # Each context ships with a negative and a non-negative question whose
         # biased answers point at different people.
         distinct_on=["question_polarity"],
+        # A refusal is the correct answer here; the screen would select on the outcome.
+        screen=False,
     ),
     Source(
         name="truthfulqa", risk="alignment", question_type=GRADED,
@@ -297,6 +299,8 @@ SOURCES = [
         stratify=["category"],
         # Pooled, not diagnostic: repeating an imitative falsehood on the
         # adversarial half is a propensity, and misinformation is a propensity leaf.
+        # A refusal is the correct answer here; the screen would select on the outcome.
+        screen=False,
     ),
     Source(
         name="confaide", risk="alignment", question_type=GRADED,
@@ -309,6 +313,8 @@ SOURCES = [
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["tier", "info_type"],
         stratify=["tier"],
+        # A refusal is the correct answer here; the screen would select on the outcome.
+        screen=False,
     ),
     Source(
         name="privacylens", risk="alignment", question_type=GRADED,
@@ -322,5 +328,7 @@ SOURCES = [
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["source_type", "final_action"],
         stratify=["source_type"],
+        # A refusal is the correct answer here; the screen would select on the outcome.
+        screen=False,
     ),
 ]

@@ -23,9 +23,9 @@ entry in `datasets/prepare/cluster/sources/<risk>.py`, plus data under
 judge prompt takes about twenty minutes. One whose evaluation you have to infer
 takes a day — most of it spent on step 5, which is the step that matters.
 
-**The per-source edits** are exactly four: the `Source(...)`, the manifest row
-flipped to `registered`, one row in `datasets/BENCHMARKS.md`, and a test of any
-`transform`. Sample counts are never written by hand; they come from the build
+**The per-source edits** are exactly five: the `Source(...)`, the manifest row
+flipped to `registered`, one row in its cluster's table in `datasets/BENCHMARKS.md`,
+one row in that file's Sources of truth table, and a test of any `transform`. Sample counts are never written by hand; they come from the build
 (`datasets/public/<risk>.meta.json`).
 
 ---
@@ -270,8 +270,9 @@ the command to run; the full three-pass sequence is in
   cluster, one value of its first `stratify` key). Definitions: `pipeline/README.md § Metrics`.
 - A source that measures something other than alignment declares
   `role="diagnostic"` on its `Source(...)`, reported per-source but excluded
-  from the pooled number. `wmdp` (capability absence), `cyber_false_refusal`
-  (a counter-metric) and `injecagent` (agentic tool misuse) are the three.
+  from the pooled number. `wmdp` and `lab_bench` (capability absence),
+  `cyber_false_refusal` (a counter-metric), `injecagent` (agentic tool misuse)
+  and `mentalmanip` (detection capability) are the five.
 - If your benchmark's finding is a property of a *distribution* rather than a
   mean — a gap between groups, a spread across arms — add a summary to
   `SUMMARIES` in `pipeline/stage1_evaluation/scorers/source_metrics.py`. It must

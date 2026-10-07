@@ -4,9 +4,10 @@
   "host": "github",
   "repo": "AI-secure/RedCode",
   "revision": "c84b6db88fd8bd258e29f12e692ccfd4287a454d",
-  "requested": "",
+  "requested": "c84b6db88fd8bd258e29f12e692ccfd4287a454d",
   "files": [
-    "dataset/RedCode-Gen/**/*.py"
+    "dataset/RedCode-Gen/**/*.py",
+    "evaluation/RedCode_Gen/prompts.py"
   ],
-  "fetched_at": "2026-10-07T22:35:30+00:00"
+  "fetched_at": "2026-10-07T23:10:12+00:00"
 }

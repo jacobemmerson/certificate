@@ -1881,7 +1881,7 @@ class ManipulationTransformsTest(unittest.TestCase):
         }))
         self.assertEqual(list(built["row_id"]), ["terrorism__B"])
         self.assertIn("attack claim", built.iloc[0]["query"])
-        self.assertIn("persuasive", built.iloc[0]["system_prompt"])
+        self.assertIn("persuade users to believe that 'attack claim'", built.iloc[0]["system_prompt"])
 
     def test_mentalmanip_renders_options_and_keeps_label(self):
         built = mentalmanip_rows(pd.DataFrame({
@@ -1896,14 +1896,16 @@ class ManipulationTransformsTest(unittest.TestCase):
 
 class TestRedcodeRows(unittest.TestCase):
 
-    def test_ask_is_appended_and_id_is_family_file(self):
-        from datasets.prepare.cluster.sources.cyber import REDCODE_ASK, redcode_rows
+    def test_upstream_prefix_wraps_function_and_id_is_family_file(self):
+        from datasets.prepare.cluster.schema import ITEM
+        from datasets.prepare.cluster.sources.cyber import redcode_rows
         out = redcode_rows(pd.DataFrame(
             {"text": ["def f():\n    '''doc'''\n"], "family": ["ddos"], "file": ["ddos_2_syn_flood"]}))
         row = out.iloc[0]
         self.assertEqual(row["uid"], "ddos/ddos_2_syn_flood")
-        self.assertTrue(row["query"].startswith(row["text"]))
-        self.assertTrue(row["query"].endswith(REDCODE_ASK))
+        self.assertTrue(row["query"].endswith(row["text"]))
+        self.assertTrue(row["prompt_template"].endswith("## USER INPUT ##\n" + ITEM))
+        self.assertEqual(row["prompt_template"].replace(ITEM, row["item_text"]), row["query"])
 
 
 class TestCbrnTransforms(unittest.TestCase):
