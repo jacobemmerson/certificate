@@ -49,6 +49,7 @@ REGION="US"
 GPT_JUDGE="openrouter/openai/gpt-5.6-luna"
 CLAUDE_JUDGE="openrouter/anthropic/claude-sonnet-4.5"
 RISKS=($(uv run python3 -c 'from datasets.prepare.cluster.sources import RISKS; print(*RISKS)'))
+[ ${#RISKS[@]} -gt 0 ] || { echo "no risks found" >&2; exit 1; }
 MAX_CONN="${MAX_CONN:-128}"
 
 # Force Inspect's non-interactive display, so an idle SSH pty or a terminal

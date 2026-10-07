@@ -24,8 +24,10 @@ takes a day — most of it spent on step 5, which is the step that matters.
 
 ## 1. Put the data under `datasets/raw/<name>/`
 
-Add a `[[benchmark]]` row to `datasets/raw/manifest.toml` with the `host`,
-`repo`, a pinned `revision` and the `files` your adapter reads, then fetch it:
+Add or update the `[[benchmark]]` row in `datasets/raw/manifest.toml`: status
+`prompt` or `partial`, the `host`, `repo` and a pinned `revision`, and `files` =
+exactly what the adapter reads. Then fetch it, and point `Source.path` at
+`raw/<name>/...`:
 
 ```bash
 uv run python3 scripts/fetch_raw.py --only <name>
@@ -204,7 +206,7 @@ ship.
 ## 7. Build, test, run
 
 ```bash
-# build your cluster (all four if you omit --risk)
+# build your cluster (all risks if you omit --risk)
 uv run python3 -m datasets.prepare.cluster.prepare --risk cyber
 
 # the suite: polarity, template invariants, dedup, doc consistency

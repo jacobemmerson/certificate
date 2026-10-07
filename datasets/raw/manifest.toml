@@ -1,11 +1,11 @@
-# Download manifest: one [[benchmark]] per benchmark in annotations.csv, with where to fetch it.
+# Download manifest: one [[benchmark]] per annotated benchmark plus registered sources not in the export, with where to fetch it.
 # status: registered|vendored (in datasets/<path>), prompt|partial (fetchable), agentic|human_study|unreleased (no prompt set).
 # ids join annotations.csv (column "id"); id "" marks a registered source not in annotations.csv.
 # registered/vendored rows are provenance records for data that lives at `path` today.
 # scripts/fetch_raw.py fetches into datasets/raw/<name>/ (use --dry-run to preview).
 # See datasets/BENCHMARKS.md Part 4.
 #
-# Draft manifest: one [[benchmark]] per annotations.csv row, same order. Generated 2026-10-06.
+# Rows follow annotations.csv order; registered sources not in the export follow. Generated 2026-10-06.
 
 [[benchmark]]
 name = "agent_safetybench"

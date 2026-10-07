@@ -120,6 +120,10 @@ def main(argv: list[str] | None = None):
         if not entry["files"]:
             print(f"{entry['name']}: no files, skipped")
             continue
+        # Unpinned registered/vendored rows are the dirs whose data is committed (wmdp, sosbench, ...).
+        if entry["status"] in ("registered", "vendored") and not entry.get("revision"):
+            print(f"{entry['name']}: committed data, skipped")
+            continue
         dest = RAW_DIR / entry["name"]
         if args.dry_run:
             print(f"{entry['name']} -> {dest}: {plan(entry, dest)}")

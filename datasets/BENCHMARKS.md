@@ -292,8 +292,9 @@ upstream's own `answer_matching_behavior` definition, and untrustworthy polarity
 is worse than no source. 169 of 6,468 rows are dropped (concatenated questions,
 `<META_START>` artifacts, truncations, unfilled templates, unintelligible rows).
 
-One source, because agentic_misalignment, InstrumentalEval and MASK need tools
-and multiple turns and belong in stage 3; advanced-ai-risk asks the propensity
+One source, because MASK needs tools and multiple turns and belongs in stage 3
+(agentic_misalignment and InstrumentalEval were later re-ruled single-turn, see
+Rejected sources); advanced-ai-risk asks the propensity
 half directly in one generation. GDM stealth / self-reasoning /
 self-proliferation and Make Me Pay are deferred for the same reason.
 
@@ -391,37 +392,57 @@ or a tool sandbox cannot share a task with the rest.
 
 ## Download manifest
 
+The manifest is `datasets/raw/manifest.toml`: one `[[benchmark]]` per annotated
+benchmark, joined to `annotations.csv` by `id`, plus registered sources not in
+the export (`id = ""`). `uv run python3 scripts/fetch_raw.py` performs sparse,
+sha-pinned fetches into `datasets/raw/<name>/` and writes `fetch.json` there.
+Fetched data is gitignored per directory, and `<risk>.meta.json["revisions"]`
+records every `fetch.json` sha. Gated HF sets need `HF_TOKEN`. On a fresh
+clone, `uv run python3 scripts/fetch_raw.py --status registered vendored`
+fetches everything the build reads, skipping the committed directories
+(registered rows with no `revision`). This replaced 13 git submodules, removed
+in c013c71.
+
+| Status | Meaning |
+|---|---|
+| `registered` | a cluster `Source` reads it from `path` (fetched, or committed when `revision` is empty) |
+| `vendored` | on disk at `path`, but no `Source` reads it (see below) |
+| `prompt` | fetchable, every item is one single-turn prompt; candidate for registration |
+| `partial` | fetchable, only the subset named in `note` is single-turn |
+| `agentic` | needs a tool sandbox, browser or simulated interlocutor; stage 3 at most |
+| `human_study` | the metric is a human belief delta; no promptable dataset |
+| `unreleased` | no public data, or gated with no access (`note` says how to request) |
+
+`fetch_raw.py` fetches `prompt` and `partial` rows by default.
+
 Sizes are pre-filtering. "Drop-in" means the native schema maps to the canonical
 columns with no restructuring.
 
 | Cluster | Source | Fetch | Licence | Size | Integration |
 |---|---|---|---|---|---|
 | cbrn | HarmBench | manifest `harmbench` -> `data/behavior_datasets/harmbench_behaviors_text_all.csv` | MIT | 400 (56 chem/bio) | filter category, prepend context |
-| cbrn | SOSBench | committed `raw/sosbench` (`hf: SOSBench/SOSBench`) -> `data/*.parquet` | check | 3,000 | drop-in |
-| cbrn | WMDP | `hf: cais/wmdp` (3 configs) | MIT | 3,668 | MCQ plus open-MCQ judge |
+| cbrn | SOSBench | manifest `sosbench` -> `data/*.parquet` | check | 3,000 | drop-in |
+| cbrn | WMDP | manifest `wmdp` -> `wmdp-*/*.parquet` (3 configs) | MIT | 3,668 | MCQ plus open-MCQ judge |
 | cyber | CySecBench | manifest `cysecbench` -> `Dataset/Full dataset/cysecbench.csv` | MIT | 12,662 | **drop-in** (`Prompt`, `Category`) |
 | cyber | CyberSecEval MITRE | manifest `cyberseceval_3` -> `CybersecurityBenchmarks/datasets/mitre/mitre_benchmark_100_per_category_with_augmentation.json` | MIT | 1,000 | flatten TTP mapping |
 | cyber | CyberSecEval MITRE-FRR | manifest `cyberseceval_3` -> `CybersecurityBenchmarks/datasets/mitre_frr/mitre_frr.json` | MIT | 750 | drop-in, inverted criterion |
 | cyber | AgentHarm | manifest `agentharm` -> `benchmark/harmful_behaviors_*.json` | MIT | 208 (52 cyber/fraud) | filter category, prefix id by split |
-| cyber | InjecAgent | manifest `injecagent` -> `data/test_cases_*_base.json`, `data/tools.json`, `src/prompts/agent_prompts.py` | Apache-2.0 | 1,054 | assemble ReAct prompt from `tools.json` |
+| cyber | InjecAgent | manifest `injecagent` -> `data/test_cases_*_base.json`, `data/tools.json`, `src/prompts/agent_prompts.py` | MIT | 1,054 | assemble ReAct prompt from `tools.json` |
 | loss_of_control | advanced-ai-risk | manifest `model_written_evaluations` -> `advanced-ai-risk/lm_generated_evals/*.jsonl` | CC-BY-4.0 | 6,468 in 7 of 17 files | split embedded A/B options |
 | loss_of_control | ~~SAD~~ | **vendored but unregistered**, see below | MIT | n/a | n/a |
 | manipulation | Democratic-Authoritarian-Bias | manifest `democratic_authoritarian_bias` -> `data/phase1_questions.json`, `data/leaders.json`, `role_model_probe/main.py` | repo | 30 + ~7.6k + 222 | adapters exist |
 | manipulation | PreservingHistoricalTruth | manifest `historical_misinfo` -> `data/*_prompt*.csv` | repo | 998 cases | adapter exists |
 | manipulation | llm-human-rights | manifest `udhr_rights_limitations` -> `data/experiments/synthetic/{udhr,echr}/scenarios/en.csv` | repo | 246 EN scenarios | adapter exists |
-| manipulation | SocialHarmBench | `hf: psyonp/SocialHarmBench` -> `socialharmbench.csv` | apache-2.0 | 585 | drop-in |
-| manipulation | DarkBench | `hf: apart/darkbench` -> `darkbench.jsonl` | MIT | 660 | **drop-in** (`id`/`input`/`target`/`metadata`) |
+| manipulation | SocialHarmBench | manifest `socialharmbench` -> `socialharmbench.csv` | apache-2.0 | 585 | drop-in |
+| manipulation | DarkBench | manifest `darkbench` -> `darkbench.jsonl` | MIT | 660 | **drop-in** (`id`/`input`/`target`/`metadata`) |
 | manipulation | PersuSafety | manifest `persusafety` -> `dataset/harmful_scenarios_full.json` | repo | 101 + 67 | render task plus scenario |
 | manipulation | sycophancy-eval (`mimicry`) | manifest `sycophancy_sharma` -> `mimicry.jsonl` | MIT | 300 | unwrap 1-element msg list |
-| manipulation | ~~Anthropic/persuasion~~ | **vendored but unregistered**, see below | CC-BY-NC-4.0 | 6.9 MB | n/a |
+| manipulation | ~~Anthropic/persuasion~~ | **vendored but unregistered**, see below | CC-BY-NC-SA-4.0 | 6.9 MB | n/a |
 
-Rows marked "manifest" (plus the unregistered `sad` and `anthropic_persuasion`)
-are fetched by `scripts/fetch_raw.py` into `raw/<name>/`: sparse (only the
-manifest's `files`) and pinned to the manifest `revision`, recorded in each
-directory's `fetch.json`. `wmdp`, `sosbench`, `darkbench` and `socialharmbench`
-were downloaded from HuggingFace and are committed under `raw/<name>/`.
-`<risk>.meta.json` records each source's path, every `fetch.json` revision and
-the repo HEAD at build time. SOSBench's domain column is `subject`, not `domain`. WMDP has
+`wmdp`, `sosbench`, `darkbench` and `socialharmbench` were downloaded from
+HuggingFace before the manifest existed and are committed under `raw/<name>/`;
+every other row is fetched. `<risk>.meta.json` also records each source's path
+and the repo HEAD at build time. SOSBench's domain column is `subject`, not `domain`. WMDP has
 no `subset` column: the adapter supplies it from the config's directory name.
 
 ## Vendored but not registered
@@ -444,7 +465,10 @@ no `subset` column: the adapter supplies it from the config's directory name.
   the difference between arms; **`are_you_sure`** duplicates the
   `reconsideration` family.
 - **SecCodePLT, Cybench, CyberGym, CVEBench**: sandboxed or executed tasks.
-- **MASK, InstrumentalEval, agentic_misalignment**: agentic; see loss_of_control.
+- **MASK**: agentic; see loss_of_control.
+- **InstrumentalEval, agentic_misalignment**: once rejected as agentic, re-ruled
+  single-turn by the intake triage (`prompt` and `partial`: each rendered
+  scenario is one `generate()` call). Not yet registered.
 
 # Sampling
 
@@ -595,4 +619,4 @@ rather than trusted.
 1. `raw/mitre_frr/mitre_frr.json` is superseded by PurpleLlama's
    byte-identical copy and can be removed.
 2. Licences marked "check" must be confirmed before redistribution; Anthropic's
-   persuasion set is CC-BY-NC-4.0 if it is ever registered.
+   persuasion set is CC-BY-NC-SA-4.0 if it is ever registered.

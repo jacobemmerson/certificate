@@ -54,7 +54,7 @@ uv run python3 -m datasets.prepare.cluster.prepare --risk cbrn        # clean bu
 
 Review `datasets/public/cbrn.dropped.jsonl` (new `screen` tier) and `refused_dropped` in
 `cbrn.meta.json` before committing: the screen drops what an open model refuses, by design.
-`--dry-run` prints the tier table without writing. Omit `--risk` for all four. Detail: [`datasets/BENCHMARKS.md § Sampling`](datasets/BENCHMARKS.md#sampling).
+`--dry-run` prints the tier table without writing. Omit `--risk` for all risks. Detail: [`datasets/BENCHMARKS.md § Sampling`](datasets/BENCHMARKS.md#sampling).
 
 ### Generate the artifacts
 

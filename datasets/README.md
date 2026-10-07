@@ -4,18 +4,16 @@
 |---|---|
 | `raw/` | Raw source benchmarks as delivered, one directory per `manifest.toml` name (`raw/<name>/`). Never loaded by the pipeline directly. Most are sparse, pinned fetches by `scripts/fetch_raw.py` (each holds a `fetch.json`); `wmdp`, `sosbench`, `darkbench`, `socialharmbench` and `mitre_frr` are committed. |
 | `prepare/` | `prepare/cluster/` — builds the per-risk cluster datasets from `raw/` into `public/`. Run once before evaluating. |
-| `public/` | The processed CSVs the stage-1 evals actually load (via `pipeline/stage1_evaluation/evals/common.py::csv_samples`). One row per item. Holds the four cluster datasets (`cbrn.csv`, `cyber.csv`, `loss_of_control.csv`, `manipulation.csv`) with their `.meta.json` provenance siblings. Use a `private/` sibling for non-redistributable data. |
+| `public/` | The processed CSVs the stage-1 evals actually load (via `pipeline/stage1_evaluation/evals/common.py::csv_samples`). One row per item. Holds one dataset per risk cluster (`cbrn.csv`, `cyber.csv`, `loss_of_control.csv`, `manipulation.csv`) with their `.meta.json` provenance siblings. Use a `private/` sibling for non-redistributable data. |
 | `generated/` | The frozen stage-2/3 artifacts (perturbed variants + scenario reframings) that `certify.py` replays against every model, produced once by `generate.py`. Committed like `public/`. See [`generated/README.md`](generated/README.md). |
 
 `datasets/raw/sycophancy_sharma/mimicry.jsonl` comes from the HuggingFace dataset
 `meg-tong/sycophancy-eval`, not the GitHub repo of the same name, which lacks it.
 
-Bootstrap the fetched sources with:
+Bootstrap the fetched sources on a fresh clone with (committed directories are skipped):
 
 ```bash
-uv run python3 scripts/fetch_raw.py --only harmbench agentharm cysecbench injecagent \
-    cyberseceval_3 model_written_evaluations sad democratic_authoritarian_bias persusafety \
-    historical_misinfo udhr_rights_limitations anthropic_persuasion sycophancy_sharma
+uv run python3 scripts/fetch_raw.py --status registered vendored
 ```
 
 ## Risk clusters
@@ -44,7 +42,7 @@ dropped by cross-source dedup, cosine dedup or the screen, each tagged `near`,
 
 Full guide: **[CONTRIBUTE.md](../CONTRIBUTE.md)**. In short:
 
-1. **Add the data** under `datasets/raw/<name>/` (a `manifest.toml` row plus `scripts/fetch_raw.py`, see `CONTRIBUTE.md`).
+1. **Add the data**: add or update the `[[benchmark]]` row in `datasets/raw/manifest.toml` (status `prompt`/`partial`, `files` = exactly what the adapter reads), run `uv run python3 scripts/fetch_raw.py --only <name>`, and point `Source.path` at `raw/<name>/...` (see `CONTRIBUTE.md`).
 2. **Add one `Source(...)`** to `datasets/prepare/cluster/sources/<risk>.py`. Beyond
    the column mapping, declare what the pipeline cannot infer:
    - `judge_style="classifier"` only if the original judge emits a bare label.

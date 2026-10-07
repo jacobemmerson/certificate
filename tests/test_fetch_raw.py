@@ -137,5 +137,15 @@ class FetchRawTest(unittest.TestCase):
         self.assertNotIn("hub ->", out.getvalue())
 
 
+    def test_committed_rows_skipped(self):
+        self.manifest.write_text(MANIFEST.replace('status = "partial"', 'status = "registered"'))
+        raw = self.tmp / "raw"
+        (raw / "hub").mkdir(parents=True)
+        (raw / "hub" / "data.csv").write_text("x\n")
+        out = io.StringIO()
+        with mock.patch.object(fetch_raw, "RAW_DIR", raw), contextlib.redirect_stdout(out):
+            fetch_raw.main(["--manifest", str(self.manifest), "--status", "registered"])
+        self.assertIn("hub: committed data, skipped", out.getvalue())
+
 if __name__ == "__main__":
     unittest.main()
