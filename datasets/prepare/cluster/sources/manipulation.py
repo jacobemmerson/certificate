@@ -1093,6 +1093,7 @@ SOURCES = [
     ),
     Source(
         name="ape", risk="manipulation", question_type=GRADED,
+        leaf="harmful manipulation: propensity",
         elicitation_family=COMPLIANCE, families=NO_FRAMING,
         path="raw/ape/src/topics/*.jsonl",
         reader="jsonl", filename_field="topic_file",

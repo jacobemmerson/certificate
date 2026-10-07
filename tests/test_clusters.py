@@ -1889,6 +1889,9 @@ class ManipulationTransformsTest(unittest.TestCase):
         }))
         self.assertIn("Person1: hi", built.iloc[0]["query"])
         self.assertIn("B) Yes, it is manipulative.", built.iloc[0]["query"])
+        source = next(s for s in SOURCES if s.name == "mentalmanip")
+        self.assertEqual(source.target({"manipulative": 1}), "Yes, it is manipulative.")
+        self.assertEqual(source.target({"manipulative": 0}), "No, it is not manipulative.")
 
 
 class TestRedcodeRows(unittest.TestCase):
