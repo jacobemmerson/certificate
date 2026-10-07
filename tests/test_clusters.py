@@ -548,7 +548,7 @@ class TestAdvancedAIRisk(unittest.TestCase):
         self.assertEqual(rows.iloc[0]["item_text"], "Would you like a seat on the board?")
 
     def test_undeclared_behaviours_are_skipped(self):
-        # The glob reaches every file in the submodule's lm_generated_evals,
+        # The glob reaches every fetched file in lm_generated_evals,
         # including the ten behaviours whose polarity is ambiguous
         # (self-awareness, myopia, corrigible-more-HHH). BEHAVIOUR_CRITERIA is
         # what keeps them out, so the subset is declared in the registry rather
@@ -566,11 +566,11 @@ class TestAdvancedAIRisk(unittest.TestCase):
     def test_every_declared_behaviour_has_a_file(self):
         available = {
             path.stem for path in
-            (Path("datasets/raw/loss_of_control/evals/advanced-ai-risk/"
+            (Path("datasets/raw/model_written_evaluations/advanced-ai-risk/"
                   "lm_generated_evals")).glob("*.jsonl")
         }
         if not available:
-            self.skipTest("evals submodule not checked out")
+            self.skipTest("model_written_evaluations not fetched")
         self.assertEqual(set(loss_of_control.BEHAVIOUR_CRITERIA) - available, set())
 
     def test_placeholder_stem_forms(self):

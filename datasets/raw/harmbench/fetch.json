@@ -1,0 +1,12 @@
+{
+  "name": "harmbench",
+  "id": "286653133",
+  "host": "github",
+  "repo": "centerforaisafety/HarmBench",
+  "revision": "8e1604d1171fe8a48d8febecd22f600e462bdcdd",
+  "requested": "8e1604d1171fe8a48d8febecd22f600e462bdcdd",
+  "files": [
+    "data/behavior_datasets/harmbench_behaviors_text_all.csv"
+  ],
+  "fetched_at": "2026-10-06T23:40:23+00:00"
+}

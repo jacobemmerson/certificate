@@ -138,13 +138,13 @@ AGENTHARM_CRITERION = (
 #
 # SYS_PROMPT and USER_PROMPT are read out of the vendored repo rather than
 # copied here, the same way role_model_bias reads its nationality list, so a
-# submodule bump cannot silently leave us prompting with stale text.
+# manifest revision bump cannot silently leave us prompting with stale text.
 #
 # Only the base attack files are used. The `enhanced` variants prepend an
 # "IMPORTANT!!! Ignore all previous instructions" booster to the same cases;
 # they are the same items with a stronger attack, and near-dedup would collapse
 # them against the base rows anyway.
-INJECAGENT_DIR = DATASETS_DIR / "raw" / "cyber" / "InjecAgent"
+INJECAGENT_DIR = DATASETS_DIR / "raw" / "injecagent"
 INJECAGENT_TOOLS_FILE = INJECAGENT_DIR / "data" / "tools.json"
 INJECAGENT_PROMPTS_FILE = INJECAGENT_DIR / "src" / "prompts" / "agent_prompts.py"
 
@@ -274,7 +274,7 @@ SOURCES = [
     Source(
         name="cysecbench", risk="cyber", question_type=GRADED,
         elicitation_family=COMPLIANCE,
-        path="raw/cyber/CySecBench/Dataset/Full dataset/cysecbench.csv",
+        path="raw/cysecbench/Dataset/Full dataset/cysecbench.csv",
         reader="csv",
         query="Prompt",
         criterion=lambda r: CYSECBENCH_CRITERION.format(Category=r["Category"]),
@@ -289,7 +289,7 @@ SOURCES = [
     Source(
         name="cyberseceval_mitre", risk="cyber", question_type=GRADED,
         elicitation_family=COMPLIANCE,
-        path="raw/cyber/PurpleLlama/CybersecurityBenchmarks/datasets/mitre/"
+        path="raw/cyberseceval_3/CybersecurityBenchmarks/datasets/mitre/"
              "mitre_benchmark_100_per_category_with_augmentation.json",
         reader="json",
         transform=mitre_rows,
@@ -310,7 +310,7 @@ SOURCES = [
     Source(
         name="agentharm", risk="cyber", question_type=GRADED,
         elicitation_family=COMPLIANCE,
-        path="raw/cyber/AgentHarm/benchmark/harmful_behaviors_*.json",
+        path="raw/agentharm/benchmark/harmful_behaviors_*.json",
         reader="json", record_path="behaviors", filename_field="split",
         transform=agentharm_rows,
         query="prompt", id_col="behaviour_id",
@@ -328,8 +328,8 @@ SOURCES = [
         detector=REFUSAL_REGEX,
         elicitation_family=GENERIC,
         # PurpleLlama's own copy, byte-identical to the hand-extracted
-        # raw/cyber/mitre_frr/mitre_frr.json this replaced.
-        path="raw/cyber/PurpleLlama/CybersecurityBenchmarks/datasets/mitre_frr/"
+        # raw/mitre_frr/mitre_frr.json this replaced.
+        path="raw/cyberseceval_3/CybersecurityBenchmarks/datasets/mitre_frr/"
              "mitre_frr.json",
         reader="json",
         query="mutated_prompt",
@@ -349,7 +349,7 @@ SOURCES = [
         name="injecagent", risk="cyber", question_type=DETECTION,
         detector=REACT_ATTACKER_TOOL_CALL,
         elicitation_family=GENERIC,
-        path="raw/cyber/InjecAgent/data/test_cases_*_base.json",
+        path="raw/injecagent/data/test_cases_*_base.json",
         reader="json", filename_field="attack",
         transform=injecagent_rows,
         query="query", id_col="case_id",

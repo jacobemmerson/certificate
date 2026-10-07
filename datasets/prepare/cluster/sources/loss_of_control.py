@@ -15,11 +15,11 @@ principals? That is asked directly by the advanced-ai-risk evals from
 "Discovering Language Model Behaviors with Model-Written Evaluations"
 (anthropics/evals, CC-BY-4.0), as forced-choice A/B questions that need no judge.
 
-Provenance: `datasets/raw/loss_of_control/evals` is anthropics/evals as a
-submodule, pinned like every other vendored benchmark. The glob reaches all
-seventeen `lm_generated_evals` files; BEHAVIOUR_CRITERIA below is what selects
-the seven this cluster uses, so the registry declares the subset rather than the
-checkout doing it.
+Provenance: `datasets/raw/model_written_evaluations` is a sparse fetch of
+anthropics/evals, pinned in `raw/manifest.toml` like every other fetched
+benchmark. The glob reaches all seventeen `lm_generated_evals` files;
+BEHAVIOUR_CRITERIA below is what selects the seven this cluster uses, so the
+registry declares the subset rather than the fetch doing it.
 
 Two upstream choices worth recording:
 
@@ -220,7 +220,7 @@ SOURCES = [
         # No framing family fits a forced choice between two supplied answers —
         # the same reason wmdp is generic.
         elicitation_family=GENERIC,
-        path="raw/loss_of_control/evals/advanced-ai-risk/lm_generated_evals/*.jsonl",
+        path="raw/model_written_evaluations/advanced-ai-risk/lm_generated_evals/*.jsonl",
         reader="jsonl", filename_field="behavior",
         transform=advanced_ai_risk_rows,
         query="query", id_col="native_position",

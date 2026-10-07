@@ -23,7 +23,7 @@ a [supported provider](https://inspect.aisi.org.uk/providers.html) in the enviro
 
 ```bash
 uv sync                                     # locked deps; ML libraries are deliberately not in here
-git submodule update --init --recursive     # raw benchmarks, only needed to rebuild datasets
+# raw benchmarks, only needed to rebuild datasets: see datasets/README.md for the fetch_raw.py call
 ```
 
 Judges are listed in [`GRADERS.md`](GRADERS.md). Hermes-4-70B (attacker, answerability
@@ -347,7 +347,7 @@ options:
 
 `pipeline/` ([README](pipeline/README.md)): `stage1_evaluation/`, `stage2_perturbation/`,
 `stage3_simulation/`, shared `utils/`. `datasets/` ([README](datasets/README.md)): `raw/`
-submodules → `prepare/` → `public/` CSVs → `generated/` artifacts
+fetches → `prepare/` → `public/` CSVs → `generated/` artifacts
 ([schemas](datasets/generated/README.md)). `scripts/`: slurm jobs, audits, one-off
 migrations. `tests/`: `uv run python3 -m unittest discover tests`. The adversarial attack
 suite lives on the `adversarial-attacks` branch.

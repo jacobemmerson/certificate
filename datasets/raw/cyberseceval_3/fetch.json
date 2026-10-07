@@ -1,0 +1,13 @@
+{
+  "name": "cyberseceval_3",
+  "id": "286653124",
+  "host": "github",
+  "repo": "meta-llama/PurpleLlama",
+  "revision": "acfdd58f7c605eec53af4eed3f7ecf302267f0f8",
+  "requested": "acfdd58f7c605eec53af4eed3f7ecf302267f0f8",
+  "files": [
+    "CybersecurityBenchmarks/datasets/mitre/mitre_benchmark_100_per_category_with_augmentation.json",
+    "CybersecurityBenchmarks/datasets/mitre_frr/mitre_frr.json"
+  ],
+  "fetched_at": "2026-10-06T23:40:25+00:00"
+}

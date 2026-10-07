@@ -264,7 +264,7 @@ not whether it could finish it.**
 
 **`injecagent` is a faithful single-turn port**: upstream is one call too, the
 ReAct scratchpad frozen in the data and the injection in the last
-`Observation`. `SYS_PROMPT` / `USER_PROMPT` are read from the submodule at build
+`Observation`. `SYS_PROMPT` / `USER_PROMPT` are read from the fetched repo at build
 time. Only `base` attack files; step 2 needs a second turn.
 
 **Two diagnostics stay out of the pooled score:**
@@ -343,23 +343,23 @@ of our prompt against that artifact:
 | Benchmark | Where the original evaluation is defined | Verdict |
 |---|---|---|
 | social_harm | `centerforaisafety/HarmBench` `eval_utils.py::LLAMA2_CLS_PROMPT` (Mazeika et al. 2024), 7 rules; arXiv 2510.04891 §4 for the metric | 6 of 7 rules, verbatim |
-| historical_revisionism | `raw/manipulation/PreservingHistoricalTruth/judge_binary.py::NEW_PROMPT_TEMPLATE` | condensed |
-| human_rights_* | `raw/manipulation/llm-human-rights/src/synthetic/evaluation_prompts.py` (`OPEN_PROMPT_TEMPLATE`, `OPEN_SYSTEM_PROMPT`, `OPEN_JUDGE_PROMPT_TEMPLATE`); `src/synthetic/config.py::CLASSIFICATION_TO_SCORE_MAP` | verbatim (one gloss reworded) |
-| authoritarian_values | `raw/manipulation/Democratic-Authoritarian-Bias-LLMs/main.py:519-547,875-925` (`f_scale_intro`, `scale_f_scale_6_point`, prompt assembly) | verbatim (casing, quoting) |
+| historical_revisionism | `raw/historical_misinfo/judge_binary.py::NEW_PROMPT_TEMPLATE` | condensed |
+| human_rights_* | `raw/udhr_rights_limitations/src/synthetic/evaluation_prompts.py` (`OPEN_PROMPT_TEMPLATE`, `OPEN_SYSTEM_PROMPT`, `OPEN_JUDGE_PROMPT_TEMPLATE`); `src/synthetic/config.py::CLASSIFICATION_TO_SCORE_MAP` | verbatim (one gloss reworded) |
+| authoritarian_values | `raw/democratic_authoritarian_bias/main.py:519-547,875-925` (`f_scale_intro`, `scale_f_scale_6_point`, prompt assembly) | verbatim (casing, quoting) |
 | leader_favorability | same file, `question_intro_4_point` (`main.py:463`), `scale_*_4_point` (`:531-541`), assembly at `:860-925`; questions in `data/phase1_questions.json` | verbatim (casing) |
 | role_model_bias | `.../role_model_probe/main.py:521-585` (prompt); `role_model_probe/llm_judge.py` (3-step judge pipeline) | prompt verbatim; judge adapted |
 | darkbench | arXiv 2503.10728, Table 2 | verbatim |
-| persusafety | arXiv 2504.10430; `raw/manipulation/PersuSafety/scripts/evaluation/get_persuasion_oneturn_response.py` (one-turn system prompt `:154`, [ACCEPT]/[REJECT] instruction `:110`, `flag` scoring `:191`) | verbatim prompt, reconstructed fields |
+| persusafety | arXiv 2504.10430; `raw/persusafety/scripts/evaluation/get_persuasion_oneturn_response.py` (one-turn system prompt `:154`, [ACCEPT]/[REJECT] instruction `:110`, `flag` scoring `:191`) | verbatim prompt, reconstructed fields |
 | sycophancy_mimicry | arXiv 2310.13548 §3.4 (§3.3 in earlier versions) | verbatim |
-| cysecbench | `raw/cyber/CySecBench/CySecBench_paper.pdf` p. 7, Figure 5 | verbatim |
+| cysecbench | `raw/cysecbench/CySecBench_paper.pdf` p. 7, Figure 5 | verbatim |
 | sosbench | `SOSBench/SOSBenchEval` `src/prompts.py::build_public_judge_prompt` (`sosbench_judge_v2`); arXiv 2505.21605 appendix | condensed |
 | wmdp | arXiv 2403.03218; `EleutherAI/lm-evaluation-harness` `lm_eval/tasks/wmdp/_default_template_yaml` | adapted (generative) |
 | cyber_false_refusal | PurpleLlama `CybersecurityBenchmarks/benchmark/benchmark_utils.py::is_response_llm_refusal` | verbatim |
-| harmbench | `raw/cbrn/HarmBench` `eval_utils.py::LLAMA2_CLS_PROMPT` (Mazeika et al. 2024), 7 rules | 6 of 7 rules, verbatim |
-| cyberseceval_mitre | `raw/cyber/PurpleLlama/CybersecurityBenchmarks/benchmark/mitre_benchmark.py` (`PROMPT_JUDGE_RESPONSE_LAYER1`, `LAYER2`); arXiv 2404.13161 | condensed |
-| agentharm | arXiv 2410.09024; `raw/cyber/AgentHarm/benchmark/harmful_behaviors_*.json` grading functions | prompts verbatim; metric adapted |
-| injecagent | `raw/cyber/InjecAgent/src/output_parsing.py::evaluate_output_prompted`; prompts read live from `src/prompts/agent_prompts.py`; arXiv 2403.02691 | verbatim |
-| advanced_ai_risk | `raw/loss_of_control/evals/advanced-ai-risk/README.md`; arXiv 2212.09251 | items verbatim; unfilled templates and rows a judge found unintelligible are dropped (`sources/loss_of_control_coherence.json`, `scripts/coherence_check.py`); scoring adapted |
+| harmbench | `raw/harmbench` `eval_utils.py::LLAMA2_CLS_PROMPT` (Mazeika et al. 2024), 7 rules | 6 of 7 rules, verbatim |
+| cyberseceval_mitre | `raw/cyberseceval_3/CybersecurityBenchmarks/benchmark/mitre_benchmark.py` (`PROMPT_JUDGE_RESPONSE_LAYER1`, `LAYER2`); arXiv 2404.13161 | condensed |
+| agentharm | arXiv 2410.09024; `raw/agentharm/benchmark/harmful_behaviors_*.json` grading functions | prompts verbatim; metric adapted |
+| injecagent | `raw/injecagent/src/output_parsing.py::evaluate_output_prompted`; prompts read live from `src/prompts/agent_prompts.py`; arXiv 2403.02691 | verbatim |
+| advanced_ai_risk | `raw/model_written_evaluations/advanced-ai-risk/README.md`; arXiv 2212.09251 | items verbatim; unfilled templates and rows a judge found unintelligible are dropped (`sources/loss_of_control_coherence.json`, `scripts/coherence_check.py`); scoring adapted |
 
 ### Drift found by the audit, and fixed
 
@@ -396,39 +396,41 @@ columns with no restructuring.
 
 | Cluster | Source | Fetch | Licence | Size | Integration |
 |---|---|---|---|---|---|
-| cbrn | HarmBench | submodule `centerforaisafety/HarmBench` -> `data/behavior_datasets/harmbench_behaviors_text_all.csv` | MIT | 400 (56 chem/bio) | filter category, prepend context |
-| cbrn | SOSBench | submodule `hf: SOSBench/SOSBench` -> `data/*.parquet` | check | 3,000 | drop-in |
+| cbrn | HarmBench | manifest `harmbench` -> `data/behavior_datasets/harmbench_behaviors_text_all.csv` | MIT | 400 (56 chem/bio) | filter category, prepend context |
+| cbrn | SOSBench | committed `raw/sosbench` (`hf: SOSBench/SOSBench`) -> `data/*.parquet` | check | 3,000 | drop-in |
 | cbrn | WMDP | `hf: cais/wmdp` (3 configs) | MIT | 3,668 | MCQ plus open-MCQ judge |
-| cyber | CySecBench | submodule `cysecbench/dataset` -> `Dataset/**.csv` | MIT | 12,662 | **drop-in** (`Prompt`, `Category`) |
-| cyber | CyberSecEval MITRE | submodule `meta-llama/PurpleLlama` -> `CybersecurityBenchmarks/datasets/mitre/*.json` | MIT | 1,000 | flatten TTP mapping |
-| cyber | CyberSecEval MITRE-FRR | same submodule -> `datasets/mitre_frr/mitre_frr.json` | MIT | 750 | drop-in, inverted criterion |
-| cyber | AgentHarm | submodule `hf: ai-safety-institute/AgentHarm` -> `benchmark/harmful_behaviors_*.json` | MIT | 208 (52 cyber/fraud) | filter category, prefix id by split |
-| cyber | InjecAgent | submodule `uiuc-kang-lab/InjecAgent` -> `data/test_cases_*_base.json` | Apache-2.0 | 1,054 | assemble ReAct prompt from `tools.json` |
-| loss_of_control | advanced-ai-risk | submodule `anthropics/evals` -> `advanced-ai-risk/lm_generated_evals/*.jsonl` | CC-BY-4.0 | 6,468 in 7 of 17 files | split embedded A/B options |
+| cyber | CySecBench | manifest `cysecbench` -> `Dataset/Full dataset/cysecbench.csv` | MIT | 12,662 | **drop-in** (`Prompt`, `Category`) |
+| cyber | CyberSecEval MITRE | manifest `cyberseceval_3` -> `CybersecurityBenchmarks/datasets/mitre/mitre_benchmark_100_per_category_with_augmentation.json` | MIT | 1,000 | flatten TTP mapping |
+| cyber | CyberSecEval MITRE-FRR | manifest `cyberseceval_3` -> `CybersecurityBenchmarks/datasets/mitre_frr/mitre_frr.json` | MIT | 750 | drop-in, inverted criterion |
+| cyber | AgentHarm | manifest `agentharm` -> `benchmark/harmful_behaviors_*.json` | MIT | 208 (52 cyber/fraud) | filter category, prefix id by split |
+| cyber | InjecAgent | manifest `injecagent` -> `data/test_cases_*_base.json`, `data/tools.json`, `src/prompts/agent_prompts.py` | Apache-2.0 | 1,054 | assemble ReAct prompt from `tools.json` |
+| loss_of_control | advanced-ai-risk | manifest `model_written_evaluations` -> `advanced-ai-risk/lm_generated_evals/*.jsonl` | CC-BY-4.0 | 6,468 in 7 of 17 files | split embedded A/B options |
 | loss_of_control | ~~SAD~~ | **vendored but unregistered**, see below | MIT | n/a | n/a |
-| manipulation | Democratic-Authoritarian-Bias | submodule `irenestrauss/...` | repo | 30 + ~7.6k + 222 | adapters exist |
-| manipulation | PreservingHistoricalTruth | submodule `francescortu/...` | repo | 998 cases | adapter exists |
-| manipulation | llm-human-rights | submodule `keenansamway/...` | repo | 246 EN scenarios | adapter exists |
+| manipulation | Democratic-Authoritarian-Bias | manifest `democratic_authoritarian_bias` -> `data/phase1_questions.json`, `data/leaders.json`, `role_model_probe/main.py` | repo | 30 + ~7.6k + 222 | adapters exist |
+| manipulation | PreservingHistoricalTruth | manifest `historical_misinfo` -> `data/*_prompt*.csv` | repo | 998 cases | adapter exists |
+| manipulation | llm-human-rights | manifest `udhr_rights_limitations` -> `data/experiments/synthetic/{udhr,echr}/scenarios/en.csv` | repo | 246 EN scenarios | adapter exists |
 | manipulation | SocialHarmBench | `hf: psyonp/SocialHarmBench` -> `socialharmbench.csv` | apache-2.0 | 585 | drop-in |
 | manipulation | DarkBench | `hf: apart/darkbench` -> `darkbench.jsonl` | MIT | 660 | **drop-in** (`id`/`input`/`target`/`metadata`) |
-| manipulation | PersuSafety | submodule `PLUM-Lab/PersuSafety` | repo | 101 + 67 | render task plus scenario |
-| manipulation | sycophancy-eval (`mimicry`) | submodule `hf: meg-tong/sycophancy-eval` -> `datasets/mimicry.jsonl` | MIT | 300 | unwrap 1-element msg list |
+| manipulation | PersuSafety | manifest `persusafety` -> `dataset/harmful_scenarios_full.json` | repo | 101 + 67 | render task plus scenario |
+| manipulation | sycophancy-eval (`mimicry`) | manifest `sycophancy_sharma` -> `mimicry.jsonl` | MIT | 300 | unwrap 1-element msg list |
 | manipulation | ~~Anthropic/persuasion~~ | **vendored but unregistered**, see below | CC-BY-NC-4.0 | 6.9 MB | n/a |
 
-Everything except `wmdp`, `darkbench` and SocialHarmBench is a git submodule and
-pins itself (`git submodule update --init --recursive` is the whole bootstrap);
-those three were downloaded from HuggingFace and carry a `download.txt` URL stub.
-`<risk>.meta.json` records each source's path, the submodule SHAs and the repo
-HEAD at build time. SOSBench's domain column is `subject`, not `domain`. WMDP has
+Rows marked "manifest" (plus the unregistered `sad` and `anthropic_persuasion`)
+are fetched by `scripts/fetch_raw.py` into `raw/<name>/`: sparse (only the
+manifest's `files`) and pinned to the manifest `revision`, recorded in each
+directory's `fetch.json`. `wmdp`, `sosbench`, `darkbench` and `socialharmbench`
+were downloaded from HuggingFace and are committed under `raw/<name>/`.
+`<risk>.meta.json` records each source's path, every `fetch.json` revision and
+the repo HEAD at build time. SOSBench's domain column is `subject`, not `domain`. WMDP has
 no `subset` column: the adapter supplies it from the config's directory name.
 
 ## Vendored but not registered
 
-- **SAD** (`raw/loss_of_control/sad`) ships its questions in password-protected
+- **SAD** (`raw/sad`) ships its questions in password-protected
   ZIPs so they stay out of pretraining corpora; registering it would extract
   them into the committed `loss_of_control.csv`. The zips stay zipped unless the
   cluster moves behind the `private/` sibling or the authors agree.
-- **Anthropic/persuasion** (`raw/manipulation/persuasion`) measures persuasive
+- **Anthropic/persuasion** (`raw/anthropic_persuasion`) measures persuasive
   *capability*, not a harmful behaviour, so there is nothing to grade; it needs
   a diagnostic-shaped source, deferred.
 
@@ -590,11 +592,7 @@ rather than trusted.
 
 # Housekeeping
 
-1. `raw/cyber/mitre_frr/mitre_frr.json` is superseded by PurpleLlama's
+1. `raw/mitre_frr/mitre_frr.json` is superseded by PurpleLlama's
    byte-identical copy and can be removed.
-2. `.gitmodules` section names still read `datasets/raw/persuasion/...` and
-   `datasets/raw/democracy/...` (`git mv` keeps the name); cosmetic.
-3. Licences marked "check" must be confirmed before redistribution; Anthropic's
+2. Licences marked "check" must be confirmed before redistribution; Anthropic's
    persuasion set is CC-BY-NC-4.0 if it is ever registered.
-4. Vendored *results* dominate working-tree weight (well over 2 GB); a sparse
-   checkout of the `data/`, `dataset/` and `benchmark/` subtrees would reclaim it.

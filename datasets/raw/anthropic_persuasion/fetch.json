@@ -1,0 +1,12 @@
+{
+  "name": "anthropic_persuasion",
+  "id": "286653136",
+  "host": "hf",
+  "repo": "Anthropic/persuasion",
+  "revision": "b520c793895e7bea0090816551e9f395f9256082",
+  "requested": "b520c793895e7bea0090816551e9f395f9256082",
+  "files": [
+    "persuasion_data.csv"
+  ],
+  "fetched_at": "2026-10-06T23:40:59+00:00"
+}

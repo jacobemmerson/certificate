@@ -49,7 +49,7 @@ from ..schema import (
 # refusal floor in scorers/cluster.py still keys on COMPLIANCE.
 NO_FRAMING = tuple(family for family in FAMILIES if family != "framing")
 
-POLITICAL_BIAS_DIR = DATASETS_DIR / "raw" / "manipulation" / "Democratic-Authoritarian-Bias-LLMs"
+POLITICAL_BIAS_DIR = DATASETS_DIR / "raw" / "democratic_authoritarian_bias"
 LEADER_QUESTIONS_FILE = POLITICAL_BIAS_DIR / "data" / "phase1_questions.json"
 
 # ----- social harm -----
@@ -817,7 +817,7 @@ SOURCES = [
     Source(
         name="social_harm", risk="manipulation", question_type=GRADED,
         elicitation_family=COMPLIANCE, families=NO_FRAMING,
-        path="raw/manipulation/SocialHarmBench/socialharmbench.csv",
+        path="raw/socialharmbench/socialharmbench.csv",
         reader="csv",
         transform=social_harm_rows,
         query="prompt_text", id_col="prompt_id",
@@ -833,7 +833,7 @@ SOURCES = [
     Source(
         name="historical_revisionism", risk="manipulation", question_type=GRADED,
         elicitation_family=COMPLIANCE, families=NO_FRAMING,
-        path="raw/manipulation/PreservingHistoricalTruth/data/*_prompt*.csv",
+        path="raw/historical_misinfo/data/*_prompt*.csv",
         reader="csv",
         transform=revisionism_cases,
         query="Prompt", id_col="case_id",
@@ -867,7 +867,7 @@ SOURCES = [
     Source(
         name="human_rights_udhr", risk="manipulation", question_type=GRADED,
         elicitation_family=JUDGMENT,
-        path="raw/manipulation/llm-human-rights/data/experiments/synthetic/udhr/scenarios/en.csv",
+        path="raw/udhr_rights_limitations/data/experiments/synthetic/udhr/scenarios/en.csv",
         reader="csv",
         transform=human_rights_rows, ask=HUMAN_RIGHTS_ASK,
         query="query", id_col="arm_id",
@@ -897,7 +897,7 @@ SOURCES = [
     Source(
         name="human_rights_echr", risk="manipulation", question_type=GRADED,
         elicitation_family=JUDGMENT,
-        path="raw/manipulation/llm-human-rights/data/experiments/synthetic/echr/scenarios/en.csv",
+        path="raw/udhr_rights_limitations/data/experiments/synthetic/echr/scenarios/en.csv",
         reader="csv",
         transform=human_rights_rows, ask=HUMAN_RIGHTS_ASK,
         query="query", id_col="arm_id",
@@ -923,7 +923,7 @@ SOURCES = [
         name="authoritarian_values", risk="manipulation", question_type=LIKERT,
         elicitation_family=OPINION,
         item_text="statement", prompt_template="prompt_template",
-        path="raw/manipulation/Democratic-Authoritarian-Bias-LLMs/data/phase1_questions.json",
+        path="raw/democratic_authoritarian_bias/data/phase1_questions.json",
         reader="json", record_path="implicit_value_probes",
         transform=authoritarian_values_rows,
         query="query", id_col="id",
@@ -943,7 +943,7 @@ SOURCES = [
         name="leader_favorability", risk="manipulation", question_type=LIKERT,
         elicitation_family=OPINION,
         item_text="question", prompt_template="prompt_template",
-        path="raw/manipulation/Democratic-Authoritarian-Bias-LLMs/data/leaders.json",
+        path="raw/democratic_authoritarian_bias/data/leaders.json",
         reader="json", record_path="leaders",
         transform=favorability_rows,
         query="query", id_col="sample_id",
@@ -964,7 +964,7 @@ SOURCES = [
     Source(
         name="role_model_bias", risk="manipulation", question_type=EXTRACTION,
         elicitation_family=GENERIC,
-        path="raw/manipulation/Democratic-Authoritarian-Bias-LLMs/role_model_probe/main.py",
+        path="raw/democratic_authoritarian_bias/role_model_probe/main.py",
         reader="pylist", record_path="NATIONALITIES_KEYS",
         transform=role_model_rows,
         query="query", item_text="item_text", prompt_template="prompt_template",
@@ -979,7 +979,7 @@ SOURCES = [
     Source(
         name="darkbench", risk="manipulation", question_type=GRADED,
         elicitation_family=COMPLIANCE, families=NO_FRAMING,
-        path="raw/manipulation/darkbench/darkbench.jsonl",
+        path="raw/darkbench/darkbench.jsonl",
         reader="jsonl",
         query="input", id_col="id",
         item_text="item_text", prompt_template="prompt_template",
@@ -997,7 +997,7 @@ SOURCES = [
         name="persusafety", risk="manipulation", question_type=DETECTION,
         detector=ACCEPT_REJECT_TOKEN,
         elicitation_family=GENERIC,
-        path="raw/manipulation/PersuSafety/dataset/harmful_scenarios_full.json",
+        path="raw/persusafety/dataset/harmful_scenarios_full.json",
         reader="json",
         transform=persusafety_prompt,
         query="query", id_col="id",
@@ -1021,7 +1021,7 @@ SOURCES = [
         name="sycophancy_mimicry", risk="manipulation", question_type=DETECTION,
         detector=ATTRIBUTION_MIMICRY,
         elicitation_family=GENERIC,
-        path="raw/manipulation/sycophancy-eval/datasets/mimicry.jsonl",
+        path="raw/sycophancy_sharma/mimicry.jsonl",
         reader="jsonl",
         transform=mimicry_prompt,
         query="query",

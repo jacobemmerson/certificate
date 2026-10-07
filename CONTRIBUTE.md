@@ -22,20 +22,22 @@ takes a day — most of it spent on step 5, which is the step that matters.
 
 ---
 
-## 1. Put the data under `datasets/raw/<risk>/`
+## 1. Put the data under `datasets/raw/<name>/`
 
-Prefer a **submodule**, so the checkout pins itself:
+Add a `[[benchmark]]` row to `datasets/raw/manifest.toml` with the `host`,
+`repo`, a pinned `revision` and the `files` your adapter reads, then fetch it:
 
 ```bash
-git submodule add git@github.com:owner/repo.git datasets/raw/<risk>/<Repo-Name>
+uv run python3 scripts/fetch_raw.py --only <name>
 ```
 
-Keep the upstream directory name — provenance stays traceable, and the build
-records each submodule's SHA in `datasets/public/<risk>.meta.json`.
+The fetch is sparse and writes `datasets/raw/<name>/fetch.json`; the build
+records its revision in `datasets/public/<risk>.meta.json`. Only `fetch.json`
+and `.gitignore` are committed.
 
-Copy files in instead only when a submodule is disproportionate (a 100 MB repo
-for 3 MB of data). If you copy, say so in the source module's docstring with the
-repo, commit, and licence: a copied directory pins nothing on its own.
+Commit files directly instead only when the data is on neither GitHub nor
+HuggingFace. If you do, say so in the source module's docstring with the origin,
+version, and licence: a committed directory pins nothing on its own.
 
 Never commit data whose licence forbids redistribution. Check before you fetch.
 
@@ -51,7 +53,7 @@ Source(
     risk="cyber",
     question_type=GRADED,
     elicitation_family=COMPLIANCE,
-    path="raw/cyber/YourRepo/data/*.parquet",
+    path="raw/your_benchmark/data/*.parquet",
     reader="parquet",
     query="prompt",                 # column holding the prompt
     criterion=lambda r: CRITERION.format(category=r["category"]),

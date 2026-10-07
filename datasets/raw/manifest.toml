@@ -25,7 +25,7 @@ repo = "ai-safety-institute/AgentHarm"
 revision = "e23b3fe60a0da9037314b88e5ee3a0c054970dad"
 files = ["benchmark/harmful_behaviors_*.json"]
 status = "registered"
-path = "raw/cyber/AgentHarm"
+path = "raw/agentharm"
 note = "Licence 'other' (MIT + usage terms in LICENSE). Registered as cyber source; harmful behaviours prompted without the tool loop."
 
 [[benchmark]]
@@ -115,7 +115,7 @@ repo = "SOSBench/SOSBench"
 revision = ""
 files = ["data/*.parquet"]
 status = "registered"
-path = "raw/cbrn/SOSBench"
+path = "raw/sosbench"
 note = "Licence 'other' on HF card. Not a submodule despite BENCHMARKS.md wording; no gitlink. Domain column is 'subject'."
 
 [[benchmark]]
@@ -155,7 +155,7 @@ repo = "cais/wmdp"
 revision = ""
 files = ["wmdp-*/*.parquet"]
 status = "registered"
-path = "raw/cbrn/wmdp"
+path = "raw/wmdp"
 note = "MIT. Downloaded from HF (download.txt stub), not a submodule. No subset column: adapter derives it from config dir."
 
 [[benchmark]]
@@ -226,7 +226,7 @@ repo = "meta-llama/PurpleLlama"
 revision = "acfdd58f7c605eec53af4eed3f7ecf302267f0f8"
 files = ["CybersecurityBenchmarks/datasets/mitre/mitre_benchmark_100_per_category_with_augmentation.json", "CybersecurityBenchmarks/datasets/mitre_frr/mitre_frr.json"]
 status = "registered"
-path = "raw/cyber/PurpleLlama"
+path = "raw/cyberseceval_3"
 note = "MIT per BENCHMARKS.md (GitHub reports NOASSERTION; repo mixes licences). Registered as two sources: mitre and mitre_frr."
 
 [[benchmark]]
@@ -317,7 +317,7 @@ repo = "centerforaisafety/HarmBench"
 revision = "8e1604d1171fe8a48d8febecd22f600e462bdcdd"
 files = ["data/behavior_datasets/harmbench_behaviors_text_all.csv"]
 status = "registered"
-path = "raw/cbrn/HarmBench"
+path = "raw/harmbench"
 note = "MIT. Registered as cbrn source, chem/bio categories."
 
 [[benchmark]]
@@ -348,7 +348,7 @@ repo = "Anthropic/persuasion"
 revision = "b520c793895e7bea0090816551e9f395f9256082"
 files = ["persuasion_data.csv"]
 status = "vendored"
-path = "raw/manipulation/persuasion"
+path = "raw/anthropic_persuasion"
 note = "CC-BY-NC-SA-4.0 on HF (BENCHMARKS.md says CC-BY-NC-4.0). Persuasion capability with human belief ratings; nothing to grade as a harm, deferred."
 
 [[benchmark]]
@@ -359,7 +359,7 @@ repo = "apart/darkbench"
 revision = ""
 files = ["darkbench.jsonl"]
 status = "registered"
-path = "raw/manipulation/darkbench"
+path = "raw/darkbench"
 note = "MIT. Downloaded from HF, not a submodule."
 
 [[benchmark]]
@@ -380,7 +380,7 @@ repo = "irenestrauss/Democratic-Authoritarian-Bias-LLMs"
 revision = "583a1e4a8d440c421ab2ef06a6ac8afd5473c9e0"
 files = ["data/phase1_questions.json", "data/leaders.json", "role_model_probe/main.py"]
 status = "registered"
-path = "raw/manipulation/Democratic-Authoritarian-Bias-LLMs"
+path = "raw/democratic_authoritarian_bias"
 note = "No licence file. Three sources; role_model_probe/main.py is read for its NATIONALITIES_KEYS list."
 
 [[benchmark]]
@@ -401,7 +401,7 @@ repo = "francescortu/PreservingHistoricalTruth"
 revision = "5d327d24c8e6f0c82b598fecf9ca9f1b46bf3c64"
 files = ["data/*_prompt*.csv"]
 status = "registered"
-path = "raw/manipulation/PreservingHistoricalTruth"
+path = "raw/historical_misinfo"
 note = "No licence file."
 
 [[benchmark]]
@@ -422,7 +422,7 @@ repo = "PLUM-Lab/PersuSafety"
 revision = "892bf057f2974c1d1624f37d1110dcb4924e4fd6"
 files = ["dataset/harmful_scenarios_full.json"]
 status = "registered"
-path = "raw/manipulation/PersuSafety"
+path = "raw/persusafety"
 note = "MIT."
 
 [[benchmark]]
@@ -453,7 +453,7 @@ repo = "psyonp/SocialHarmBench"
 revision = ""
 files = ["socialharmbench.csv"]
 status = "registered"
-path = "raw/manipulation/SocialHarmBench"
+path = "raw/socialharmbench"
 note = "Apache-2.0. Downloaded from HF, not a submodule."
 
 [[benchmark]]
@@ -464,7 +464,7 @@ repo = "meg-tong/sycophancy-eval"
 revision = "18f18160e9998e524bbf027c4475bfa7fdeb6949"
 files = ["mimicry.jsonl"]
 status = "registered"
-path = "raw/manipulation/sycophancy-eval"
+path = "raw/sycophancy_sharma"
 note = "MIT. CONFLICT: submodule is GitHub meg-tong/sycophancy-eval@9a16942, which has no mimicry.jsonl; datasets/mimicry.jsonl is an untracked local file. Only the HF repo ships it, at root. Revision is HF HEAD sha."
 
 [[benchmark]]
@@ -475,7 +475,7 @@ repo = "keenansamway/llm-human-rights"
 revision = "65171d7c5ec20255256e5d0500dc118c8f7904ef"
 files = ["data/experiments/synthetic/udhr/scenarios/en.csv", "data/experiments/synthetic/echr/scenarios/en.csv"]
 status = "registered"
-path = "raw/manipulation/llm-human-rights"
+path = "raw/udhr_rights_limitations"
 note = "No licence file. Two sources (UDHR and ECHR charters)."
 
 [[benchmark]]
@@ -564,7 +564,7 @@ repo = "anthropics/evals"
 revision = "84fcc677e52e1902d696c32cd1a6b663e70d3993"
 files = ["advanced-ai-risk/lm_generated_evals/*.jsonl"]
 status = "registered"
-path = "raw/loss_of_control/evals"
+path = "raw/model_written_evaluations"
 note = "CC-BY-4.0. advanced-ai-risk subset; 7 of 17 files used."
 
 [[benchmark]]
@@ -594,7 +594,7 @@ repo = "LRudL/sad"
 revision = "dfc5c9831a9bcc5c9a9dbdcaa2955aae983cd1d3"
 files = ["sad/**/*.zip"]
 status = "vendored"
-path = "raw/loss_of_control/sad"
+path = "raw/sad"
 note = "CC-BY-4.0. Questions in password-protected zips to avoid pretraining leakage; unregistered so they stay zipped."
 
 [[benchmark]]
@@ -694,7 +694,7 @@ repo = "uiuc-kang-lab/InjecAgent"
 revision = "f19c9f2c79a41046eb13c03c51a24c567a8ffa07"
 files = ["data/test_cases_*_base.json", "data/tools.json", "src/prompts/agent_prompts.py"]
 status = "registered"
-path = "raw/cyber/InjecAgent"
+path = "raw/injecagent"
 note = "MIT (BENCHMARKS.md says Apache-2.0; GitHub reports MIT). Adapter also reads tools.json and agent_prompts.py to assemble the ReAct prompt."
 
 [[benchmark]]
@@ -755,5 +755,5 @@ repo = "cysecbench/dataset"
 revision = "ea3868f63961833e33d3e81933dd1024505dabe0"
 files = ["Dataset/Full dataset/cysecbench.csv"]
 status = "registered"
-path = "raw/cyber/CySecBench"
+path = "raw/cysecbench"
 note = "MIT. Not in annotations.csv; listed because it is a registered source."

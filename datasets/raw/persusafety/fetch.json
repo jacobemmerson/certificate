@@ -1,0 +1,12 @@
+{
+  "name": "persusafety",
+  "id": "286653143",
+  "host": "github",
+  "repo": "PLUM-Lab/PersuSafety",
+  "revision": "892bf057f2974c1d1624f37d1110dcb4924e4fd6",
+  "requested": "892bf057f2974c1d1624f37d1110dcb4924e4fd6",
+  "files": [
+    "dataset/harmful_scenarios_full.json"
+  ],
+  "fetched_at": "2026-10-06T23:40:57+00:00"
+}

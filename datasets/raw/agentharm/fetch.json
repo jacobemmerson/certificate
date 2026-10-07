@@ -1,0 +1,12 @@
+{
+  "name": "agentharm",
+  "id": "286653104",
+  "host": "hf",
+  "repo": "ai-safety-institute/AgentHarm",
+  "revision": "e23b3fe60a0da9037314b88e5ee3a0c054970dad",
+  "requested": "e23b3fe60a0da9037314b88e5ee3a0c054970dad",
+  "files": [
+    "benchmark/harmful_behaviors_*.json"
+  ],
+  "fetched_at": "2026-10-06T23:40:24+00:00"
+}

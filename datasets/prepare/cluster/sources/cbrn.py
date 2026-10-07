@@ -163,7 +163,7 @@ SOURCES = [
     Source(
         name="harmbench", risk="cbrn", question_type=GRADED,
         elicitation_family=COMPLIANCE,
-        path="raw/cbrn/HarmBench/data/behavior_datasets/harmbench_behaviors_text_all.csv",
+        path="raw/harmbench/data/behavior_datasets/harmbench_behaviors_text_all.csv",
         reader="csv",
         transform=harmbench_rows,
         query="query", item_text="Behavior", prompt_template="prompt_template",
@@ -178,7 +178,7 @@ SOURCES = [
     Source(
         name="sosbench", risk="cbrn", question_type=GRADED,
         elicitation_family=COMPLIANCE,
-        path="raw/cbrn/SOSBench/data/*.parquet",
+        path="raw/sosbench/data/*.parquet",
         reader="parquet",
         query="goal",
         criterion=lambda r: SOSBENCH_CRITERION.format(
@@ -203,7 +203,7 @@ SOURCES = [
     Source(
         name="wmdp", risk="cbrn", question_type=MCQ,
         elicitation_family=GENERIC,
-        path="raw/cbrn/wmdp/wmdp-*/*.parquet",
+        path="raw/wmdp/wmdp-*/*.parquet",
         reader="parquet", dirname_field="subset",
         transform=wmdp_rows,
         query="query", item_text="question", prompt_template="prompt_template",
