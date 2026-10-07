@@ -616,7 +616,5 @@ rather than trusted.
 
 # Housekeeping
 
-1. `raw/mitre_frr/mitre_frr.json` is superseded by PurpleLlama's
-   byte-identical copy and can be removed.
-2. Licences marked "check" must be confirmed before redistribution; Anthropic's
+1. Licences marked "check" must be confirmed before redistribution; Anthropic's
    persuasion set is CC-BY-NC-SA-4.0 if it is ever registered.

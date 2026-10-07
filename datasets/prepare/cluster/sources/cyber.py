@@ -327,8 +327,6 @@ SOURCES = [
         name="cyber_false_refusal", risk="cyber", question_type=DETECTION,
         detector=REFUSAL_REGEX,
         elicitation_family=GENERIC,
-        # PurpleLlama's own copy, byte-identical to the hand-extracted
-        # raw/mitre_frr/mitre_frr.json this replaced.
         path="raw/cyberseceval_3/CybersecurityBenchmarks/datasets/mitre_frr/"
              "mitre_frr.json",
         reader="json",
