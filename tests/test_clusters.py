@@ -1127,6 +1127,37 @@ class TestSelection(unittest.TestCase):
             quota=quota, **overrides,
         )
 
+    def test_anchors_push_the_walk_away_from_what_the_cluster_already_holds(self):
+        rows = self.pool(3)
+        embeddings = embedded(rows, [(1, 0, 0), (0, 1, 0), (0, 0, 1)])
+        anchors = np.array([unit(1, 0, 0)])
+        order = prepare._diverse_order(rows, [0, 1, 2], 1, self.source(1, select="diverse"),
+                                       0, embeddings, anchors=anchors)
+        self.assertNotEqual(order, [0], "the anchored region is picked last")
+
+    def test_empty_payloads_are_picked_last(self):
+        rows = self.pool(3)
+        rows[1].query = ""
+        embeddings = embedded([rows[0], rows[2]], [(1, 0), (0, 1)])
+        order = prepare._diverse_order(rows, [0, 1, 2], 3, self.source(3, select="diverse"), 0, embeddings)
+        self.assertEqual(order[-1], 1)
+
+    def test_anchors_are_skipped_for_payload_sources(self):
+        rows = [make_row(sample_id=f"src:{i}", query=f"wrapper {i}", metadata={"event": f"event {i}"})
+                for i in range(3)]
+        source = self.source(1, select="diverse", dedup_on="event")
+        embeddings = embedded(rows, [(1, 0, 0), (0, 1, 0), (0, 0, 1)],
+                              payload=lambda r: r.metadata["event"])
+        caches = prepare.Caches(embeddings, selected=[np.array([unit(1, 0, 0)])])
+        with mock.patch.object(prepare, "_diverse_order", wraps=prepare._diverse_order) as spy:
+            prepare._select(rows, [0, 1, 2], 1, source, 0, caches)
+        self.assertIsNone(spy.call_args.kwargs.get("anchors"))
+
+    def test_selected_vectors_become_anchors(self):
+        caches = prepare.Caches({}, selected=[np.array([unit(1, 0)]), np.array([unit(0, 1)])])
+        self.assertEqual(caches.anchors().shape, (2, 2))
+        self.assertIsNone(prepare.Caches({}).anchors())
+
     def test_selection_survives_an_unrelated_row_entering_the_pool(self):
         '''
         The property the seeded shuffle failed. `random_state` pins a shuffle of

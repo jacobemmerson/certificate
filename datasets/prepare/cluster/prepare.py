@@ -71,6 +71,13 @@ class Caches:
     missing: dict[str, dict] = field(default_factory=dict)  # screen inputs still needed
     refused: list[dict] = field(default_factory=list)       # "screen" tier drop records
     candidates: int = 0                                      # rows sent through the screen
+    selected: list[np.ndarray] = field(default_factory=list)  # query vectors of rows already kept
+
+    def anchors(self) -> np.ndarray | None:
+        if not self.selected:
+            return None
+        stacked = np.vstack(self.selected)
+        return stacked if len(stacked) else None  # every source so far kept nothing
 
 
 def screen_key(row: Row) -> str:
@@ -603,7 +610,7 @@ def _stable_order(rows: list[Row], indices: list[int], seed: int) -> list[int]:
 
 def _diverse_order(
     rows: list[Row], indices: list[int], take: int, source: Source, seed: int,
-    embeddings: dict[str, np.ndarray],
+    embeddings: dict[str, np.ndarray], anchors: np.ndarray | None = None,
 ) -> list[int]:
     '''
     Greedy farthest-point on embedding cosine: repeatedly take the item least
@@ -617,19 +624,33 @@ def _diverse_order(
     query otherwise). The first pick comes from `_stable_order` and ties break
     on `key_bytes`, so the walk is deterministic without being tied to input
     order.
+
+    With `anchors` (rows the cluster has already kept), the walk starts from
+    the candidate farthest from any anchor instead of the stable-order head, so
+    two sources cannot fill the same region.
     '''
     vectors = _vectors([rows[i] for i in indices], _payload_fn(source.dedup_on), embeddings)
     ties = [key_bytes(rows[i], seed) for i in indices]
-    first = indices.index(_stable_order(rows, indices, seed)[0])
-    picked = [first]
-    # Each item's similarity to the closest pick so far, taken items pinned at
-    # +inf; the next pick minimises it.
-    nearest = np.round(vectors @ vectors[first], 6)
-    nearest[first] = np.inf
+    # Each item's similarity to the closest pick so far; picked items are
+    # pinned at +inf. Empty payloads have zero vectors and would otherwise read
+    # as "far from everything": 2.0 is above any cosine, so they go last.
+    empty = ~vectors.any(axis=1)
+    if anchors is None:
+        order = _stable_order(rows, indices, seed)
+        first = next((indices.index(i) for i in order if not empty[indices.index(i)]),
+                     indices.index(order[0]))
+        picked = [first]
+        nearest = np.round(vectors @ vectors[first], 6)
+        nearest[first] = np.inf
+    else:
+        picked = []
+        nearest = np.round(vectors @ anchors.T, 6).max(axis=1)
+    nearest[empty & np.isfinite(nearest)] = 2.0
     while len(picked) < take:
         candidate = min(range(len(indices)), key=lambda p: (nearest[p], ties[p]))
         picked.append(candidate)
-        nearest = np.maximum(nearest, np.round(vectors @ vectors[candidate], 6))
+        if not empty[candidate]:
+            nearest = np.maximum(nearest, np.round(vectors @ vectors[candidate], 6))
         nearest[candidate] = np.inf
     return [indices[p] for p in picked]
 
@@ -684,7 +705,8 @@ def _select(
     if source.select == DIVERSE:
         if caches is None:
             raise ValueError(f"{source.name}: diverse selection needs the embedding cache")
-        return _diverse_order(rows, indices, take, source, seed, caches.embeddings)
+        anchors = caches.anchors() if source.dedup_on is None else None
+        return _diverse_order(rows, indices, take, source, seed, caches.embeddings, anchors=anchors)
     raise ValueError(f"{source.name}: unknown select mode {source.select!r}")
 
 
@@ -859,6 +881,7 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
             report[source.name]["screen_candidates"] = caches.candidates - candidates
             report[source.name]["screen_refused"] = len(caches.refused) - refused
         all_rows.extend(rows)
+        caches.selected.append(_vectors(rows, _payload_fn(None), embeddings))
 
     require_screen(risk, caches)
     all_dropped.extend(caches.refused)
