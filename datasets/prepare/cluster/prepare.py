@@ -179,9 +179,10 @@ def require_embeddings(
     for source, rows in pools:
         payload = _payload_fn(source.dedup_on)
         for row in rows:
-            key = embed_key(payload(row))
-            if key and key not in embeddings:
-                missing[key] = normalised(payload(row))
+            for text in {payload(row), row.query}:
+                key = embed_key(text)
+                if key and key not in embeddings:
+                    missing[key] = normalised(text)
     if missing:
         raise _cache_miss(
             CACHE_DIR / f"{risk}.embed_input.jsonl",
@@ -419,8 +420,10 @@ def cross_source_dedup(
 
 # ----- tier 2: cosine near-dedup -----
 
-def _distinguishable(left: Row, right: Row, distinct_on: Sequence[str]) -> bool:
+def _mergeable(left: Row, right: Row, distinct_on: Sequence[str]) -> bool:
     '''
+    True when the pair may merge: same mcq target and equal `distinct_on` fields.
+
     Exact guard against the similarity filter's blind spot: when a benchmark
     varies one term inside a fixed template, the entire distinction is a few
     characters that barely moves a whole-text similarity. Items differing in
@@ -446,6 +449,36 @@ def _vectors(rows: list[Row], payload, embeddings: dict[str, np.ndarray]) -> np.
     return matrix
 
 
+def _near_candidates(rows, vectors, tau, allowed) -> list[tuple[float, int, int]]:
+    '''Pairs at or above tau, in row blocks; `allowed(left, right)` filters by index.'''
+    candidates = []
+    for start in range(0, len(rows), _BLOCK):
+        # Rounded so a BLAS summing in another order cannot flip a pair across
+        # tau or reorder ties between machines.
+        similarity = np.round(vectors[start:start + _BLOCK] @ vectors.T, 6)
+        for offset, right in zip(*np.nonzero(similarity >= tau)):
+            left, right = start + int(offset), int(right)
+            if left < right and allowed(left, right):
+                candidates.append((float(similarity[offset, right]), left, right))
+    return candidates
+
+
+def _greedy_drop(candidates, rows, payload, tier) -> tuple[set[int], list[dict]]:
+    '''Highest similarity first; the later row of each surviving pair is dropped.'''
+    dropped_indices: set[int] = set()
+    records = []
+    for score, left, right in sorted(candidates, reverse=True):
+        if left in dropped_indices or right in dropped_indices:
+            continue
+        dropped_indices.add(right)
+        records.append({
+            "tier": tier, "similarity": round(score, 4),
+            "kept": rows[left].sample_id, "kept_text": payload(rows[left])[:300],
+            "dropped": rows[right].sample_id, "dropped_text": payload(rows[right])[:300],
+        })
+    return dropped_indices, records
+
+
 def near_dedup(
     rows: list[Row],
     embeddings: dict[str, np.ndarray],
@@ -466,31 +499,36 @@ def near_dedup(
     payload = _payload_fn(dedup_on)
     vectors = _vectors(rows, payload, embeddings)
 
-    candidates = []
-    for start in range(0, len(rows), _BLOCK):
-        # Rounded so a BLAS summing in another order cannot flip a pair across
-        # tau or reorder ties between machines.
-        similarity = np.round(vectors[start:start + _BLOCK] @ vectors.T, 6)
-        for offset, right in zip(*np.nonzero(similarity >= tau)):
-            left, right = start + int(offset), int(right)
-            if left < right and _distinguishable(rows[left], rows[right], distinct_on):
-                candidates.append((float(similarity[offset, right]), left, right))
-
-    dropped_indices: set[int] = set()
-    dropped_pairs = []
-    for score, left, right in sorted(candidates, reverse=True):
-        if left in dropped_indices or right in dropped_indices:
-            continue
-        dropped_indices.add(right)
-        dropped_pairs.append({
-            "tier": "near",
-            "similarity": round(score, 4),
-            "kept": rows[left].sample_id, "kept_text": payload(rows[left])[:300],
-            "dropped": rows[right].sample_id, "dropped_text": payload(rows[right])[:300],
-        })
-
+    candidates = _near_candidates(
+        rows, vectors, tau, lambda l, r: _mergeable(rows[l], rows[r], distinct_on))
+    dropped_indices, dropped_pairs = _greedy_drop(candidates, rows, payload, "near")
     survivors = [row for index, row in enumerate(rows) if index not in dropped_indices]
     return survivors, dropped_pairs
+
+
+def cross_source_near_dedup(
+    pools: list[tuple[Source, list[Row]]], embeddings: dict[str, np.ndarray],
+    tau: float = COSINE_TAU,
+) -> tuple[list[tuple[Source, list[Row]]], list[dict]]:
+    '''
+    Tier 2b: a paraphrase of an earlier source's prompt, shipped by a later one.
+
+    Compares the delivered query for every row: `dedup_on` names a metadata
+    field with no counterpart in another source. Pools are walked in registry
+    order, so the later source loses, as in the exact cross-source tier.
+    Sources with `dedup=False` keep their opt-out.
+    '''
+    rows = [row for source, pool in pools if source.dedup for row in pool]
+    payload = _payload_fn(None)
+    vectors = _vectors(rows, payload, embeddings)
+    candidates = _near_candidates(
+        rows, vectors, tau,
+        lambda l, r: rows[l].source != rows[r].source and _mergeable(rows[l], rows[r], ()),
+    )
+    dropped_indices, dropped = _greedy_drop(candidates, rows, payload, "near_cross_source")
+    gone = {rows[i].sample_id for i in dropped_indices}
+    kept_pools = [(source, [row for row in pool if row.sample_id not in gone]) for source, pool in pools]
+    return kept_pools, dropped
 
 
 # ----- tier 3: stratified quota -----
@@ -803,6 +841,8 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
     sizes = {source.name: len(rows) for source, rows in pools}
     pools, cross_dropped = cross_source_dedup(pools)
     all_dropped.extend(cross_dropped)
+    pools, cross_near_dropped = cross_source_near_dedup(pools, embeddings)
+    all_dropped.extend(cross_near_dropped)
     caches = Caches(embeddings, verdicts=load_screen(risk))
     for source, rows in pools:
         report[source.name]["cross_source_dropped"] = sizes[source.name] - len(rows)

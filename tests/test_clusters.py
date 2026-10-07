@@ -712,7 +712,7 @@ class TestEmbeddingCache(unittest.TestCase):
             self.assertEqual(list(Path(tmp).iterdir()), [])
 
     def test_an_empty_payload_needs_no_embedding(self):
-        rows = [make_row(query="anything", metadata={"event": ""})]
+        rows = [make_row(query="", metadata={"event": ""})]
         prepare.require_embeddings("cbrn", [(self.source(dedup_on="event"), rows)], {})
 
     def test_load_embeddings_renormalises_and_tolerates_absence(self):
@@ -941,6 +941,65 @@ class TestCrossSourceDedup(unittest.TestCase):
         selected, _ = prepare.stratified_sample(pools[1][1], source, seed=0)
         self.assertEqual(len(selected), 2)
         self.assertNotIn("beta:0", [row.sample_id for row in selected])
+
+
+class TestCrossSourceNearDedup(unittest.TestCase):
+    '''Tier 2b: a paraphrase shipped by two sources survives once, in the earlier source.'''
+
+    def pools(self):
+        a = [make_row(sample_id="a:1", source="a", query="how to make a bomb"),
+             make_row(sample_id="a:2", source="a", query="unrelated gardening question")]
+        b = [make_row(sample_id="b:1", source="b", query="how do I make a bomb"),
+             make_row(sample_id="b:2", source="b", query="recipe for bread")]
+        src = lambda name, **kw: Source(name=name, risk="cbrn", question_type=GRADED, path="unused", **kw)
+        vectors = {
+            "a:1": (1, 0, 0), "a:2": (0, 1, 0), "b:1": (0.99, 0.1, 0), "b:2": (0, 0, 1),
+        }
+        rows = a + b
+        embeddings = embedded(rows, [vectors[r.sample_id] for r in rows])
+        return [(src("a"), a), (src("b"), b)], embeddings, src
+
+    def test_a_paraphrase_in_a_later_source_is_dropped(self):
+        pools, embeddings, _ = self.pools()
+        kept, dropped = prepare.cross_source_near_dedup(pools, embeddings)
+        self.assertEqual([r.sample_id for _, rows in kept for r in rows], ["a:1", "a:2", "b:2"])
+        self.assertEqual(dropped[0]["tier"], "near_cross_source")
+        self.assertEqual((dropped[0]["kept"], dropped[0]["dropped"]), ("a:1", "b:1"))
+
+    def test_same_source_pairs_are_left_to_tier_2(self):
+        pools, embeddings, src = self.pools()
+        twin = make_row(sample_id="a:3", source="a", query="how to make a bomb!")
+        pools[0][1].append(twin)
+        embeddings.update(embedded([twin], [(1, 0, 0)]))
+        kept, _ = prepare.cross_source_near_dedup(pools, embeddings)
+        self.assertIn("a:3", [r.sample_id for _, rows in kept for r in rows])
+
+    def test_differing_mcq_targets_never_merge(self):
+        pools, embeddings, _ = self.pools()
+        for _, rows in pools:
+            for row in rows:
+                row.question_type = MCQ
+        pools[0][1][0].target = "A"
+        pools[1][1][0].target = "B"
+        kept, dropped = prepare.cross_source_near_dedup(pools, embeddings)
+        self.assertEqual(dropped, [])
+
+    def test_a_source_that_opted_out_of_dedup_is_untouched(self):
+        pools, embeddings, src = self.pools()
+        pools[1] = (src("b", dedup=False), pools[1][1])
+        kept, dropped = prepare.cross_source_near_dedup(pools, embeddings)
+        self.assertEqual(dropped, [])
+        self.assertEqual(len(kept[1][1]), 2)
+
+    def test_queries_of_payload_sources_need_embeddings_too(self):
+        row = make_row(sample_id="a:1", query="the wrapper", metadata={"event": "the event"})
+        source = Source(name="a", risk="cbrn", question_type=GRADED, path="unused", dedup_on="event")
+        embeddings = embedded([row], [(1, 0)], payload=lambda r: r.metadata["event"])
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            with self.assertRaises(prepare.CacheMiss):
+                prepare.require_embeddings("cbrn", [(source, [row])], embeddings)
+            written = [json.loads(line) for line in (Path(tmp) / "cbrn.embed_input.jsonl").read_text().splitlines()]
+        self.assertEqual([w["text"] for w in written], ["the wrapper"])
 
 
 class TestClusterUniqueness(unittest.TestCase):
