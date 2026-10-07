@@ -95,10 +95,10 @@ lives in `criterion` and the optional `rubric` column. The objection that a
 bespoke rubric preserves comparability with published numbers is weak here: we
 subset and perturb every benchmark, so that comparability is gone before the
 rubric is chosen, and internal consistency is what one template buys. Two risks
-come with it: one rubric and judge ensemble now decide all four clusters, so a
+come with it: one rubric and judge ensemble now decide every cluster, so a
 source whose rubric verdict disagrees with its native scorer on the control has
 a wrong criterion; and a generic judge may not see domain hazards (SOSBench), so
-do not assume one judge tier fits all four clusters.
+do not assume one judge tier fits every cluster.
 
 ## Diagnostics beside the cluster score, never inside it
 
@@ -487,7 +487,7 @@ everything below decides *which* rows fill each allotment.
 | 2 | **cosine near-dedup** per source on cached embeddings, `COSINE_TAU` = 0.92 (overridable by `Source.tau`); `distinct_on` and differing mcq `target` win at any similarity | one `V @ V.T` in row blocks |
 | 1b | cross-source exact dedup on the prompt *as delivered* (user + system text), after each source's whole pool so a source never collides with itself; runs before the quota so the copy's source backfills | free; `cross_source_dropped` is the number to watch |
 | 3 | stratified quota: `_allocate`, then per stratum pre-select `SCREEN_FACTOR` (3.5) × allotment by the source's `select` | `O(take × stratum)` dot products |
-| 3b | **Hermes answerability screen**: drop candidates Hermes-4-70B refuses, then fill the allotment from the survivors by the same `select` | ~2.5k GPU calls for all four clusters, cached |
+| 3b | **Hermes answerability screen**: drop candidates Hermes-4-70B refuses, then fill the allotment from the survivors by the same `select` | ~2.5k GPU calls for all clusters, cached |
 | 4 | emit `public/<risk>.csv`, `<risk>.meta.json`, `<risk>.dropped.jsonl` | |
 
 `select` is `uniform` (order by `blake2b(f"{seed}:{sample_id}")`, take the first

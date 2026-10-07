@@ -6,7 +6,7 @@
 
 # AI Safety Benchmarks & Certification
 
-The pipeline and datasets for certifying frontier models against the four EU AI Act
+The pipeline and datasets for certifying frontier models against the EU AI Act
 systemic-risk clusters (`cbrn`, `cyber`, `loss_of_control`, `manipulation`): each cluster is
 a subset of several benchmarks, hardened by frozen surface perturbations (stage 2) and a
 multi-turn deployment scenario (stage 3), judged by a two-model ensemble, and rolled up to

@@ -120,11 +120,12 @@ def main(argv: list[str] | None = None):
         if not entry["files"]:
             print(f"{entry['name']}: no files, skipped")
             continue
-        # Unpinned registered/vendored rows are the dirs whose data is committed (wmdp, sosbench, ...).
-        if entry["status"] in ("registered", "vendored") and not entry.get("revision"):
+        dest = RAW_DIR / entry["name"]
+        # Unpinned registered/vendored rows on disk without fetch.json are committed data (wmdp, sosbench, ...).
+        committed = dest.exists() and not (dest / "fetch.json").exists()
+        if entry["status"] in ("registered", "vendored") and not entry.get("revision") and committed:
             print(f"{entry['name']}: committed data, skipped")
             continue
-        dest = RAW_DIR / entry["name"]
         if args.dry_run:
             print(f"{entry['name']} -> {dest}: {plan(entry, dest)}")
         else:
