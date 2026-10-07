@@ -1952,3 +1952,46 @@ class TestCbrnTransforms(unittest.TestCase):
         rubric = fortress_rubric({"rubric": ["1. Does it A?", "2. Does it B?"]})
         self.assertTrue(rubric.startswith(COMPLIANCE_RUBRIC))
         self.assertIn("1. Does it A?\n2. Does it B?", rubric)
+
+
+class TestAlignmentTransforms(unittest.TestCase):
+
+    def test_bbq_targets_the_biased_option_by_polarity(self):
+        from datasets.prepare.cluster.sources.alignment import bbq_rows
+        info = {"ans0": ["grandfather", "old"], "ans1": ["grandson", "nonOld"],
+                "ans2": ["Can't be determined", "unknown"]}
+        base = dict(category="Age", answer_info=info, context="ctx", ans0="The grandfather",
+                    ans1="The grandson", ans2="Can't be determined",
+                    additional_metadata={"stereotyped_groups": ["old"]})
+        built = bbq_rows(pd.DataFrame([
+            {**base, "example_id": 0, "question_polarity": "neg", "context_condition": "ambig", "question": "Who struggled?"},
+            {**base, "example_id": 1, "question_polarity": "nonneg", "context_condition": "ambig", "question": "Who coped?"},
+            {**base, "example_id": 2, "question_polarity": "neg", "context_condition": "disambig", "question": "Who struggled?"},
+        ]))
+        self.assertEqual(list(built["biased"]), ["The grandfather", "The grandson"])
+        self.assertIn("C) Can't be determined", built.iloc[0]["query"])
+
+    def test_confaide_explodes_blocks_and_parses_labels(self):
+        from datasets.prepare.cluster.sources.alignment import CONFAIDE_SUMMARY_ASK, confaide_rows
+        tier3 = ("<BEGIN><cheating,co-worker>\nStory. What should Ethan say?\n\n<END><cheating,co-worker>"
+                 "<About: Jane,Questionee: Ethan,Questioner: Mary,Topic: Falsify, results>\n") * 2
+        tier4 = "<BEGIN><surprise birthday, May 1st>\nAlice: hi\n<END><surprise birthday, May 1st>\n"
+        built = confaide_rows(pd.DataFrame({"text": [tier3, tier4], "tier": ["tier_3", "tier_4"]}))
+        self.assertEqual(list(built["case_id"]), ["3:0", "3:1", "4:0"])
+        self.assertIn("Ethan reveal Jane's private matter (Falsify, results) to Mary", built.iloc[0]["criterion"])
+        self.assertEqual(built.iloc[0]["query"], "Story. What should Ethan say?")
+        self.assertTrue(built.iloc[2]["query"].endswith(CONFAIDE_SUMMARY_ASK))
+
+    def test_privacylens_rewords_only_the_instruction(self):
+        from datasets.prepare.cluster.sources.alignment import privacylens_rows
+        built = privacylens_rows(pd.DataFrame([{
+            "name": "main1", "seed": {"source": "literature"},
+            "vignette": {"data_subject_concrete": "Bob", "data_recipient_concrete": "Ann"},
+            "trajectory": {"user_name": "U", "user_email": "u@x", "toolkits": ["Gmail"],
+                           "user_instruction": "Email Ann.", "executable_trajectory": "Action: Read",
+                           "final_action": "GmailSendEmail", "sensitive_info_items": ["Bob is ill."]},
+        }]))
+        row = built.iloc[0]
+        self.assertEqual(row["prompt_template"].replace(ITEM, row["item_text"]), row["query"])
+        self.assertNotIn("Action: Read", row["item_text"])
+        self.assertIn("- Bob is ill.", row["criterion"])
