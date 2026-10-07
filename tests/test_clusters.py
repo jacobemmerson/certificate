@@ -986,6 +986,66 @@ class TestAllocation(unittest.TestCase):
         self.assertTrue(all(count == 1 for count in allocation.values()))
 
 
+class TestSampleReport(unittest.TestCase):
+    '''What the build says about each source, so a short or skewed source is seen.'''
+
+    def pool(self, n, categories):
+        return [
+            make_row(sample_id=f"src:{i}", query=f"item {i}",
+                     metadata={"category": categories[i % len(categories)]})
+            for i in range(n)
+        ]
+
+    def source(self, **overrides):
+        return Source(name="src", risk="cbrn", question_type=GRADED, path="unused",
+                      **{"stratify": ["category"], **overrides})
+
+    def test_quota_parameter_overrides_the_source(self):
+        rows = self.pool(40, ["a", "b"])
+        kept, report = prepare.stratified_sample(rows, self.source(quota=4), seed=0, quota=10)
+        self.assertEqual((len(kept), report["allotted"], report["selected"]), (10, 10, 10))
+
+    def test_quota_none_falls_back_to_the_source(self):
+        rows = self.pool(40, ["a", "b"])
+        kept, _ = prepare.stratified_sample(rows, self.source(quota=4), seed=0)
+        self.assertEqual(len(kept), 4)
+
+    def test_strata_report_pool_and_kept_per_key(self):
+        rows = self.pool(30, ["a", "a", "b"])  # 20 a, 10 b
+        _, report = prepare.stratified_sample(rows, self.source(), seed=0, quota=9)
+        self.assertEqual(report["strata"], {"a": {"pool": 20, "kept": 6}, "b": {"pool": 10, "kept": 3}})
+        self.assertEqual(report["divergence"], 0.0)
+
+    def test_divergence_measures_skew(self):
+        strata = {"a": {"pool": 50, "kept": 10}, "b": {"pool": 50, "kept": 0}}
+        self.assertEqual(prepare._divergence(strata), 0.5)
+
+    def test_divergence_is_none_when_nothing_is_kept(self):
+        self.assertIsNone(prepare._divergence({"a": {"pool": 5, "kept": 0}}))
+        self.assertIsNone(prepare._divergence({}))
+
+    def test_unstratified_source_reports_no_strata(self):
+        rows = self.pool(10, ["a"])
+        _, report = prepare.stratified_sample(rows, self.source(stratify=()), seed=0, quota=3)
+        self.assertEqual((report["strata"], report["divergence"]), ({}, None))
+
+    def test_a_quota_above_the_pool_allots_the_pool(self):
+        rows = self.pool(3, ["a", "b", "c"])
+        _, report = prepare.stratified_sample(rows, self.source(), seed=0, quota=10)
+        self.assertEqual((report["allotted"], report["selected"]), (3, 3))
+
+    def test_grouped_report_counts_groups(self):
+        rows = [
+            make_row(sample_id=f"src:{g}:{arm}", query=f"scenario {g} arm {arm}",
+                     metadata={"scenario": str(g), "arm": arm, "category": "x"})
+            for g in range(6) for arm in ("p", "q", "r")
+        ]
+        source = self.source(group_key="scenario", distinct_on=["arm"])
+        kept, report = prepare.stratified_sample(rows, source, seed=0, quota=4)
+        self.assertEqual((len(kept), report["groups"], report["allotted"], report["selected"]),
+                         (12, 6, 4, 4))
+
+
 class TestSelection(unittest.TestCase):
     '''
     Which items fill a quota, as distinct from how many.

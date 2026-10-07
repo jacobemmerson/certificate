@@ -496,15 +496,20 @@ def near_dedup(
 # ----- tier 3: stratified quota -----
 
 def stratified_sample(
-    rows: list[Row], source: Source, seed: int, caches: Caches | None = None
+    rows: list[Row], source: Source, seed: int, caches: Caches | None = None,
+    quota: int | None = None,
 ) -> tuple[list[Row], dict]:
+    '''`quota` is the allotment decided by the cluster budget; None reads the source's own.'''
+    if quota is None:
+        quota = source.quota
     if source.group_key:
-        return _grouped_sample(rows, source, seed, caches)
-    return _row_sample(rows, source, seed, caches)
+        return _grouped_sample(rows, source, seed, caches, quota)
+    return _row_sample(rows, source, seed, caches, quota)
 
 
 def _grouped_sample(
-    rows: list[Row], source: Source, seed: int, caches: Caches | None = None
+    rows: list[Row], source: Source, seed: int, caches: Caches | None = None,
+    quota: int | None = None,
 ) -> tuple[list[Row], dict]:
     '''
     Sample whole groups, so rows that are only meaningful together survive
@@ -523,14 +528,13 @@ def _grouped_sample(
     # Select over one representative row per group, so groups are picked by the
     # same stratification the source declares, then expand back to every member.
     leaders = {key: rows[indices[0]] for key, indices in groups.items()}
-    picked, report = _row_sample(list(leaders.values()), source, seed, caches)
+    picked, report = _row_sample(list(leaders.values()), source, seed, caches, quota)
 
     by_id = {id(row): key for key, row in leaders.items()}
     wanted = {by_id[id(row)] for row in picked}
     chosen = [i for key, indices in groups.items() if key in wanted for i in indices]
 
     report["groups"] = len(groups)
-    report["allocated"] = len(chosen)
     return [rows[i] for i in sorted(chosen)], report
 
 
@@ -647,18 +651,18 @@ def _select(
 
 
 def _row_sample(
-    rows: list[Row], source: Source, seed: int, caches: Caches | None = None
+    rows: list[Row], source: Source, seed: int, caches: Caches | None = None,
+    quota: int | None = None,
 ) -> tuple[list[Row], dict]:
-    quota = source.quota
     if quota is None or quota >= len(rows):
         if source.select not in (UNIFORM, DIVERSE):
             raise ValueError(f"{source.name}: unknown select mode {source.select!r}")
         chosen = _take(rows, list(range(len(rows))), len(rows), source, seed, caches)
-        return [rows[i] for i in sorted(chosen)], {"strata": 0, "allocated": len(chosen)}
+        return [rows[i] for i in sorted(chosen)], _sample_report({}, chosen, len(rows))
 
     if not source.stratify:
         chosen = _take(rows, list(range(len(rows))), quota, source, seed, caches)
-        return [rows[i] for i in sorted(chosen)], {"strata": 1, "allocated": len(chosen)}
+        return [rows[i] for i in sorted(chosen)], _sample_report({}, chosen, quota)
 
     keys = [
         tuple(str(row.metadata.get(column, "")) for column in source.stratify)
@@ -674,10 +678,26 @@ def _row_sample(
     for key, take in allocation.items():
         chosen.extend(_take(rows, buckets[key], take, source, seed, caches))
 
-    return (
-        [rows[i] for i in sorted(chosen)],
-        {"strata": len(buckets), "allocated": len(chosen)},
-    )
+    return [rows[i] for i in sorted(chosen)], _sample_report(buckets, chosen, quota)
+
+
+def _sample_report(buckets: dict, chosen: list[int], allotted: int) -> dict:
+    taken = set(chosen)
+    strata = {
+        "|".join(key): {"pool": len(indices), "kept": sum(i in taken for i in indices)}
+        for key, indices in buckets.items()
+    }
+    return {"allotted": allotted, "selected": len(chosen),
+            "strata": strata, "divergence": _divergence(strata)}
+
+
+def _divergence(strata: dict) -> float | None:
+    '''Total variation distance between the pool's and the kept set's stratum shares.'''
+    pool = sum(s["pool"] for s in strata.values())
+    kept = sum(s["kept"] for s in strata.values())
+    if not pool or not kept:
+        return None
+    return round(0.5 * sum(abs(s["pool"] / pool - s["kept"] / kept) for s in strata.values()), 3)
 
 
 def _allocate(buckets: dict, quota: int, *, balanced: bool) -> dict:
@@ -787,9 +807,14 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
     for source, rows in pools:
         report[source.name]["cross_source_dropped"] = sizes[source.name] - len(rows)
         refused, candidates = len(caches.refused), caches.candidates
-        rows, allocation = stratified_sample(rows, source, seed, caches)
-        report[source.name]["kept"] = len(rows)
-        report[source.name]["strata"] = allocation["strata"]
+        rows, sample = stratified_sample(rows, source, seed, caches)
+        report[source.name].update({
+            "kept": len(rows),
+            "allotted": sample["allotted"],
+            "shortfall": sample["allotted"] - sample["selected"],
+            "strata": sample["strata"],
+            "divergence": sample["divergence"],
+        })
         if source.screened():
             report[source.name]["screen_candidates"] = caches.candidates - candidates
             report[source.name]["screen_refused"] = len(caches.refused) - refused
@@ -858,7 +883,7 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
 def print_report(risk: str, report: dict, rows: list[Row]):
     print(f"\n=== {risk} ===")
     header = (f"  {'source':22s} {'loaded':>7s} {'exact':>6s} {'near':>6s} "
-              f"{'cross':>6s} {'screen':>6s} {'kept':>6s} {'share':>6s}")
+              f"{'cross':>6s} {'screen':>6s} {'allot':>6s} {'kept':>6s} {'short':>6s} {'share':>6s}")
     print(header)
     print("  " + "-" * (len(header) - 2))
     total = len(rows) or 1
@@ -867,13 +892,20 @@ def print_report(risk: str, report: dict, rows: list[Row]):
         print(
             f"  {name:22s} {stats['loaded']:7d} {stats['exact_dropped']:6d} "
             f"{stats['near_dropped']:6d} {stats['cross_source_dropped']:6d} "
-            f"{refused:6d} {stats['kept']:6d} {100 * stats['kept'] / total:5.1f}%"
+            f"{refused:6d} {stats.get('allotted', 0):6d} {stats['kept']:6d} "
+            f"{stats.get('shortfall', 0):6d} {100 * stats['kept'] / total:5.1f}%"
         )
+        if stats.get("shortfall", 0) > 0:
+            print(f"  [WARNING] {name}: short {stats['shortfall']} of {stats['allotted']}; "
+                  f"its pool or a stratum ran dry")
+        divergence = stats.get("divergence")
+        if divergence is not None and divergence > 0.10 and not stats.get("balanced"):
+            print(f"  [WARNING] {name}: kept strata diverge from the pool (TVD {divergence:.2f})")
         candidates = stats.get("screen_candidates", 0)
         if candidates and 2 * refused > candidates:
             print(f"  [WARNING] {name}: the screen refused {refused} of {candidates} "
                   f"candidates; raise SCREEN_FACTOR rather than shrink the quota")
-    print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {'':6s} {'':6s} {total:6d}")
+    print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {'':6s} {'':6s} {'':6s} {'':6s} {total:6d}")
 
 
 def main():
