@@ -1901,3 +1901,51 @@ class TestRedcodeRows(unittest.TestCase):
         self.assertEqual(row["uid"], "ddos/ddos_2_syn_flood")
         self.assertTrue(row["query"].startswith(row["text"]))
         self.assertTrue(row["query"].endswith(REDCODE_ASK))
+
+
+class TestCbrnTransforms(unittest.TestCase):
+
+    def test_scisafeeval_keeps_bio_chem_and_nuclear_physics_with_entity_fixed(self):
+        from datasets.prepare.cluster.sources.cbrn import MAX_ENTITY_CHARS, scisafeeval_rows
+        built = scisafeeval_rows(pd.DataFrame({
+            "task": ["biology_gene-classification", "biology_gene-classification",
+                     "chemistry_property-prediction", "medicine_knowledge-retrieval",
+                     "physics_knowledge-retrieval", "physics_knowledge-retrieval"],
+            "instruction": ["classify", "classify", "predict", "dose?", "nuclear?", "optics?"],
+            "name": ["virus", "genome", "compound", None, None, None],
+            "sequence": ["ACGT", "A" * (MAX_ENTITY_CHARS + 1), None, None, None, None],
+            "smiles": [None, None, "CCO", None, None, None],
+        }))
+        self.assertEqual(list(built["instruction"]), ["classify", "predict", "nuclear?"])
+        self.assertEqual(built.iloc[0]["query"], "classify\n\nName: virus\nSequence: ACGT")
+        self.assertEqual(built.iloc[1]["query"], "predict\n\nName: compound\nSMILES: CCO")
+        self.assertEqual(built.iloc[2]["prompt_template"], ITEM)
+        for _, row in built.iterrows():
+            self.assertEqual(row["prompt_template"].replace(ITEM, row["instruction"]), row["query"])
+
+    def test_lab_bench_shuffle_is_stable_and_keeps_ideal_once(self):
+        from datasets.prepare.cluster.sources.cbrn import lab_bench_rows
+        frame = pd.DataFrame({
+            "subset": ["SeqQA", "ProtocolQA", "FigQA"],
+            "id": ["a", "b", "c"],
+            "question": ["q1", "q2", "q3"],
+            "ideal": ["right", "right", "right"],
+            "distractors": [["w1", "right", "w2"], ["w1", "w2", "w3"], ["w1"]],
+            "protocol": [None, "step 1", None],
+        })
+        first, second = lab_bench_rows(frame), lab_bench_rows(frame)
+        self.assertEqual(list(first["subset"]), ["SeqQA", "ProtocolQA"])
+        self.assertEqual(list(first["choices"]), list(second["choices"]))
+        for _, row in first.iterrows():
+            self.assertEqual(row["choices"].count("right"), 1)
+            self.assertEqual(row["choices"][row["answer"]], "right")
+            self.assertEqual(row["prompt_template"].replace(ITEM, row["question"]), row["query"])
+        self.assertTrue(first.iloc[1]["query"].startswith("Protocol:\nstep 1"))
+        self.assertFalse(first.iloc[0]["query"].startswith("Protocol:"))
+
+    def test_fortress_rubric_lists_every_item_check(self):
+        from datasets.prepare.cluster.schema import COMPLIANCE_RUBRIC
+        from datasets.prepare.cluster.sources.cbrn import fortress_rubric
+        rubric = fortress_rubric({"rubric": ["1. Does it A?", "2. Does it B?"]})
+        self.assertTrue(rubric.startswith(COMPLIANCE_RUBRIC))
+        self.assertIn("1. Does it A?\n2. Does it B?", rubric)
