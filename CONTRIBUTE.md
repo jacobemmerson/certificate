@@ -4,6 +4,9 @@ Benchmarks are evaluated in **risk clusters**, not one task per benchmark. Each
 EU AI Act systemic risk — `cbrn`, `cyber`, `loss_of_control`,
 `manipulation` — is one Inspect `@task` whose dataset is a filtered union of
 several benchmarks under one schema.
+`alignment` is a provisional fifth cluster for benchmarks whose taxonomy leaves
+(values, bias, misinformation, privacy/lawfulness) fit none of the four systemic
+risks; it is scored beside them until the leaf mapping lands.
 
 **So adding a benchmark changes nothing in `pipeline/`.** It is one `Source(...)`
 entry in `datasets/prepare/cluster/sources/<risk>.py`, plus data under

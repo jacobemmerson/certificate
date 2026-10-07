@@ -4,7 +4,7 @@
 |---|---|
 | `raw/` | Raw source benchmarks as delivered, one directory per `manifest.toml` name (`raw/<name>/`). Never loaded by the pipeline directly. Most are sparse, pinned fetches by `scripts/fetch_raw.py` (each holds a `fetch.json`); `wmdp`, `sosbench`, `darkbench` and `socialharmbench` are committed. |
 | `prepare/` | `prepare/cluster/` — builds the per-risk cluster datasets from `raw/` into `public/`. Run once before evaluating. |
-| `public/` | The processed CSVs the stage-1 evals actually load (via `pipeline/stage1_evaluation/evals/common.py::csv_samples`). One row per item. Holds one dataset per risk cluster (`cbrn.csv`, `cyber.csv`, `loss_of_control.csv`, `manipulation.csv`) with their `.meta.json` provenance siblings. Use a `private/` sibling for non-redistributable data. |
+| `public/` | The processed CSVs the stage-1 evals actually load (via `pipeline/stage1_evaluation/evals/common.py::csv_samples`). One row per item. Holds one dataset per risk cluster (`cbrn.csv`, `cyber.csv`, `loss_of_control.csv`, `manipulation.csv`; `alignment` is a provisional fifth cluster, built once its sources are prepared, for benchmarks whose taxonomy leaves fit none of the four risks) with their `.meta.json` provenance siblings. Use a `private/` sibling for non-redistributable data. |
 | `generated/` | The frozen stage-2/3 artifacts (perturbed variants + scenario reframings) that `certify.py` replays against every model, produced once by `generate.py`. Committed like `public/`. See [`generated/README.md`](generated/README.md). |
 
 `datasets/raw/sycophancy_sharma/mimicry.jsonl` comes from the HuggingFace dataset
