@@ -37,10 +37,10 @@ uv run python3 -m datasets.prepare.cluster.prepare --risk cyber
 Every source is read from `raw/` directly — there is no intermediate flattening
 step, and no source-specific loader between the pipeline and its data.
 
-Each build writes `public/<risk>.csv`, a `<risk>.meta.json` (seed, quotas,
-per-tier drop counts, source revisions) and `<risk>.dropped.jsonl` (every pair or item
-dropped by cross-source dedup, cosine dedup or the screen, each tagged `near`,
-`exact_cross_source` or `screen`, so thresholds stay reviewable).
+Each build writes `public/<risk>.csv`, a `<risk>.meta.json` (seed, budget and shortfall,
+per-source allotments, per-tier drop counts, strata skew, source revisions) and `<risk>.dropped.jsonl` (every pair or item
+dropped by cross-source dedup, cosine dedup or the screen, each tagged `exact`, `near`,
+`exact_cross_source`, `near_cross_source` or `screen`, so thresholds stay reviewable).
 
 ### Adding a benchmark to a cluster
 

@@ -23,7 +23,7 @@ manipulation), whose dataset is a filtered union of several benchmarks. Merged
 into one task, **sample count becomes weight** in the headline tail: WMDP
 (3,668) plus SOSBench (3,000) would make a cbrn score ~55% WMDP by arithmetic,
 and DarkBench (660) plus PersuSafety (101) would be 87% DarkBench. Per-source
-quotas are therefore what lets the cluster score mean anything, and
+shares are therefore what lets the cluster score mean anything, and
 `tests/test_clusters.py` fails any cluster where one source exceeds 40% of it.
 
 ## One canonical schema per cluster
@@ -230,7 +230,7 @@ clarifications): the generic one missed the calls that decide these items
 (encyclopedic facts are not actionable, an unsafe reasoning leak counts).
 
 **`wmdp` is a diagnostic.** Ignorance scores like restraint, and the *correct*
-answer is the unsafe end. All three subsets stay here (one home, one quota).
+answer is the unsafe end. All three subsets stay here (one home, one share).
 WMDP is an unlearning benchmark built to be publishable: its items are proxies
 for expertise and **none is harmful to answer**, so a safety rubric would mark
 nearly everything safe and refusal rate would reward evasion about public-health
@@ -476,18 +476,22 @@ no `subset` column: the adapter supplies it from the config's directory name.
 > **Scope: `datasets/raw/` only.** Nothing here reads `datasets/generated/`; those
 > artifacts are near-duplicates of their base item by construction.
 
-Every registered source contributes to its cluster, always. `quota` says how many
-rows a source gets and `prepare.py::_allocate` splits it across strata;
-everything below decides *which* rows fill each allotment.
+Every registered source contributes to its cluster, always. Each `sources/<risk>.py`
+declares one `BUDGET` (rows for the cluster); `prepare.py::allocate_budget` water-fills it
+across the risk's sources after dedup, smallest pool first, so a small source keeps
+everything and its unused share flows to the larger ones. `Source.quota` overrides a share.
+`_allocate` then splits each share across strata; everything below decides *which* rows fill
+each allotment.
 `datasets/prepare/cluster/prepare.py::build_risk`, in order:
 
 | Tier | What it does | Cost |
 |---|---|---|
 | 0 | `transform`, the source's own structural collapse (PreservingHistoricalTruth 5,478 → 498 case ids; llm-human-rights 1,440 multilingual rows → 144 English) | free |
-| 1 | `exact_dedup`: normalise (lowercase, `[a-z0-9]+` tokens) and drop repeats | free |
+| 1 | `exact_dedup`: normalise (lowercase, `[a-z0-9]+` tokens) and drop repeats | free; pairs in `dropped.jsonl` (`tier: exact`) |
 | 2 | **cosine near-dedup** per source on cached embeddings, `COSINE_TAU` = 0.92 (overridable by `Source.tau`); `distinct_on` and differing mcq `target` win at any similarity | one `V @ V.T` in row blocks |
-| 1b | cross-source exact dedup on the prompt *as delivered* (user + system text), after each source's whole pool so a source never collides with itself; runs before the quota so the copy's source backfills | free; `cross_source_dropped` is the number to watch |
-| 3 | stratified quota: `_allocate`, then per stratum pre-select `SCREEN_FACTOR` (3.5) × allotment by the source's `select` | `O(take × stratum)` dot products |
+| 1b | cross-source exact dedup on the prompt *as delivered* (user + system text), after each source's whole pool so a source never collides with itself; runs before the budget is allocated so the copy's source backfills | free; `cross_source_dropped` is the number to watch |
+| 2b | **cross-source near-dedup** on the delivered query at `COSINE_TAU`, later source loses; sources with `dedup=False` are skipped | one more `V @ V.T` per cluster |
+| 3 | water-filled share, then `_allocate` per stratum, then per stratum pre-select `SCREEN_FACTOR` (3.5) × allotment by the source's `select`; `diverse` starts from the item farthest from anything the cluster has already kept | `O(take × stratum)` dot products |
 | 3b | **Hermes answerability screen**: drop candidates Hermes-4-70B refuses, then fill the allotment from the survivors by the same `select` | ~2.5k GPU calls for all clusters, cached |
 | 4 | emit `public/<risk>.csv`, `<risk>.meta.json`, `<risk>.dropped.jsonl` | |
 
@@ -501,7 +505,7 @@ paying to regenerate them.
 
 ## Why embeddings replaced Jaccard
 
-Pools are heading to ~100k items, so the quota must pick *diverse* items from a
+Pools are heading to ~100k items, so the selection must pick *diverse* items from a
 pool it cannot keep whole, and token-set Jaccard fails on long text both ways:
 on PreservingHistoricalTruth's rendered prompts (median 117 tokens) the top pair
 at 0.598 was boilerplate between two *different* events, and ECHR's true
@@ -543,7 +547,7 @@ completion[:400], model, created_at}`, keyed by the prompt as delivered), so
 reruns are free and the file is reviewable. `prepare.py` prints a warning when
 the screen refuses over half a source's candidates, and fails when an allotment
 cannot be filled while the stratum has rows beyond the pre-selection: raise
-`SCREEN_FACTOR` rather than shrink the quota. **Read `screen/<risk>.jsonl` and
+`SCREEN_FACTOR` rather than shrink the share. **Read `screen/<risk>.jsonl` and
 `refused_dropped` before committing a CSV:** the screen drops the most egregious
 prompts by design, and that is the one place to see what it threw away.
 
@@ -565,13 +569,13 @@ the new selection before anyone has reviewed it.
 
 ## Strata
 
-The quota is allocated proportionally (or evenly where `balanced` is declared)
+The share is allocated proportionally (or evenly where `balanced` is declared)
 across the cross of each source's stratify columns and filled within each cell:
 
 | Source | Stratify on | `select` |
 |---|---|---|
 | `historical_revisionism` | `Push Level` × `Country/Region` | uniform |
-| `human_rights_udhr` / `human_rights_echr` | `severity` (quota counts scenarios, 3 arms each) | uniform |
+| `human_rights_udhr` / `human_rights_echr` | `severity` (the share counts scenarios, 3 arms each) | uniform |
 | `leader_favorability` | `classification`, **evenly** (the gap metric needs balanced groups) | uniform |
 | `authoritarian_values` | kept whole | uniform |
 | `role_model_bias` | none | uniform |
@@ -605,14 +609,16 @@ benchmarks have no logs yet.
 
 ## Provenance
 
-`<risk>.meta.json` records the seed; per source `loaded`, `quota`,
-`stratify_on`, `balanced`, `strata`, `kept` and drop counts (`exact_dropped`,
+`<risk>.meta.json` records the seed; top-level `budget` and `shortfall`; per
+source `loaded`, `quota` (the override, usually null), `allotted`, `shortfall`,
+`strata` (`{key: {pool, kept}}`), `divergence` (total variation distance pool
+vs kept, null when unstratified), `stratify_on`, `balanced`, `kept` and drop counts (`exact_dropped`,
 `near_dropped`, `cross_source_dropped`, and `screen_candidates` /
 `screen_refused` where screened); the `embedding` block (`model`, `tau_cosine`,
 `cache`); the `screen` block (`model`, `applies_to`, `candidate_factor`,
 `refused_dropped` per source); and `revisions`. `<risk>.dropped.jsonl` holds
-every pair tier 2 or 1b removed and every candidate the screen dropped, tagged
-`tier` = `near`, `exact_cross_source` or `screen`, so a threshold is reviewable
+every pair or item the dedup tiers removed and every candidate the screen dropped,
+tagged `tier` = `exact`, `near`, `exact_cross_source`, `near_cross_source` or `screen`, so a threshold is reviewable
 rather than trusted.
 
 # Housekeeping

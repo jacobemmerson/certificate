@@ -67,7 +67,7 @@ Source(
     rubric=YOUR_RUBRIC,
     categories=YES_NO, scale_map=YES_NO_MAP,
     metadata=["category"],          # travels with the row, drives stratification
-    stratify=["category"], quota=90,
+    stratify=["category"],
 )
 ```
 
@@ -78,7 +78,8 @@ Useful fields when the shape is awkward:
 | `filename_field` / `dirname_field` | "one file per category" — turns the filename into an ordinary column |
 | `transform` | a `DataFrame -> DataFrame` hook, for prompt construction or structural collapse |
 | `system_prompt` | benchmarks that steer the model deliberately (persona arms, assigned roles) |
-| `group_key` | rows only meaningful as a set — the quota then counts groups, not rows |
+| `group_key` | rows only meaningful as a set — the share then counts groups, not rows |
+| `quota` | override the water-filled share from the cluster `BUDGET`; say why in a comment |
 | `balanced` | even allocation per stratum instead of proportional |
 | `distinct_on` | fields whose differing values mean "different items, however similar the text" |
 | `judge_style="classifier"` | the original judge emits a bare label, not reasoning |
@@ -234,9 +235,13 @@ ships prompts an earlier source in the same cluster already ships — worth
 checking whether it is vendoring another benchmark before you tune anything. A
 `screen` drop above half the candidates means the source's prompts are mostly
 refused by an open model; raise `SCREEN_FACTOR` or reconsider the source rather
-than shrink the quota. `<risk>.dropped.jsonl` tags every record with its `tier`
-(`near`, `exact_cross_source`, `screen`), so the thresholds are reviewable
-rather than trusted.
+than shrink the share. `allot` and `short` show what the budget gave the source
+and how much it could not fill; a `short` above 0 means the pool or a stratum ran
+dry. A `[WARNING]` on strata divergence means the kept rows are distributed unlike
+the pool, usually because the screen refused one category. `<risk>.dropped.jsonl`
+tags every record with its `tier` (`exact`, `near`, `exact_cross_source`,
+`near_cross_source`, `screen`), so the thresholds are reviewable rather than
+trusted.
 
 `prepare.py` exits 2 when an embedding or screen cache is missing and prints
 the command to run; the full three-pass sequence is in
