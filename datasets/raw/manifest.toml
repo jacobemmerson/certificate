@@ -116,7 +116,7 @@ revision = ""
 files = ["data/*.parquet"]
 status = "registered"
 path = "raw/sosbench"
-note = "Licence 'other' on HF card. Not a submodule despite BENCHMARKS.md wording; no gitlink. Domain column is 'subject'."
+note = "Licence 'other' on HF card. Committed under raw/sosbench (no fetch.json). Domain column is 'subject'."
 
 [[benchmark]]
 name = "scimt_safety"
@@ -156,7 +156,7 @@ revision = ""
 files = ["wmdp-*/*.parquet"]
 status = "registered"
 path = "raw/wmdp"
-note = "MIT. Downloaded from HF (download.txt stub), not a submodule. No subset column: adapter derives it from config dir."
+note = "MIT. Downloaded from HF, committed under raw/wmdp (no fetch.json). No subset column: adapter derives it from config dir."
 
 [[benchmark]]
 name = "threecb"
@@ -360,7 +360,7 @@ revision = ""
 files = ["darkbench.jsonl"]
 status = "registered"
 path = "raw/darkbench"
-note = "MIT. Downloaded from HF, not a submodule."
+note = "MIT. Downloaded from HF, committed under raw/darkbench (no fetch.json)."
 
 [[benchmark]]
 name = "debategpt"
@@ -454,7 +454,7 @@ revision = ""
 files = ["socialharmbench.csv"]
 status = "registered"
 path = "raw/socialharmbench"
-note = "Apache-2.0. Downloaded from HF, not a submodule."
+note = "Apache-2.0. Downloaded from HF, committed under raw/socialharmbench (no fetch.json)."
 
 [[benchmark]]
 name = "sycophancy_sharma"
@@ -465,7 +465,7 @@ revision = "18f18160e9998e524bbf027c4475bfa7fdeb6949"
 files = ["mimicry.jsonl"]
 status = "registered"
 path = "raw/sycophancy_sharma"
-note = "MIT. CONFLICT: submodule is GitHub meg-tong/sycophancy-eval@9a16942, which has no mimicry.jsonl; datasets/mimicry.jsonl is an untracked local file. Only the HF repo ships it, at root. Revision is HF HEAD sha."
+note = "MIT. Fetched from HF: the GitHub repo meg-tong/sycophancy-eval has no mimicry.jsonl; only the HF repo ships it, at root. Revision is HF HEAD sha."
 
 [[benchmark]]
 name = "udhr_rights_limitations"

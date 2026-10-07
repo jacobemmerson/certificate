@@ -793,8 +793,7 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
 
 
 def source_revisions() -> dict:
-    '''Pin what produced this build: the repo HEAD, submodule SHAs, and the
-    resolved revision of every datasets/raw/<name>/fetch.json (scripts/fetch_raw.py).'''
+    '''Pin what produced this build: the repo HEAD and the resolved revision of every datasets/raw/<name>/fetch.json (scripts/fetch_raw.py).'''
     def git(*args: str) -> str:
         try:
             return subprocess.run(
@@ -804,15 +803,6 @@ def source_revisions() -> dict:
             return "unknown"
 
     revisions = {"repo": git("rev-parse", "HEAD")}
-
-    # Read gitlinks (mode 160000) straight from the index rather than using
-    # `git submodule status`, which aborts entirely if any path is missing from
-    # .gitmodules — one stale entry would otherwise leave the provenance blank
-    # without failing the build.
-    for line in git("ls-files", "--stage").splitlines():
-        fields = line.split(maxsplit=3)
-        if len(fields) == 4 and fields[0] == "160000":
-            revisions[fields[3].strip()] = fields[1]
 
     for record in sorted((REPO_ROOT / "datasets" / "raw").glob("*/fetch.json")):
         revisions[f"datasets/raw/{record.parent.name}"] = json.loads(record.read_text())["revision"]
