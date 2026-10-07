@@ -16,7 +16,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from huggingface_hub.errors import GatedRepoError, HfHubHTTPError
+from huggingface_hub.errors import GatedRepoError
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from datasets.prepare.cluster.manifest import MANIFEST_PATH, NAME_PATTERN, STATUSES, load_manifest  # noqa: E402
@@ -131,7 +131,7 @@ def main(argv: list[str] | None = None):
         except GatedRepoError:
             print(f"{name}: failed: gated dataset {entry['repo']}; accept its terms on the Hub and set HF_TOKEN")
             failed.append(name)
-        except (subprocess.CalledProcessError, OSError, HfHubHTTPError) as error:
+        except Exception as error:  # any failure of one entry must not stop the rest
             print(f"{name}: failed: {error}")
             failed.append(name)
     if failed:
