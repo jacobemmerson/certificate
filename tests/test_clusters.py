@@ -48,7 +48,7 @@ from datasets.prepare.cluster.schema import Source
 from datasets.prepare.cluster.sources import RISKS, SOURCES, budget_for, for_risk
 from datasets.prepare.cluster.sources import loss_of_control
 from datasets.prepare.cluster.sources.manipulation import (
-    darkbench_rows, favorability_scale_map,
+    ape_rows, darkbench_rows, favorability_scale_map, mentalmanip_rows,
 )
 
 PUBLIC_DIR = Path(__file__).resolve().parent.parent / "datasets" / "public"
@@ -1493,6 +1493,9 @@ class TestMeta(unittest.TestCase):
         report = {"advanced_ai_risk": {
             "loaded": 10, "exact_dropped": 0, "near_dropped": 0, "cross_source_dropped": 0,
             "kept": 1, "strata": 1, "screen_candidates": 4, "screen_refused": 3,
+        }, "instrumentaleval": {
+            "loaded": 0, "exact_dropped": 0, "near_dropped": 0, "cross_source_dropped": 0,
+            "kept": 0, "strata": 0, "screen_candidates": 0, "screen_refused": 0,
         }}
         with tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.object(prepare, "OUT_DIR", Path(tmp)), \
@@ -1509,8 +1512,9 @@ class TestMeta(unittest.TestCase):
             "cache": "datasets/cache/embeddings/loss_of_control.npz",
         })
         self.assertEqual(meta["screen"], {
-            "model": ["vllm/NousResearch/Hermes-4-70B"], "applies_to": ["advanced_ai_risk"],
-            "candidate_factor": 3.5, "refused_dropped": {"advanced_ai_risk": 3},
+            "model": ["vllm/NousResearch/Hermes-4-70B"], "applies_to": ["advanced_ai_risk", "instrumentaleval"],
+            "candidate_factor": 3.5,
+            "refused_dropped": {"advanced_ai_risk": 3, "instrumentaleval": 0},
         })
         self.assertEqual((meta["budget"], meta["shortfall"]), (budget_for("loss_of_control"), budget_for("loss_of_control") - 1))
         self.assertFalse({"jaccard_tau_default", "cosine_tau_default", "token_gate"} & set(meta))
@@ -1870,3 +1874,34 @@ class SourceRevisionsTest(unittest.TestCase):
             with mock.patch.object(prepare, "REPO_ROOT", Path(tmp)):
                 revisions = prepare.source_revisions()
         self.assertEqual(revisions["_warning"], "no source revisions recorded")
+
+
+class ManipulationTransformsTest(unittest.TestCase):
+    def test_ape_drops_benign_topics_and_sets_persuader_system_prompt(self):
+        built = ape_rows(pd.DataFrame({
+            "topic_file": ["diverse_topics", "terrorism"],
+            "short_title": ["A", "B"],
+            "text": ["benign claim", "attack claim"],
+        }))
+        self.assertEqual(list(built["row_id"]), ["terrorism__B"])
+        self.assertIn("attack claim", built.iloc[0]["query"])
+        self.assertIn("persuasive", built.iloc[0]["system_prompt"])
+
+    def test_mentalmanip_renders_options_and_keeps_label(self):
+        built = mentalmanip_rows(pd.DataFrame({
+            "id": [1], "dialogue": ["Person1: hi"], "manipulative": [1],
+        }))
+        self.assertIn("Person1: hi", built.iloc[0]["query"])
+        self.assertIn("B) Yes, it is manipulative.", built.iloc[0]["query"])
+
+
+class TestRedcodeRows(unittest.TestCase):
+
+    def test_ask_is_appended_and_id_is_family_file(self):
+        from datasets.prepare.cluster.sources.cyber import REDCODE_ASK, redcode_rows
+        out = redcode_rows(pd.DataFrame(
+            {"text": ["def f():\n    '''doc'''\n"], "family": ["ddos"], "file": ["ddos_2_syn_flood"]}))
+        row = out.iloc[0]
+        self.assertEqual(row["uid"], "ddos/ddos_2_syn_flood")
+        self.assertTrue(row["query"].startswith(row["text"]))
+        self.assertTrue(row["query"].endswith(REDCODE_ASK))
