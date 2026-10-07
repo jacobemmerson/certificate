@@ -1,0 +1,12 @@
+{
+  "name": "beavertails",
+  "id": "286653132",
+  "host": "hf",
+  "repo": "PKU-Alignment/BeaverTails-Evaluation",
+  "revision": "a93205d9ba6cc9dc398a34466da3602abddd2d40",
+  "requested": "",
+  "files": [
+    "v1/test.jsonl.xz"
+  ],
+  "fetched_at": "2026-10-07T22:35:31+00:00"
+}

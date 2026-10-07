@@ -1,0 +1,13 @@
+{
+  "name": "ctrl_alt_deceit",
+  "id": "287222719",
+  "host": "github",
+  "repo": "TeunvdWeij/ctrl-alt-deceit",
+  "revision": "60c1dff47a4615aedaceb2a14d4f1daa3afad990",
+  "requested": "60c1dff47a4615aedaceb2a14d4f1daa3afad990",
+  "files": [
+    "configs/*.yaml",
+    "data/task_descriptions/**"
+  ],
+  "fetched_at": "2026-10-07T22:36:25+00:00"
+}

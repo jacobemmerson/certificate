@@ -1,0 +1,12 @@
+{
+  "name": "mentalmanip",
+  "id": "286653142",
+  "host": "hf",
+  "repo": "audreyeleven/MentalManip",
+  "revision": "86e800cebf9ee2baa8f5999845027cc3f50e8fd5",
+  "requested": "",
+  "files": [
+    "mentalmanip_con.csv"
+  ],
+  "fetched_at": "2026-10-07T22:35:32+00:00"
+}

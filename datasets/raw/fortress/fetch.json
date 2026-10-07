@@ -1,0 +1,12 @@
+{
+  "name": "fortress",
+  "id": "287222721",
+  "host": "hf",
+  "repo": "ScaleAI/fortress_public",
+  "revision": "0c096becbc75bb12065c8059a53960c7f0d4d35c",
+  "requested": "0c096becbc75bb12065c8059a53960c7f0d4d35c",
+  "files": [
+    "data/train-*.parquet"
+  ],
+  "fetched_at": "2026-10-07T22:35:35+00:00"
+}

@@ -1,0 +1,12 @@
+{
+  "name": "biolp_bench",
+  "id": "286653110",
+  "host": "github",
+  "repo": "baceolus/BioLP-bench",
+  "revision": "148d5a2dd90c185ce2859c77c368b79c2173d907",
+  "requested": "",
+  "files": [
+    "keys/Public protocols.csv"
+  ],
+  "fetched_at": "2026-10-07T22:35:27+00:00"
+}

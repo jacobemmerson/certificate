@@ -1,0 +1,12 @@
+{
+  "name": "instrumentaleval",
+  "id": "286653155",
+  "host": "github",
+  "repo": "yf-he/InstrumentalEval",
+  "revision": "269678168cf0388bf5dd7d10dfaed4af07905c49",
+  "requested": "",
+  "files": [
+    "benchmark/*.csv"
+  ],
+  "fetched_at": "2026-10-07T22:35:33+00:00"
+}

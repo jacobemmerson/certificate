@@ -1,0 +1,12 @@
+{
+  "name": "deception_bench",
+  "id": "287222720",
+  "host": "hf",
+  "repo": "PKU-Alignment/DeceptionBench",
+  "revision": "9c6c67b3d2a2d9c226ea0dd2120f1bb0899d779d",
+  "requested": "9c6c67b3d2a2d9c226ea0dd2120f1bb0899d779d",
+  "files": [
+    "deceptionbench_0527.json"
+  ],
+  "fetched_at": "2026-10-07T22:35:34+00:00"
+}
