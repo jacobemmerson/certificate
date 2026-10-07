@@ -11,7 +11,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from datasets.prepare.cluster.manifest import HOSTS, MANIFEST_PATH, NAME_PATTERN, STATUSES, load_manifest
 
-NO_REPO_STATUSES = {"unreleased", "human_study", "agentic"}
+NO_REPO_STATUSES = {"unreleased", "human_study", "agentic", "excluded"}
 ON_DISK_STATUSES = {"registered", "vendored"}
 
 
@@ -19,6 +19,10 @@ class ManifestTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.rows = load_manifest(MANIFEST_PATH)
+        text = MANIFEST_PATH.read_text(encoding="utf-8")
+        _, marker, added_section = text.partition("# Added 2026-10-07")
+        assert marker, "manifest lost its '# Added 2026-10-07' marker"
+        cls.added = set(re.findall(r'^name = "([^"]+)"', added_section, re.M))
 
     @unittest.skipUnless((REPO_ROOT / "annotations.csv").exists(),
                          "annotations.csv (annotation export) not in checkout")
@@ -41,7 +45,8 @@ class ManifestTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIn(row["status"], STATUSES)
                 if not row["id"]:
-                    self.assertIn(row["status"], ON_DISK_STATUSES)
+                    # ids are blank for on-disk sources and for rows added after the export.
+                    self.assertTrue(row["status"] in ON_DISK_STATUSES or name in self.added)
                 self.assertIn(row["host"], HOSTS)
                 if row["host"] != "none":
                     # files may be empty with a host: partial rows whose prompts are rendered (note says how).
@@ -58,6 +63,18 @@ class ManifestTest(unittest.TestCase):
                     self.assertIsInstance(entry, str)
                     self.assertTrue(entry)
                 self.assertIsInstance(row["revision"], str)
+
+    def test_excluded_rows_keep_their_join(self):
+        for row in self.rows:
+            if row["status"] == "excluded":
+                with self.subTest(name=row["name"]):
+                    self.assertTrue(row["id"])
+                    self.assertTrue(row["note"].startswith("Excluded 2026-10-07:"))
+
+    def test_row_count(self):
+        self.assertEqual(len(self.rows), 91)
+        self.assertEqual(len(self.added), 17)
+        self.assertEqual(sum(row["status"] == "excluded" for row in self.rows), 10)
 
     def test_sources_read_registered_rows(self):
         from datasets.prepare.cluster.sources import SOURCES

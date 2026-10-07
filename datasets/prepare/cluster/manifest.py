@@ -2,7 +2,7 @@
 import tomllib
 from pathlib import Path
 
-STATUSES = ("registered", "vendored", "prompt", "partial", "agentic", "human_study", "unreleased")
+STATUSES = ("registered", "vendored", "prompt", "partial", "agentic", "human_study", "unreleased", "excluded")
 HOSTS = ("github", "hf", "none")
 NAME_PATTERN = r"[a-z0-9_]+"
 REPO_ROOT = Path(__file__).resolve().parents[3]

@@ -412,6 +412,7 @@ in c013c71.
 | `agentic` | needs a tool sandbox, browser or simulated interlocutor; stage 3 at most |
 | `human_study` | the metric is a human belief delta; no promptable dataset |
 | `unreleased` | no public data, or gated with no access (`note` says how to request) |
+| `excluded` | dropped from the set by the 2026-10-07 revision; `note` gives the reason; kept so `id` still joins the labelling export |
 
 `fetch_raw.py` fetches `prompt` and `partial` rows by default.
 

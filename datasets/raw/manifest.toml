@@ -1,11 +1,11 @@
 # Download manifest: one [[benchmark]] per annotated benchmark plus registered sources not in the export, with where to fetch it.
-# status: registered|vendored (in datasets/<path>), prompt|partial (fetchable), agentic|human_study|unreleased (no prompt set).
-# ids join annotations.csv (column "id"); id "" marks a registered source not in annotations.csv.
+# status: registered|vendored (in datasets/<path>), prompt|partial (fetchable), agentic|human_study|unreleased (no prompt set), excluded (dropped by the 2026-10-07 revision; note says why).
+# ids join annotations.csv (column "id"); id "" marks a registered source not in annotations.csv, or a row added 2026-10-07 that has no id yet.
 # registered/vendored rows are provenance records for data that lives at `path` today.
 # scripts/fetch_raw.py fetches into datasets/raw/<name>/ (use --dry-run to preview).
 # See datasets/BENCHMARKS.md Part 4.
 #
-# Rows follow annotations.csv order; registered sources not in the export follow. Generated 2026-10-06.
+# Rows follow annotations.csv order; registered sources not in the export follow, then the 2026-10-07 additions. Generated 2026-10-06, revised 2026-10-07.
 
 [[benchmark]]
 name = "agent_safetybench"
@@ -45,8 +45,8 @@ host = "github"
 repo = "Lordog/R-Judge"
 revision = ""
 files = ["data/*/*.json"]
-status = "prompt"
-note = "No licence file. One recorded agent trajectory per prompt, model labels safe/unsafe. Measures risk-judgment capability, not propensity."
+status = "excluded"
+note = "Excluded 2026-10-07: Tests whether a model can label risk in recorded agent trajectories, which is a judging skill, not the risky behaviour itself. No licence file. One recorded agent trajectory per prompt, model labels safe/unsafe. Measures risk-judgment capability, not propensity."
 
 [[benchmark]]
 name = "safearena"
@@ -296,8 +296,8 @@ host = "hf"
 repo = "nvidia/Aegis-AI-Content-Safety-Dataset-1.0"
 revision = ""
 files = ["Content Moderation Extracted Annotations 02.08.24_test_release_0418_v1.parquet"]
-status = "prompt"
-note = "CC-BY-4.0. Model classifies each text safe/unsafe vs human label. Measures moderation capability, not propensity. File names contain spaces."
+status = "excluded"
+note = "Excluded 2026-10-07: A content-moderation dataset whose metric is a guard model's classification accuracy, which is not a leaf behaviour of a general-purpose model. CC-BY-4.0. Model classifies each text safe/unsafe vs human label. Measures moderation capability, not propensity. File names contain spaces."
 
 [[benchmark]]
 name = "beavertails"
@@ -369,8 +369,8 @@ host = "github"
 repo = "epfl-dlab/debategpt"
 revision = ""
 files = []
-status = "human_study"
-note = "MIT. Code for a human RCT debate platform; metric is human opinion change, no promptable dataset."
+status = "excluded"
+note = "Excluded 2026-10-07: A randomised controlled trial with human participants, with no fixed item set that a model can be run against and scored automatically. MIT. Code for a human RCT debate platform; metric is human opinion change, no promptable dataset."
 
 [[benchmark]]
 name = "democratic_authoritarian_bias"
@@ -485,8 +485,8 @@ host = "github"
 repo = "rgreenblatt/control-evaluations"
 revision = ""
 files = []
-status = "agentic"
-note = "MIT. Multi-model control protocols over APPS backdoor tasks; trusted/untrusted model pipeline."
+status = "excluded"
+note = "Excluded 2026-10-07: Evaluates a control protocol against a red team, so its score describes the protocol, not a capability or propensity of the model under test. MIT. Multi-model control protocols over APPS backdoor tasks; trusted/untrusted model pipeline."
 
 [[benchmark]]
 name = "ai_sandbagging"
@@ -663,8 +663,8 @@ host = "github"
 repo = "agiresearch/ASB"
 revision = ""
 files = []
-status = "agentic"
-note = "MIT. Agent framework with tool calls and memory attacks."
+status = "excluded"
+note = "Excluded 2026-10-07: Duplicates the prompt-injection construct already held by AgentDojo and InjecAgent and adds no coverage of any specified risk. MIT. Agent framework with tool calls and memory attacks."
 
 [[benchmark]]
 name = "agentdojo"
@@ -683,8 +683,8 @@ host = "github"
 repo = "microsoft/BIPIA"
 revision = ""
 files = ["benchmark/*/test.jsonl", "benchmark/*_attack_test.json"]
-status = "prompt"
-note = "Licence NOASSERTION on GitHub (see LICENSE). Context + embedded attack per prompt. email/table/code ship content; qa/abstract only ship index.json+md5 and must be rebuilt from NewsQA/XSum."
+status = "excluded"
+note = "Excluded 2026-10-07: Prompt-injection robustness has no leaf in the taxonomy, and AgentDojo and InjecAgent suffice for the out-of-scope stratum. Licence NOASSERTION on GitHub (see LICENSE). Context + embedded attack per prompt. email/table/code ship content; qa/abstract only ship index.json+md5 and must be rebuilt from NewsQA/XSum."
 
 [[benchmark]]
 name = "injecagent"
@@ -704,8 +704,8 @@ host = "github"
 repo = "facebookresearch/wasp"
 revision = ""
 files = []
-status = "agentic"
-note = "Custom licence. Web agents in live VisualWebArena sites."
+status = "excluded"
+note = "Excluded 2026-10-07: A third prompt-injection benchmark with no leaf, and it needs a live web-agent environment the harness cannot perturb at the planned cost. Custom licence. Web agents in live VisualWebArena sites."
 
 [[benchmark]]
 name = "toxigen"
@@ -714,8 +714,8 @@ host = "hf"
 repo = "toxigen/toxigen-data"
 revision = ""
 files = ["annotated/test-*.parquet"]
-status = "prompt"
-note = "No licence tag on HF (GitHub microsoft/TOXIGEN: see LICENSE). Human-validated test statements; model classifies toxic vs benign. Detection capability, not propensity."
+status = "excluded"
+note = "Excluded 2026-10-07: A 2022 hate-speech detection dataset, outside the specified risks and already represented in the out-of-scope stratum by BBQ. No licence tag on HF (GitHub microsoft/TOXIGEN: see LICENSE). Human-validated test statements; model classifies toxic vs benign. Detection capability, not propensity."
 
 [[benchmark]]
 name = "toxicchat"
@@ -724,8 +724,8 @@ host = "hf"
 repo = "lmsys/toxic-chat"
 revision = ""
 files = ["data/0124/toxic-chat_annotation_test.csv"]
-status = "prompt"
-note = "CC-BY-NC-4.0. Real user prompts with toxicity labels; model classifies. Detection capability, not propensity. 0124 is the latest release."
+status = "excluded"
+note = "Excluded 2026-10-07: Scores toxicity detection on user prompts, so it measures a classifier and maps to no leaf under the four specified risks. CC-BY-NC-4.0. Real user prompts with toxicity labels; model classifies. Detection capability, not propensity. 0124 is the latest release."
 
 [[benchmark]]
 name = "decodingtrust"
@@ -744,8 +744,8 @@ host = "hf"
 repo = "TrustLLM/TrustLLM-dataset"
 revision = ""
 files = ["safety/*.json", "ethics/*.json", "fairness/*.json", "privacy/*.json", "truthfulness/sycophancy.json"]
-status = "partial"
-note = "Apache-2.0, HF gated (auto-approve). Safety/ethics/fairness/privacy/sycophancy files are single prompts; robustness and hallucination are capability tasks."
+status = "excluded"
+note = "Excluded 2026-10-07: An omnibus suite that a one-page card with three items cannot represent, and DecodingTrust (split into sub-benchmarks) already covers the same ground. Apache-2.0, HF gated (auto-approve). Safety/ethics/fairness/privacy/sycophancy files are single prompts; robustness and hallucination are capability tasks."
 
 [[benchmark]]
 name = "cysecbench"
@@ -757,3 +757,175 @@ files = ["Dataset/Full dataset/cysecbench.csv"]
 status = "registered"
 path = "raw/cysecbench"
 note = "MIT. Not in annotations.csv; listed because it is a registered source."
+
+# Added 2026-10-07 (benchmark-set revision); no annotation id until the export is regenerated.
+
+[[benchmark]]
+name = "paper_bench"
+id = ""
+host = "github"
+repo = "openai/frontier-evals"
+revision = "51052cede8cc608f95bb00346635e03759013e5a"
+files = ["project/paperbench/data/papers/*/**"]
+status = "agentic"
+note = "MIT (repo-level; no LICENSE found inside the paperbench directory). Serves loss of control: autonomous AI R&D (second benchmark on the leaf beside RE-Bench). Agent must reproduce a paper in a GPU sandbox, graded against a rubric tree. Monorepo; large files via LFS possible, UNVERIFIED."
+
+[[benchmark]]
+name = "mlgym"
+id = ""
+host = "github"
+repo = "facebookresearch/MLGym"
+revision = "9d40c1b5035202018cd7091fb4e83a9c68b377c0"
+files = ["configs/tasks/*.yaml", "data/**"]
+status = "agentic"
+note = "CC-BY-NC-4.0 (LICENSE file; GitHub says NOASSERTION). Serves loss of control: autonomous AI R&D (third benchmark on the leaf, larger task set than RE-Bench). Gym of ML research tasks run by an agent in a shell. Repo archived. Non-commercial licence. Code may carry a separate licence, UNVERIFIED."
+
+[[benchmark]]
+name = "ctrl_alt_deceit"
+id = ""
+host = "github"
+repo = "TeunvdWeij/ctrl-alt-deceit"
+revision = "60c1dff47a4615aedaceb2a14d4f1daa3afad990"
+files = ["configs/*.yaml", "data/task_descriptions/**"]
+status = "agentic"
+note = "Licence: none found. Serves loss of control: sabotage and evading oversight (links the R&D and oversight-evasion leaves). Sabotage and sandbagging measured on MLE-bench subversion tasks in a sandbox. Extends MLE-bench; needs MLE-bench/Kaggle data separately."
+
+[[benchmark]]
+name = "shutdown_resistance"
+id = ""
+host = "github"
+repo = "PalisadeResearch/shutdown_avoidance"
+revision = "df0ce52e90aed38e8721b54058a5d46923a34583"
+files = []
+status = "agentic"
+note = "Licence: none found. Serves loss of control: resisting shutdown (no benchmark on the current list measures it directly). Inspect task with a Docker sandbox, bash tool and a shutdown script; 100 samples of one scenario. Not confirmed this repo is the 'Incomplete Tasks Induce Shutdown Resistance' repo, UNVERIFIED. Scenario text lives in conf.py, not a data file."
+
+[[benchmark]]
+name = "mask"
+id = ""
+host = "hf"
+repo = "cais/MASK"
+revision = "4602b84dd9e2ca05c6e1eafbc14e556e908ac1bb"
+files = ["*/test-*.parquet"]
+status = "prompt"
+note = "Licence not on the HF card; GitHub centerforaisafety/mask is MIT (sha 25e0b1201e6c928ebe69f7c5aad6fa9063a377ea), HF licence UNVERIFIED. Serves loss of control: deception (separates honesty from accuracy with a static item set the harness can run and perturb). Each of 1000 rows in 6 configs is a system+user prompt plus belief-elicitation prompts, scored by LLM judge. Canary column present. Belief elicitation needs several calls per item."
+
+[[benchmark]]
+name = "deception_bench"
+id = ""
+host = "hf"
+repo = "PKU-Alignment/DeceptionBench"
+revision = "9c6c67b3d2a2d9c226ea0dd2120f1bb0899d779d"
+files = ["deceptionbench_0527.json"]
+status = "prompt"
+note = "MIT. Serves loss of control: deception (second deception-propensity benchmark so the leaf can be validated). 180 single-prompt scenarios scored for deception tendency. Name collides with skyai798/DeceptionBench and sitong-fang/MM-DeceptionBench; confirm PKU is the intended one."
+
+[[benchmark]]
+name = "open_deception"
+id = ""
+host = "github"
+repo = "Simoniracle/OpenDeception-Bench"
+revision = "9c644fcd28e752675929731f5f3d8dc26569b5f0"
+files = []
+status = "agentic"
+note = "Licence: none found. Serves loss of control: deception; harmful manipulation: deception (deceptive behaviour in open-ended interaction). Needs an LLM-simulated user interlocutor over multi-turn dialogue; 50 scenarios. Items are a Python literal in examples.py, not a data file. Paper link was anonymous.4open.science. Sibling repo Simoniracle/OpenDeception-Framework (sha d19912f3f026152767e2e61efeb59a48ca34f045) has OpenDeception_Dataset/, contents UNVERIFIED. Simoniracle/OpenDeception is empty."
+
+[[benchmark]]
+name = "ape"
+id = ""
+host = "github"
+repo = "AlignmentResearch/AttemptPersuadeEval"
+revision = "f2ca0a9900d5bcd1b0238a49a335a1988cbc09a9"
+files = ["src/topics/*.jsonl"]
+status = "partial"
+note = "Apache-2.0. Serves harmful manipulation: propensity (scores persuasion attempts on harmful topics automatically). The src/topics/*.jsonl statements (600 diverse, 18 conspiracies, 100 harmful_texts, 100 terrorism) are the scorable subset: a persuasion attempt on a stated topic is a single prompt. The 3-round simulated persuadee is stage 3 at most."
+
+[[benchmark]]
+name = "harmful_manipulation"
+id = ""
+host = "none"
+repo = ""
+revision = ""
+files = []
+status = "human_study"
+note = "Licence: CC-BY-4.0 for the paper only. Serves harmful manipulation: capability and propensity (targets the construct by name). Efficacy is belief/behaviour change in a 10,101-participant human study; propensity needs their platform. Blog says materials released; no URL located. Deliberate Lab platform repo not checked. UNVERIFIED."
+
+[[benchmark]]
+name = "cogmanip"
+id = ""
+host = "github"
+repo = "yanchenfei/CogManip"
+revision = "d2207932ccaff6d5df1258037d154ac469731aa4"
+files = ["data/*.jsonl"]
+status = "agentic"
+note = "Licence: none found. Serves harmful manipulation: propensity (manipulative behaviour in multi-turn dialogue). Multi-turn dialogue with a simulated user and judge; 5 jsonl domain files, about 1000 scenarios. Sampled rows are Chinese; English coverage UNVERIFIED. Repo ships results/ and logs."
+
+[[benchmark]]
+name = "nuclearqa"
+id = ""
+host = "none"
+repo = ""
+revision = ""
+files = []
+status = "unreleased"
+note = "Licence: none found. Serves CBRN: radiological and nuclear (public proxy for that agent class). Paper describes 100 expert questions; no official release located. infinite-dataset-hub/NuclearQA is synthetic and unrelated. Paper text could not be parsed for a release statement, UNVERIFIED. NuclearQAv2 (arXiv 2606.27047, about 1240 QA) exists; release not checked."
+
+[[benchmark]]
+name = "fortress"
+id = ""
+host = "hf"
+repo = "ScaleAI/fortress_public"
+revision = "0c096becbc75bb12065c8059a53960c7f0d4d35c"
+files = ["data/train-*.parquet"]
+status = "prompt"
+note = "CC-BY-4.0. Serves CBRN and other security risks: propensity to assist (expert-written adversarial prompts with a risk-down direction). 500 single prompts (adversarial_prompt, benign_prompt, rubric, risk_domain, risk_subdomain), rubric-scored by LLM judge. Card forbids adversarial training use. Public subset only; private remainder UNVERIFIED."
+
+[[benchmark]]
+name = "lab_bench"
+id = ""
+host = "hf"
+repo = "futurehouse/lab-bench"
+revision = "5c77cec648430f30611808808861eb86f81d5eaa"
+files = ["*/train-*.parquet"]
+status = "partial"
+note = "CC-BY-SA-4.0. Serves CBRN: biology (proxy; standard dual-use biology capability proxy). Text-only configs (DbQA, LitQA2, ProtocolQA, SeqQA, CloningScenarios) are MCQ exact-match; FigQA/TableQA/SuppQA need images. 8 configs, 1967 rows total (counts 33/520/181/199/108/600/82/244). Config-to-count mapping and which configs embed images UNVERIFIED. Canary column."
+
+[[benchmark]]
+name = "occult"
+id = ""
+host = "none"
+repo = ""
+revision = ""
+files = []
+status = "unreleased"
+note = "Licence: none found. Serves cyber offence: operational use (targets offensive operations). MITRE paper describes TACTL and CyberLayer; no public data located. Paper PDF could not be parsed, UNVERIFIED."
+
+[[benchmark]]
+name = "swe_bench_verified"
+id = ""
+host = "hf"
+repo = "princeton-nlp/SWE-bench_Verified"
+revision = "c104f840cc67f8b6eec6f759ebc8b2693d585d4a"
+files = ["data/test-*.parquet"]
+status = "agentic"
+note = "Licence not on the card; code repo SWE-bench/SWE-bench is MIT (sha 02e7a74ffd0b707aab73d203fe87bdc7c76afc8e). Serves control: general capability (anchors the capability-correlation test). 500 rows; scoring needs Docker test runs, and the issue text alone does not exercise the control leaf."
+
+[[benchmark]]
+name = "gpqa_diamond"
+id = ""
+host = "hf"
+repo = "Idavidrein/gpqa"
+revision = "83022cefff930aea54f654c0b282e74b9eeda5c6"
+files = ["gpqa_diamond.csv"]
+status = "prompt"
+note = "CC-BY-4.0. Serves control: general capability (general science-knowledge control for the CBRN knowledge benchmarks). 4-option MCQ, exact match; CSV of 198 rows (count UNVERIFIED, from memory). Gated: accept the terms on the Hub and set HF_TOKEN. Terms forbid posting examples online in plain text."
+
+[[benchmark]]
+name = "gaia"
+id = ""
+host = "hf"
+repo = "gaia-benchmark/GAIA"
+revision = "682dd723ee1e1697e00360edccf2366dc8418dd9"
+files = ["2023/validation/*"]
+status = "agentic"
+note = "Licence: none found. Serves control: general capability (general agentic control for the cyber and loss-of-control agent tasks). Questions need web browsing, file handling and tools; validation has answers, test answers are withheld (about 165 validation rows UNVERIFIED). Gated (auto-approve) with no-reshare terms; accept the terms and set HF_TOKEN. Attachments are mixed binary files."
