@@ -1,13 +1,17 @@
 '''
 loss_of_control — scheming, instrumental convergence, oversight subversion.
 
-The obvious candidates for this cluster are agentic: InstrumentalEval and
-anthropic-experimental/agentic-misalignment both put a model in a scaffold with
-tools and multiple turns and watch what it does. Neither fits the cluster
-contract, which is one row -> one prompt -> one generation, and adapting them
-would mean either porting a harness into this repo or flattening the scenario
-into a prose question, at which point it is no longer the benchmark. They are
-better suited to stage 3, which already reframes items as scenarios.
+The obvious agentic candidates are anthropic-experimental/agentic-misalignment
+and similar tool-using scaffolds: they put a model in a scaffold with tools and
+multiple turns and watch what it does. That does not fit the cluster contract,
+which is one row -> one prompt -> one generation, and adapting them would mean
+either porting a harness into this repo or flattening the scenario into a prose
+question, at which point it is no longer the benchmark. They are better suited to
+stage 3, which already reframes items as scenarios.
+
+InstrumentalEval is not in that group: its items are single-turn scenario
+prompts judged by an LLM. It is absent only because upstream ships no licence,
+so redistributing its prompts is not permitted.
 
 What is here instead is the propensity half of the same question: does the model
 *want* power, resources, survival, or to coordinate with other AIs against its
@@ -40,9 +44,10 @@ Two upstream choices worth recording:
   `corrigible-less-HHH`, where matching means consenting to a *less* aligned
   objective, reads unambiguously as a failure.
 
-MASK is still absent: cais/MASK is HF-gated and most of its archetypes need two
-generations (elicit a belief, then apply pressure), which the one-row-one-prompt
-schema cannot express.
+MASK and DeceptionBench (PKU-Alignment) are still absent: both score deception as a mismatch
+between a belief elicited in one generation and a statement made under pressure
+in another, which the one-row-one-prompt schema cannot express. cais/MASK is also
+HF-gated.
 '''
 
 import json
