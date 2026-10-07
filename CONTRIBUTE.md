@@ -37,6 +37,11 @@ The fetch is sparse and writes `datasets/raw/<name>/fetch.json`; the build
 records its revision in `datasets/public/<risk>.meta.json`. Only `fetch.json`
 and `.gitignore` are committed.
 
+Once your `Source` reads the data, set the row to `status = "registered"` and
+add `path = "raw/<name>"`. The fresh-clone bootstrap fetches only registered
+and vendored rows, and `tests/test_manifest.py` fails if a `Source.path` has no
+such row.
+
 Commit files directly instead only when the data is on neither GitHub nor
 HuggingFace. If you do, say so in the source module's docstring with the origin,
 version, and licence: a committed directory pins nothing on its own.

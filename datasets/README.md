@@ -2,7 +2,7 @@
 
 | Directory | Contents |
 |---|---|
-| `raw/` | Raw source benchmarks as delivered, one directory per `manifest.toml` name (`raw/<name>/`). Never loaded by the pipeline directly. Most are sparse, pinned fetches by `scripts/fetch_raw.py` (each holds a `fetch.json`); `wmdp`, `sosbench`, `darkbench`, `socialharmbench` and `mitre_frr` are committed. |
+| `raw/` | Raw source benchmarks as delivered, one directory per `manifest.toml` name (`raw/<name>/`). Never loaded by the pipeline directly. Most are sparse, pinned fetches by `scripts/fetch_raw.py` (each holds a `fetch.json`); `wmdp`, `sosbench`, `darkbench` and `socialharmbench` are committed. |
 | `prepare/` | `prepare/cluster/` — builds the per-risk cluster datasets from `raw/` into `public/`. Run once before evaluating. |
 | `public/` | The processed CSVs the stage-1 evals actually load (via `pipeline/stage1_evaluation/evals/common.py::csv_samples`). One row per item. Holds one dataset per risk cluster (`cbrn.csv`, `cyber.csv`, `loss_of_control.csv`, `manipulation.csv`) with their `.meta.json` provenance siblings. Use a `private/` sibling for non-redistributable data. |
 | `generated/` | The frozen stage-2/3 artifacts (perturbed variants + scenario reframings) that `certify.py` replays against every model, produced once by `generate.py`. Committed like `public/`. See [`generated/README.md`](generated/README.md). |
@@ -15,6 +15,10 @@ Bootstrap the fetched sources on a fresh clone with (committed directories are s
 ```bash
 uv run python3 scripts/fetch_raw.py --status registered vendored
 ```
+
+A gated HuggingFace dataset needs its terms accepted on the Hub and `HF_TOKEN`
+exported first. A failed fetch is reported and the rest continue; the script
+exits non-zero listing the failures.
 
 ## Risk clusters
 
@@ -42,7 +46,7 @@ dropped by cross-source dedup, cosine dedup or the screen, each tagged `near`,
 
 Full guide: **[CONTRIBUTE.md](../CONTRIBUTE.md)**. In short:
 
-1. **Add the data**: add or update the `[[benchmark]]` row in `datasets/raw/manifest.toml` (status `prompt`/`partial`, `files` = exactly what the adapter reads), run `uv run python3 scripts/fetch_raw.py --only <name>`, and point `Source.path` at `raw/<name>/...` (see `CONTRIBUTE.md`).
+1. **Add the data**: add or update the `[[benchmark]]` row in `datasets/raw/manifest.toml` (status `prompt`/`partial`, `files` = exactly what the adapter reads), run `uv run python3 scripts/fetch_raw.py --only <name>`, and point `Source.path` at `raw/<name>/...`. Once the `Source` reads it, set `status = "registered"` and add `path = "raw/<name>"` so the fresh-clone bootstrap fetches it (see `CONTRIBUTE.md`).
 2. **Add one `Source(...)`** to `datasets/prepare/cluster/sources/<risk>.py`. Beyond
    the column mapping, declare what the pipeline cannot infer:
    - `judge_style="classifier"` only if the original judge emits a bare label.
