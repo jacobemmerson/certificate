@@ -153,6 +153,18 @@ class FetchRawTest(unittest.TestCase):
         self.assertIn("hub: committed data, skipped", out.getvalue())
         self.assertNotIn("hub ->", out.getvalue())
 
+    def test_failed_fetch_continues_and_exits_nonzero(self):
+        failure = subprocess.CalledProcessError(128, ["git", "fetch"])
+        out = io.StringIO()
+        with mock.patch.object(fetch_raw, "RAW_DIR", self.tmp / "raw"), \
+                mock.patch.object(fetch_raw, "fetch", side_effect=[failure, None]) as fetch, \
+                contextlib.redirect_stdout(out), self.assertRaises(SystemExit) as exit:
+            fetch_raw.main(["--manifest", str(self.manifest)])
+        self.assertEqual(fetch.call_count, 2)
+        self.assertIn("gh: failed:", out.getvalue())
+        self.assertIn("gh", str(exit.exception.code))
+        self.assertNotIn("hub", str(exit.exception.code))
+
 
 if __name__ == "__main__":
     unittest.main()

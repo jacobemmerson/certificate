@@ -2,12 +2,8 @@
 author: @tae
 
 Risk-cluster task — one parameterised @task over the EU AI Act systemic risks,
-each evaluating a filtered union of several benchmarks.
-
-  cbrn              chemical, biological, radiological and nuclear misuse
-  cyber             offensive cyber capability
-  loss_of_control   scheming and oversight subversion
-  manipulation      dark patterns, unethical influence, political manipulation
+each evaluating a filtered union of several benchmarks. There is one risk per
+`datasets/prepare/cluster/sources/<risk>.py`; see RISKS.
 
 The datasets are built by `datasets/prepare/cluster/` into
 `datasets/public/<risk>.csv`, one canonical schema across every source. This

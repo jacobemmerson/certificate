@@ -16,11 +16,12 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO_ROOT))
-from datasets.prepare.cluster.manifest import STATUSES, load_manifest  # noqa: E402
+from huggingface_hub.errors import GatedRepoError, HfHubHTTPError
 
-RAW_DIR = REPO_ROOT / "datasets" / "raw"
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from datasets.prepare.cluster.manifest import MANIFEST_PATH, NAME_PATTERN, STATUSES, load_manifest  # noqa: E402
+
+RAW_DIR = MANIFEST_PATH.parent
 
 
 def select(entries: list[dict], only: list[str], statuses: list[str]) -> list[dict]:
@@ -79,16 +80,11 @@ def fetch(entry: dict, dest: Path):
 
 def download(entry: dict, dest: Path) -> str:
     '''Populate dest and return the resolved commit SHA.'''
-    name, steps = entry["name"], plan(entry, dest)
+    steps = plan(entry, dest)
     if entry["host"] == "hf":
         from huggingface_hub import HfApi, snapshot_download
-        from huggingface_hub.errors import GatedRepoError
-        try:
-            sha = HfApi().dataset_info(entry["repo"], revision=steps["revision"]).sha
-            snapshot_download(**{**steps, "revision": sha})
-        except GatedRepoError as error:
-            raise SystemExit(f"{name}: gated dataset {entry['repo']}; accept its terms on the Hub "
-                             f"and set HF_TOKEN in the environment ({error})")
+        sha = HfApi().dataset_info(entry["repo"], revision=steps["revision"]).sha
+        snapshot_download(**{**steps, "revision": sha})
         shutil.rmtree(dest / ".cache", ignore_errors=True)
     else:
         for command in steps:
@@ -104,32 +100,42 @@ def main(argv: list[str] | None = None):
     parser.add_argument("--only", nargs="+", default=[], metavar="NAME")
     parser.add_argument("--status", nargs="+", default=["prompt", "partial"], choices=STATUSES)
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--manifest", type=Path, default=RAW_DIR / "manifest.toml")
+    parser.add_argument("--manifest", type=Path, default=MANIFEST_PATH)
     args = parser.parse_args(argv)
 
     entries = load_manifest(args.manifest)
     if unknown := set(args.only) - {entry["name"] for entry in entries}:
         parser.error(f"--only names not in {args.manifest}: {sorted(unknown)}")
-    if bad := [entry["name"] for entry in entries if not re.fullmatch(r"[a-z0-9_]+", entry["name"])]:
+    if bad := [entry["name"] for entry in entries if not re.fullmatch(NAME_PATTERN, entry["name"])]:
         parser.error(f"manifest names must match [a-z0-9_]+: {bad}")
 
+    failed = []
     for entry in select(entries, args.only, args.status):
+        name = entry["name"]
         if entry["host"] == "none":
-            print(f"{entry['name']}: no host ({entry['status']}), skipped")
+            print(f"{name}: no host ({entry['status']}), skipped")
             continue
         if not entry["files"]:
-            print(f"{entry['name']}: no files, skipped")
+            print(f"{name}: no files, skipped")
             continue
-        dest = RAW_DIR / entry["name"]
-        # Unpinned registered/vendored rows on disk without fetch.json are committed data (wmdp, sosbench, ...).
-        committed = dest.exists() and not (dest / "fetch.json").exists()
-        if entry["status"] in ("registered", "vendored") and not entry.get("revision") and committed:
-            print(f"{entry['name']}: committed data, skipped")
+        dest = RAW_DIR / name
+        # Data on disk without a fetch.json was committed, not fetched (wmdp, sosbench, ...).
+        if dest.exists() and any(dest.iterdir()) and not (dest / "fetch.json").exists():
+            print(f"{name}: committed data, skipped")
             continue
         if args.dry_run:
-            print(f"{entry['name']} -> {dest}: {plan(entry, dest)}")
-        else:
+            print(f"{name} -> {dest}: {plan(entry, dest)}")
+            continue
+        try:
             fetch(entry, dest)
+        except GatedRepoError:
+            print(f"{name}: failed: gated dataset {entry['repo']}; accept its terms on the Hub and set HF_TOKEN")
+            failed.append(name)
+        except (subprocess.CalledProcessError, OSError, HfHubHTTPError) as error:
+            print(f"{name}: failed: {error}")
+            failed.append(name)
+    if failed:
+        raise SystemExit(f"fetch failed for: {' '.join(failed)}")
 
 
 if __name__ == "__main__":
