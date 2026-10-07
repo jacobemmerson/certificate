@@ -311,7 +311,7 @@ def rows_from_frame(source: Source, frame) -> list[Row]:
             judge_style=source.judge_style, role=source.role, pool=source.pool,
             summary=source.summary,
             families=source.families_for(system_prompt),
-            metadata={**{key: _plain(record.get(key)) for key in source.metadata},
+            metadata={**{key: _plain(record[key]) for key in source.metadata},
                       **({"must_survive": list(must_survive)} if must_survive else {})},
         )
         validate(row)
@@ -883,6 +883,7 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
             "quota": source.quota,
             "stratify_on": list(source.stratify),
             "balanced": source.balanced,
+            "leaf": source.leaf,
             "question_type": source.question_type,
             "path": source.path,
         }

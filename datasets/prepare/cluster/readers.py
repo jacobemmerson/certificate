@@ -39,8 +39,9 @@ def _read_one(
     if reader == "parquet":
         return pd.read_parquet(path)
     if reader == "jsonl":
-        with open(path, encoding="utf-8") as f:
-            return pd.DataFrame([json.loads(line) for line in f if line.strip()])
+        return pd.read_json(path, lines=True, dtype=False)
+    if reader == "text":
+        return pd.DataFrame({"text": [path.read_text(encoding="utf-8")]})
     if reader == "json":
         with open(path, encoding="utf-8") as f:
             data = json.load(f)

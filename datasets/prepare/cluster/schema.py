@@ -358,6 +358,7 @@ class Source:
     # unpaired and make the comparison meaningless.
     group_key: str | None = None
     balanced: bool = False   # even allocation per stratum, not proportional
+    leaf: str | None = None  # taxonomy leaf this source serves, copied into meta.sources
 
     # How a stratum's allotment is filled, once `_allocate` has decided how many
     # rows it gets.
@@ -430,7 +431,11 @@ class Source:
             return None
         if callable(spec):
             return spec(row)
-        return row.get(spec, spec)
+        if spec in row:
+            return row[spec]
+        if isinstance(spec, str) and spec.isidentifier():
+            raise KeyError(f"{self.name}: no column {spec!r}")
+        return spec
 
 
 # ----- text normalisation (tiers 1-2) -----

@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from datasets.prepare.cluster.manifest import MANIFEST_PATH, NAME_PATTERN, STATUSES, load_manifest  # noqa: E402
 
 RAW_DIR = MANIFEST_PATH.parent
+BOOKKEEPING = {"fetch.json", ".gitignore"}
 
 
 def select(entries: list[dict], only: list[str], statuses: list[str]) -> list[dict]:
@@ -54,7 +55,8 @@ def fetch(entry: dict, dest: Path):
     if record.exists():
         data = json.loads(record.read_text())
         pinned = not requested or requested in (data["revision"], data.get("requested"))
-        if pinned and data.get("files") == entry["files"]:
+        have_data = any(p.name not in BOOKKEEPING for p in dest.iterdir())
+        if pinned and data.get("files") == entry["files"] and have_data:
             print(f"{name}: up to date")
             return
         shutil.rmtree(dest)

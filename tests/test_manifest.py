@@ -1,6 +1,8 @@
 '''datasets/raw/manifest.toml stays consistent with annotations.csv and the datasets tree.'''
 import csv
+import json
 import re
+import subprocess
 import sys
 import unittest
 
@@ -71,10 +73,19 @@ class ManifestTest(unittest.TestCase):
                     self.assertTrue(row["id"])
                     self.assertTrue(row["note"].startswith("Excluded 2026-10-07:"))
 
-    def test_row_count(self):
-        self.assertEqual(len(self.rows), 91)
-        self.assertEqual(len(self.added), 17)
-        self.assertEqual(sum(row["status"] == "excluded" for row in self.rows), 10)
+    def test_fetched_revisions_match(self):
+        # Committed records only, so an in-progress fetch cannot change the result.
+        tracked = subprocess.run(
+            ["git", "ls-files", "datasets/raw/*/fetch.json"],
+            cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+        ).stdout.split()
+        revisions = {row["name"]: row["revision"] for row in self.rows}
+        for path in tracked:
+            name = Path(path).parent.name
+            with self.subTest(name=name):
+                if revisions[name]:  # empty means unpinned
+                    recorded = json.loads((REPO_ROOT / path).read_text(encoding="utf-8"))
+                    self.assertEqual(recorded["revision"], revisions[name])
 
     def test_sources_read_registered_rows(self):
         from datasets.prepare.cluster.sources import SOURCES

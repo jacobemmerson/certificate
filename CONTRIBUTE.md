@@ -20,6 +20,11 @@ entry in `datasets/prepare/cluster/sources/<risk>.py`, plus data under
 judge prompt takes about twenty minutes. One whose evaluation you have to infer
 takes a day — most of it spent on step 5, which is the step that matters.
 
+**The per-source edits** are exactly four: the `Source(...)`, the manifest row
+flipped to `registered`, one row in `datasets/BENCHMARKS.md`, and a test of any
+`transform`. Sample counts are never written by hand; they come from the build
+(`datasets/public/<risk>.meta.json`).
+
 ---
 
 ## 1. Put the data under `datasets/raw/<name>/`
@@ -142,8 +147,9 @@ lives in the data, never in a flag:
   callable — see `favorability_scale_map`, where approving of an autocrat and
   approving of a democrat score oppositely with no scorer branch.
 
-**Add a polarity exemplar** to `POLARITY_EXEMPLARS` in `tests/test_clusters.py`:
-a known-safe and a known-unsafe answer in your benchmark's own vocabulary. The
+**Add a polarity exemplar** to `POLARITY_EXEMPLARS` in `tests/test_clusters.py`
+unless the source uses `YES_NO_MAP`, whose polarity follows from the criterion
+naming the failure and is pinned once: a known-safe and a known-unsafe answer in your benchmark's own vocabulary. The
 suite refuses to let a graded or likert source register without one, because an
 inverted map is invisible to code review — the file parses, the build succeeds,
 and the only symptom is a benchmark quietly contributing backwards to a
@@ -153,13 +159,13 @@ certification number. Deterministic sources are asserted in
 ## 5. Verify against the original — the step that matters
 
 Read the benchmark's **own** evaluation code or paper appendix, not a summary,
-and reproduce it. Recent audits of this repo found five of fifteen sources
-scoring differently from their originals, three of which were being judged by an
+and reproduce it. Recent audits of this repo found a third of the sources
+scoring differently from their originals, some of which were being judged by an
 LLM when the benchmark uses no judge at all.
 
 Specifically, find out:
 
-- **Does it use a judge?** Three sources here do not. Check the repo before
+- **Does it use a judge?** Some sources here do not. Check the repo before
   assuming.
 - **What is the actual scale?** CySecBench rates 1–5, not pass/fail; collapsing
   it lost the distinction the rating exists to make.
@@ -169,12 +175,12 @@ Specifically, find out:
 - **Is there a system prompt, or a pre-screen?** PersuSafety's pressure framing
   is the treatment, not decoration; dropping it measured something easier.
 
-Then **document it** in [datasets/BENCHMARKS.md](datasets/BENCHMARKS.md): counts,
-question type, the original's evaluation, ours, and a Divergence column that is
+Then **document it** in [datasets/BENCHMARKS.md](datasets/BENCHMARKS.md): question
+type, the original's evaluation, ours, and a Divergence column that is
 empty only if you verified it is. Add the primary source to the "Sources of
 truth" table so the next person re-checks in one step.
 `tests/test_benchmarks_doc.py` fails if a registered source is undocumented or
-if a count drifts.
+documented under the wrong question type.
 
 Divergence is allowed — some are unavoidable (logprobs unavailable through a
 router) and some are deliberate (we average judges rather than majority-voting).
@@ -253,10 +259,12 @@ the command to run; the full three-pass sequence is in
 
 ## 8. Scoring conventions
 
-- Quotas are load-bearing: the headline tail pools every item of a risk's pooled
-  sources, so sample count is weight there. `tests/test_clusters.py` fails any
-  cluster where one source holds over 40% of rows (for a one-source cluster, one
-  value of its first `stratify` key). Definitions: `pipeline/README.md § Metrics`.
+- Shares are load-bearing: the headline tail pools every item of a risk's pooled
+  sources, so sample count is weight there. Each source's share is water-filled
+  from the cluster `BUDGET`; override it with `quota` only for a reason.
+  `tests/test_clusters.py` fails any cluster where one source holds over 40% of
+  rows (half, for a two-source cluster; for a one-source
+  cluster, one value of its first `stratify` key). Definitions: `pipeline/README.md § Metrics`.
 - A source that measures something other than alignment declares
   `role="diagnostic"` on its `Source(...)`, reported per-source but excluded
   from the pooled number. `wmdp` (capability absence), `cyber_false_refusal`
@@ -279,7 +287,7 @@ the command to run; the full three-pass sequence is in
 
 | | |
 |---|---|
-| `datasets/BENCHMARKS.md` | the schema and why the registries collapsed into it; every benchmark, its counts, and how it is scored vs. its original |
+| `datasets/BENCHMARKS.md` | the schema and why the registries collapsed into it; every benchmark and how it is scored vs. its original |
 | `datasets/prepare/cluster/schema.py` | `Source`, `Row`, `validate()` — the contract |
 | `datasets/prepare/cluster/sources/` | one module per risk; this is where you add yours |
 | `pipeline/stage1_evaluation/scorers/cluster.py` | the dispatching scorer and judge prompts |

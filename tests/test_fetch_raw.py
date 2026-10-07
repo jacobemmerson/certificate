@@ -85,6 +85,7 @@ class FetchRawTest(unittest.TestCase):
     def test_up_to_date_skip(self):
         dest = self.tmp / "gh"
         dest.mkdir()
+        (dest / "data.jsonl").write_text("{}\n")
         (dest / "fetch.json").write_text(json.dumps({"revision": "v1", "files": ["data/*.jsonl", "README.md"]}))
         out = io.StringIO()
         with mock.patch.object(fetch_raw.subprocess, "run") as run, contextlib.redirect_stdout(out):
@@ -95,6 +96,7 @@ class FetchRawTest(unittest.TestCase):
         # Unpinned request: any recorded revision counts as current.
         hub = self.tmp / "hub"
         hub.mkdir()
+        (hub / "part.parquet").write_text("")
         (hub / "fetch.json").write_text(json.dumps({"revision": "abc", "files": ["*.parquet"]}))
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -109,6 +111,16 @@ class FetchRawTest(unittest.TestCase):
             fetch_raw.fetch(self.entries[0], dest)
         run.assert_not_called()
         self.assertIn("up to date", out.getvalue())
+
+    def test_fetch_json_without_data_refetches(self):
+        dest = self.tmp / "gh"
+        dest.mkdir()
+        (dest / "fetch.json").write_text(json.dumps({"revision": "v1", "files": ["data/*.jsonl", "README.md"]}))
+        (dest / ".gitignore").write_text("*\n")
+        with mock.patch.object(fetch_raw, "download", return_value="v1") as download, \
+                contextlib.redirect_stdout(io.StringIO()):
+            fetch_raw.fetch(self.entries[0], dest)
+        download.assert_called_once()
 
     def test_files_change_refetches_and_failure_cleans_up(self):
         dest = self.tmp / "gh"
