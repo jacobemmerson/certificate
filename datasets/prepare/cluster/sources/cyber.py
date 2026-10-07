@@ -335,7 +335,7 @@ SOURCES = [
         query="mutated_prompt",
         criterion=FALSE_REFUSAL_CRITERION,
         metadata=["attack_type"],
-        # Free-text benign requests, and only 40 of 750 are kept: Jaccard-era
+        # Free-text benign requests, and only a small share of the 750 is kept: Jaccard-era
         # redundancy 0.455 -> 0.253 (not re-measured on embeddings), so
         # spreading covers materially more of the benign-request space than a uniform draw of the same size.
         select="diverse",

@@ -159,7 +159,11 @@ def harmbench_rows(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-BUDGET = 186   # cbrn: today's cluster size; raise toward 2x once the screen cache is in
+# cbrn: today's cluster size; raise toward 2x once the screen cache is in.
+# Caveat: at 2x (372) water-filling gives sosbench and wmdp ~42% each, over the
+# 40% cap TestBuiltClusters checks, so raising it needs a `quota` on those two
+# (or a new source).
+BUDGET = 186
 
 SOURCES = [
     Source(
@@ -192,8 +196,8 @@ SOURCES = [
         # Free-text items, so spread is a real axis: Jaccard-era
         # redundancy 0.292 -> 0.095 at this share (not re-measured on embeddings).
         select="diverse",
-        # 70 rather than 90: with harmbench and wmdp alongside it, 90 would put
-        # sosbench over the 40% share the cluster invariant allows.
+        # Its water-filled share stays under the 40% of the cluster the
+        # cluster invariant allows, with harmbench and wmdp alongside it.
         stratify=["subject"],
         # Every prompt is one instruction shape wrapped around a regulated term,
         # so two rows naming different hazards are different items no matter how

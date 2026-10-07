@@ -5,10 +5,10 @@ Build the risk-cluster datasets.
     uv run python3 -m datasets.prepare.cluster.prepare --dry-run
 
 Writes datasets/public/<risk>.csv plus a <risk>.meta.json sibling (provenance:
-seed, quotas, per-tier drop counts, embedding model and threshold, screen model
-and refusals, source revisions) and <risk>.dropped.jsonl (every pair tiers 1b
-and 2 removed and every candidate the screen dropped, each tagged with its
-`tier`, so thresholds are reviewable rather than trusted).
+seed, budget and shares, per-tier drop counts, embedding model and threshold, screen model
+and refusals, source revisions) and <risk>.dropped.jsonl (every pair tiers exact,
+near, exact_cross_source and near_cross_source removed and every candidate the
+screen dropped, each tagged with its `tier`, so thresholds are reviewable rather than trusted).
 
 Reads two gitignored caches under datasets/cache/. On a miss it writes what is
 missing, prints the command that fills it and exits 2: embeddings first, then
@@ -48,7 +48,7 @@ EMBED_COMMAND = (
 )
 # Tier 3b: candidates per allotted row sent to the answerability screen. 3.5
 # fills an allotment while Hermes refuses up to ~70% of its candidates; past
-# that the build stops and names the gap (raise this, never shrink the quota).
+# that the build stops and names the gap (raise this, never shrink the share).
 SCREEN_FACTOR = 3.5
 SCREEN_COMMANDS = (
     "sbatch --export=ALL,SCREEN_ONLY=1 scripts/generate_hermes_slurm.sh",
@@ -688,7 +688,7 @@ def _take(
         raise ValueError(
             f"{source.name}: the screen kept {len(kept)} of {len(pool)} candidates for an "
             f"allotment of {take}; short by {take - len(kept)}. Raise SCREEN_FACTOR "
-            f"({SCREEN_FACTOR}) rather than shrink the quota."
+            f"({SCREEN_FACTOR}) rather than shrink the share."
         )
     return _select(rows, kept, take, source, seed, caches)
 
@@ -809,12 +809,17 @@ def _allocate(buckets: dict, quota: int, *, balanced: bool) -> dict:
 
 # ----- driver -----
 
+def _group_count(source: Source, rows: list[Row]) -> int:
+    if not source.group_key:
+        return len(rows)
+    return len({str(row.metadata.get(source.group_key, i)) for i, row in enumerate(rows)})
+
+
 def _group_size(source: Source, rows: list[Row]) -> int:
     '''Rows per selection unit: 1, or the mean group size for a group_key source.'''
     if not source.group_key or not rows:
         return 1
-    groups = {str(row.metadata.get(source.group_key, i)) for i, row in enumerate(rows)}
-    return max(1, round(len(rows) / len(groups)))
+    return max(1, round(len(rows) / _group_count(source, rows)))
 
 
 def allocate_budget(pools: list[tuple[Source, list[Row]]], budget: int) -> dict[str, int]:
@@ -830,7 +835,7 @@ def allocate_budget(pools: list[tuple[Source, list[Row]]], budget: int) -> dict[
     free: list[tuple[int, str, Source, int]] = []
     for source, rows in pools:
         size = _group_size(source, rows)
-        units = math.ceil(len(rows) / size)
+        units = _group_count(source, rows)
         if source.quota is not None:
             takes[source.name] = min(source.quota, units)
             remaining -= takes[source.name] * size
@@ -1014,15 +1019,14 @@ def print_report(risk: str, report: dict, rows: list[Row]):
         candidates = stats.get("screen_candidates", 0)
         if candidates and 2 * refused > candidates:
             print(f"  [WARNING] {name}: the screen refused {refused} of {candidates} "
-                  f"candidates; raise SCREEN_FACTOR rather than shrink the quota")
-    print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {'':6s} {'':6s} {'':6s} {'':6s} {total:6d}")
+                  f"candidates; raise SCREEN_FACTOR rather than shrink the share")
+    print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {'':6s} {'':6s} {'':6s} {total:6d}")
     budget = budget_for(risk)
     if len(rows) < budget:
         print(f"  [WARNING] {risk}: {len(rows)} rows against a budget of {budget}; "
-              f"every pool is exhausted")
+              f"see per-source short")
     elif len(rows) > budget:
-        print(f"  [WARNING] {risk}: {len(rows)} rows exceed the budget of {budget}; "
-              f"fixed quotas add up to more than BUDGET")
+        print(f"  [WARNING] {risk}: {len(rows)} rows exceed the budget of {budget}")
 
 
 def main():

@@ -851,8 +851,8 @@ SOURCES = [
         # Left on the uniform draw. Diverse selection was measured at exactly
         # zero gain here: `dedup_on` below already deduplicates the pool on
         # the event payload, and `distinct_on` caps each event at
-        # one row per push level, so any draw of this size lands ~53 distinct
-        # events out of 60 rows and there is nothing left to spread.
+        # one row per push level, so a draw lands ~53 distinct events
+        # per 60 rows, and there is nothing left to spread.
         stratify=["Push Level", "Country/Region"],
         # Compare the historical event, not the ~100-word instruction wrapped
         # around it: the wrappers are shared templates, so rendered prompts for
@@ -882,9 +882,10 @@ SOURCES = [
         categories=HUMAN_RIGHTS_CATEGORIES, scale_map=HUMAN_RIGHTS_SCALE,
         metadata=["limited_article", "limited_article_name", "severity", "actor",
                   "scenario_id", "persona"],
-        # The share counts scenarios, not rows: 20 scenarios x 3 persona arms.
-        # 20 rather than 10 because human_rights_persona_gap is a difference of
-        # two arm means, and a difference of two 10-sample means is mostly noise.
+        # The share counts scenarios, each carrying 3 persona arms. It must be
+        # checked to stay at 20 scenarios or more (water-fill currently gives
+        # 19), not assumed: human_rights_persona_gap is a difference of two arm
+        # means, and a difference of two 10-sample means is mostly noise.
         stratify=["severity"], group_key="scenario_id",
         # The arms share a user message and differ only in the system prompt,
         # so without this dedup collapses each scenario to a single arm.
@@ -912,9 +913,10 @@ SOURCES = [
         categories=HUMAN_RIGHTS_CATEGORIES, scale_map=HUMAN_RIGHTS_SCALE,
         metadata=["limited_article", "limited_article_name", "severity", "actor",
                   "scenario_id", "persona"],
-        # The share counts scenarios, not rows: 20 scenarios x 3 persona arms.
-        # 20 rather than 10 because human_rights_persona_gap is a difference of
-        # two arm means, and a difference of two 10-sample means is mostly noise.
+        # The share counts scenarios, each carrying 3 persona arms. It must be
+        # checked to stay at 20 scenarios or more (water-fill currently gives
+        # 19), not assumed: human_rights_persona_gap is a difference of two arm
+        # means, and a difference of two 10-sample means is mostly noise.
         stratify=["severity"], group_key="scenario_id",
         # The arms share a user message and differ only in the system prompt,
         # so without this dedup collapses each scenario to a single arm.

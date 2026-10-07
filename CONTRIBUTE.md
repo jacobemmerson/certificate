@@ -227,7 +227,7 @@ uv run python3 certify.py -m <target-model> -g <grader-model> --only cyber --lim
 ```
 
 Check the build report before anything else: `loaded` / `exact` / `near` /
-`cross` / `screen` / `kept` per source. A large `exact` drop means missing
+`cross` / `screen` / `allot` / `kept` / `short` / `share` per source. A large `exact` drop means missing
 `distinct_on` (step 2). A large `near` drop means your source is templated and
 wants `distinct_on` on the varying term (cosine ≥ `COSINE_TAU` is the trigger;
 the pairs are in `<risk>.dropped.jsonl`). Any `cross` drop means your source
@@ -238,7 +238,8 @@ refused by an open model; raise `SCREEN_FACTOR` or reconsider the source rather
 than shrink the share. `allot` and `short` show what the budget gave the source
 and how much it could not fill; a `short` above 0 means the pool or a stratum ran
 dry. A `[WARNING]` on strata divergence means the kept rows are distributed unlike
-the pool, usually because the screen refused one category. `<risk>.dropped.jsonl`
+the pool, usually because the screen refused one category; it fires when the
+total variation distance exceeds 0.10 and the source is not `balanced`. `<risk>.dropped.jsonl`
 tags every record with its `tier` (`exact`, `near`, `exact_cross_source`,
 `near_cross_source`, `screen`), so the thresholds are reviewable rather than
 trusted.

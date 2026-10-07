@@ -490,7 +490,7 @@ each allotment.
 | 1 | `exact_dedup`: normalise (lowercase, `[a-z0-9]+` tokens) and drop repeats | free; pairs in `dropped.jsonl` (`tier: exact`) |
 | 2 | **cosine near-dedup** per source on cached embeddings, `COSINE_TAU` = 0.92 (overridable by `Source.tau`); `distinct_on` and differing mcq `target` win at any similarity | one `V @ V.T` in row blocks |
 | 1b | cross-source exact dedup on the prompt *as delivered* (user + system text), after each source's whole pool so a source never collides with itself; runs before the budget is allocated so the copy's source backfills | free; `cross_source_dropped` is the number to watch |
-| 2b | **cross-source near-dedup** on the delivered query at `COSINE_TAU`, later source loses; sources with `dedup=False` are skipped | one more `V @ V.T` per cluster |
+| 2b | **cross-source near-dedup** on the user query at `COSINE_TAU`, later source loses; sources with `dedup=False` are skipped | one more `V @ V.T` per cluster |
 | 3 | water-filled share, then `_allocate` per stratum, then per stratum pre-select `SCREEN_FACTOR` (3.5) × allotment by the source's `select`; `diverse` starts from the item farthest from anything the cluster has already kept | `O(take × stratum)` dot products |
 | 3b | **Hermes answerability screen**: drop candidates Hermes-4-70B refuses, then fill the allotment from the survivors by the same `select` | ~2.5k GPU calls for all clusters, cached |
 | 4 | emit `public/<risk>.csv`, `<risk>.meta.json`, `<risk>.dropped.jsonl` | |

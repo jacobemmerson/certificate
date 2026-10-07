@@ -1557,6 +1557,10 @@ class TestOrdinalFallbacks(unittest.TestCase):
         self.assertTrue(rows)
         return rows
 
+QUOTA_OVERRIDES: dict[str, str] = {}
+"""A `quota` is an override of the water-filled share; declare it here with its reason."""
+
+
 class TestRegistry(unittest.TestCase):
 
     def test_source_names_are_unique(self):
@@ -1602,9 +1606,24 @@ class TestRegistry(unittest.TestCase):
                 self.assertGreater(budget_for(risk), 0)
         self.assertEqual(set(BUDGETS), set(RISKS))
 
-    def test_no_source_hard_codes_a_quota(self):
-        '''Shares come from BUDGET; `quota` is an override that needs a comment where used.'''
-        self.assertEqual([s.name for s in SOURCES if s.quota is not None], [])
+    def test_no_source_hard_codes_an_undeclared_quota(self):
+        self.assertEqual({s.name for s in SOURCES if s.quota is not None}, set(QUOTA_OVERRIDES))
+
+
+class TestPrintReport(unittest.TestCase):
+    def test_total_prints_under_the_kept_column(self):
+        import contextlib
+        import io
+        stats = {"loaded": 9, "exact_dropped": 1, "near_dropped": 0,
+                 "cross_source_dropped": 0, "kept": 7}
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            prepare.print_report(RISKS[0], {"src": stats}, [mock.Mock()] * 7)
+        lines = out.getvalue().splitlines()
+        header = next(l for l in lines if "kept" in l and "source" in l)
+        total = next(l for l in lines if "TOTAL" in l)
+        self.assertEqual(total.split()[1], "7")
+        self.assertEqual(total.index("7") + 1, header.index("kept") + len("kept"))
 
 
 class TestBuiltClusters(unittest.TestCase):

@@ -101,7 +101,7 @@ Registry order determines who anchors whom; it is already the tie-break everywhe
 - `divergence`: total variation distance between the pool and kept stratum distributions
   (`0.5 × Σ |p_pool − p_kept|`), rounded to 3 decimals; `null` when unstratified.
 
-**Per cluster** (`meta` top level): `budget`, `allotted`, `shortfall`.
+**Per cluster** (`meta` top level): `budget`, `shortfall`. (`allotted` is not summed at cluster level: group_key sources allot groups, the rest rows.)
 
 **Warnings** in `print_report`: any source with `shortfall > 0`; any non-`balanced` source
 with `divergence > 0.10` (balanced sources skew by design). A report row gains `allot` and
