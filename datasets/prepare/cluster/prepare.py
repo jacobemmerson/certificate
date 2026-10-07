@@ -348,15 +348,22 @@ def _identity(row: Row, distinct_on: Sequence[str]) -> tuple:
 
 def exact_dedup(
     rows: list[Row], distinct_on: Sequence[str] = ()
-) -> tuple[list[Row], int]:
-    kept, seen = [], set()
+) -> tuple[list[Row], list[dict]]:
+    '''Tier 1: drop repeats of the normalised query inside one source.'''
+    kept, seen, dropped = [], {}, []
     for row in rows:
         key = (normalised(row.query), _identity(row, distinct_on))
-        if key in seen:
+        incumbent = seen.get(key)
+        if incumbent is not None:
+            dropped.append({
+                "tier": "exact", "similarity": 1.0,
+                "kept": incumbent.sample_id, "kept_text": incumbent.query[:300],
+                "dropped": row.sample_id, "dropped_text": row.query[:300],
+            })
             continue
-        seen.add(key)
+        seen[key] = row
         kept.append(row)
-    return kept, len(rows) - len(kept)
+    return kept, dropped
 
 
 
@@ -738,9 +745,10 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
         rows = load_source(source)
         loaded = len(rows)
         rows, exact_dropped = exact_dedup(rows, source.distinct_on)
+        all_dropped.extend(exact_dropped)
         report[source.name] = {
             "loaded": loaded,
-            "exact_dropped": exact_dropped,
+            "exact_dropped": len(exact_dropped),
             "near_dropped": 0,
             "cross_source_dropped": 0,
             "quota": source.quota,

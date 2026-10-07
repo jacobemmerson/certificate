@@ -435,10 +435,10 @@ class TestGroupedSelection(unittest.TestCase):
             ])
         ]
         collapsed, dropped = prepare.exact_dedup(rows)
-        self.assertEqual((len(collapsed), dropped), (1, 2), "undeclared: arms collapse")
+        self.assertEqual((len(collapsed), len(dropped)), (1, 2), "undeclared: arms collapse")
 
         kept, dropped = prepare.exact_dedup(rows, distinct_on=["persona"])
-        self.assertEqual((len(kept), dropped), (3, 0), "declared: arms survive")
+        self.assertEqual((len(kept), len(dropped)), (3, 0), "declared: arms survive")
 
     def test_genuine_duplicates_still_go_within_an_arm(self):
         # distinct_on must not disable dedup — two identical rows sharing the
@@ -449,7 +449,7 @@ class TestGroupedSelection(unittest.TestCase):
             for i in range(3)
         ]
         kept, dropped = prepare.exact_dedup(rows, distinct_on=["persona"])
-        self.assertEqual((len(kept), dropped), (1, 2))
+        self.assertEqual((len(kept), len(dropped)), (1, 2))
 
 
 class TestAdvancedAIRisk(unittest.TestCase):
@@ -766,8 +766,18 @@ class TestTiers(unittest.TestCase):
         kept, dropped = prepare.exact_dedup(
             self.rows("Sino-Vietnamese War (1979)", "sino vietnamese war 1979", "Korean War")
         )
-        self.assertEqual(dropped, 1)
+        self.assertEqual(len(dropped), 1)
         self.assertEqual(len(kept), 2)
+
+    def test_exact_drops_are_recorded_like_every_other_tier(self):
+        rows = self.rows("Korean War", "korean war!", "Vietnam War")
+        kept, dropped = prepare.exact_dedup(rows)
+        self.assertEqual(len(kept), 2)
+        self.assertEqual(dropped, [{
+            "tier": "exact", "similarity": 1.0,
+            "kept": rows[0].sample_id, "kept_text": rows[0].query,
+            "dropped": rows[1].sample_id, "dropped_text": rows[1].query,
+        }])
 
     def test_near_dedup_drops_above_tau_and_keeps_below(self):
         rows = self.rows("first", "second", "third")
