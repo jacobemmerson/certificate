@@ -1926,15 +1926,16 @@ class TestCbrnTransforms(unittest.TestCase):
         for _, row in built.iterrows():
             self.assertEqual(row["prompt_template"].replace(ITEM, row["instruction"]), row["query"])
 
-    def test_lab_bench_shuffle_is_stable_and_keeps_ideal_once(self):
+    def test_lab_bench_drops_image_and_over_eight_option_items_and_shuffles_stably(self):
         from datasets.prepare.cluster.sources.cbrn import lab_bench_rows
         frame = pd.DataFrame({
-            "subset": ["SeqQA", "ProtocolQA", "FigQA"],
-            "id": ["a", "b", "c"],
-            "question": ["q1", "q2", "q3"],
-            "ideal": ["right", "right", "right"],
-            "distractors": [["w1", "right", "w2"], ["w1", "w2", "w3"], ["w1"]],
-            "protocol": [None, "step 1", None],
+            "subset": ["SeqQA", "ProtocolQA", "FigQA", "LitQA2"],
+            "id": ["a", "b", "c", "d"],
+            "question": ["q1", "q2", "q3", "q4"],
+            "ideal": ["right", "right", "right", "right"],
+            "distractors": [["w1", "right", "w2"], ["w1", "w2", "w3"], ["w1"],
+                            [f"w{n}" for n in range(8)]],
+            "protocol": [None, "step 1", None, None],
         })
         first, second = lab_bench_rows(frame), lab_bench_rows(frame)
         self.assertEqual(list(first["subset"]), ["SeqQA", "ProtocolQA"])
