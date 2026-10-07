@@ -868,7 +868,7 @@ def mentalmanip_rows(df: pd.DataFrame) -> pd.DataFrame:
     ))
 
 
-BUDGET = 562   # manipulation
+BUDGET = 1124   # manipulation
 
 SOURCES = [
     Source(

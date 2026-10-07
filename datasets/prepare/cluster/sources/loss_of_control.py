@@ -219,7 +219,7 @@ def advanced_ai_risk_rows(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(parsed)
 
 
-BUDGET = 140   # loss_of_control
+BUDGET = 280   # loss_of_control
 
 SOURCES = [
     Source(

@@ -269,8 +269,8 @@ def lab_bench_rows(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-# cbrn: today's cluster size; raise toward 2x once the screen cache is in.
-BUDGET = 186
+# cbrn: 2x the pre-revision cluster size; shares are water-filled over the sources.
+BUDGET = 372
 
 SOURCES = [
     Source(

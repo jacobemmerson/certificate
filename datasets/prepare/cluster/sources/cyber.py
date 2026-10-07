@@ -288,7 +288,7 @@ def redcode_rows(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-BUDGET = 300   # cyber
+BUDGET = 600   # cyber
 
 SOURCES = [
     Source(
