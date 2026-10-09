@@ -26,6 +26,7 @@ dependencies = [
     "geopandas",
     "ipython",
     "dirtyjson",
+    "pyyaml",
     "pyarrow>=25.0.0",
 ]
 
