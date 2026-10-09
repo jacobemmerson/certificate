@@ -23,7 +23,7 @@ import hashlib
 import json
 import math
 import subprocess
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
@@ -581,7 +581,7 @@ def relevance_scores(
     return similarity.max(axis=1), hit
 
 
-def leaf_threshold(matrix: np.ndarray, override: float | None) -> float:
+def leaf_threshold(matrix: np.ndarray, override: float | None) -> float | None:
     '''
     The cosine a row must reach to count as on-topic for this leaf: the 10th
     percentile of each exemplar's leave-one-out max similarity to the other
@@ -594,13 +594,13 @@ def leaf_threshold(matrix: np.ndarray, override: float | None) -> float:
     territory (near-dedup drops at COSINE_TAU = 0.92): a row scoring 0.9
     against an exemplar is a rewording of it, so 0.9 would keep almost nothing
     and the floor in relevance_filter would decide every time.
-    Fewer than two exemplars calibrate nothing, so it returns 0.0: only rows
-    pointing away from every anchor drop, and the floor still applies.
+    Fewer than two exemplars calibrate nothing, so it returns None (the leaf
+    is uncalibrated, Leaf.calibrated) and relevance_filter drops nothing.
     '''
     if override is not None:
         return override
     if len(matrix) < 3:
-        return 0.0
+        return None
     similarity = np.round(matrix @ matrix.T, 9)
     np.fill_diagonal(similarity, -np.inf)
     return round(float(np.percentile(similarity[1:].max(axis=1), 10)), 9)
@@ -612,11 +612,14 @@ def relevance_filter(
 ) -> tuple[list[tuple[Source, list[Row]]], list[dict], dict[str, dict]]:
     '''
     Drop rows scoring below their leaf's threshold, but never below a floor of
-    max(SCREEN_FACTOR x provisional share, 1% of the pool) rows, so the screen
-    still has its candidates when the threshold bites hard. Kept rows carry
-    their score and best anchor in metadata. A group_key source is kept or
-    dropped by whole groups, scored by the group's best arm. Sources with no
-    leaf pass through unscored.
+    max(2 x SCREEN_FACTOR x provisional share, 1% of the pool) rows, so the
+    screen still has its candidates (with headroom for its refusals) when the
+    threshold bites hard. Kept rows carry their score and best anchor in
+    metadata, rounded to 6 d.p. so the CSV shows no float noise; the threshold
+    compares the 9 d.p. scores. A group_key source is kept or dropped by whole
+    groups, scored by the group's best arm. Sources with no leaf pass through
+    unscored; an uncalibrated leaf (under two exemplars, no override) scores
+    and reports its rows but drops nothing.
     '''
     shares = allocate_budget(pools, budget)
     kept_pools, dropped, report = [], [], {}
@@ -632,6 +635,19 @@ def relevance_filter(
         scores, hit = relevance_scores(rows, matrix, embeddings)
 
         unit_scores = scores
+        strata_before = None
+        if source.stratify:
+            # Counted over the units _row_sample stratifies (a group's leader), so
+            # the counts line up with the post-filter `strata` pools.
+            units = rows
+            if source.group_key:
+                leaders: dict[str, Row] = {}
+                for group, row in zip(_group_ids(source, rows), rows):
+                    leaders.setdefault(group, row)
+                units = list(leaders.values())
+            strata_before = dict(sorted(Counter(
+                "|".join(str(row.metadata.get(column, "")) for column in source.stratify)
+                for row in units).items()))
         if source.group_key:
             best: dict[str, float] = {}
             group_of = _group_ids(source, rows)
@@ -639,10 +655,13 @@ def relevance_filter(
                 best[group] = max(best.get(group, -np.inf), float(score))
             unit_scores = np.array([best[group] for group in group_of])
 
-        share_rows = shares[source.name] * _group_size(source, rows)
-        n_floor = max(math.ceil(SCREEN_FACTOR * share_rows), math.ceil(0.01 * len(rows)), 1)
-        ranked = np.sort(unit_scores)[::-1]
-        threshold_eff = min(theta, float(ranked[min(n_floor, len(rows)) - 1]))
+        if theta is None:
+            threshold_eff = -np.inf
+        else:
+            share_rows = shares[source.name] * _group_size(source, rows)
+            n_floor = max(math.ceil(2 * SCREEN_FACTOR * share_rows), math.ceil(0.01 * len(rows)), 1)
+            ranked = np.sort(unit_scores)[::-1]
+            threshold_eff = min(theta, float(ranked[min(n_floor, len(rows)) - 1]))
 
         kept, hits = [], defaultdict(int)
         for row, unit_score, score, anchor in zip(rows, unit_scores, scores, hit):
@@ -651,10 +670,10 @@ def relevance_filter(
                 # A fresh dict: readers may share one metadata dict across rows.
                 # For a group, "relevance" is the group's best arm on every arm:
                 # the window ranks a group by its leader (first arm) alone.
-                row.metadata = {**row.metadata, "relevance": float(unit_score),
+                row.metadata = {**row.metadata, "relevance": round(float(unit_score), 6),
                                 "relevance_anchor": name}
                 if source.group_key:
-                    row.metadata["relevance_own"] = float(score)
+                    row.metadata["relevance_own"] = round(float(score), 6)
                 kept.append(row)
                 if name:
                     hits[name] += 1
@@ -669,10 +688,13 @@ def relevance_filter(
         report[source.name] = {
             "leaf": source.leaf,
             "leaf_exemplars": len(leaf.exemplars),
-            "relevance_status": "scored",
-            "relevance_threshold": theta,
-            "relevance_threshold_eff": threshold_eff,
-            "relevance_floor_used": threshold_eff < theta,
+            "relevance_status": "uncalibrated" if theta is None else "scored",
+            **({} if theta is None else {
+                "relevance_threshold": theta,
+                "relevance_threshold_eff": threshold_eff,
+                "relevance_floor_used": threshold_eff < theta and len(kept) < len(rows),
+            }),
+            **({} if strata_before is None else {"relevance_strata_before": strata_before}),
             "relevance_pool": len(rows),
             "relevance_kept": len(kept),
             "score_quantiles": dict(zip(("min", "p10", "p50", "p90", "max"),
@@ -813,8 +835,10 @@ def _payload_fn(dedup_on: str | None):
     return lambda row: row.query
 
 
-def relevance_for(source: Source) -> float:
-    r = source.relevance if source.relevance is not None else (0.5 if source.role == "diagnostic" else 1.0)
+def relevance_for(source: Source) -> float | None:
+    r = source.relevance
+    if r is None:
+        return None
     if not 0 < r <= 1:
         raise ValueError(f"{source.name}: relevance must be in (0, 1], got {r}")
     return r
@@ -825,16 +849,22 @@ def _window(
     caches: Caches | None,
 ) -> list[int]:
     '''
-    The most relevant ceil(n_needed / r) candidates, so r is the fraction of the
-    window the selection fills: r = 1 only reorders, r < 1 widens the pool
-    the selection (and screen) may choose from. A source without scores, or any
-    row without one, is left as it is. Grouped sources window over their
-    leaders, so a group ranks by its first row's score.
+    The n_needed + round(r x (stratum - n_needed)) most relevant candidates, in
+    their input order: r = 1 is the whole stratum (no change), r -> 0 the top
+    n_needed by score. Untouched when the source sets no relevance, has no
+    leaf, any row lacks a score, or its leaf is uncalibrated (nothing to rank
+    by). Grouped sources window over their leaders, which carry the group's
+    best score.
     '''
-    if not indices or any("relevance" not in rows[i].metadata for i in indices):
+    r = relevance_for(source)
+    if (r is None or source.leaf is None or not indices
+            or any("relevance" not in rows[i].metadata for i in indices)
+            or not load_leaves()[source.leaf].calibrated):
         return indices
+    n_cand = min(max(n_needed + round(r * (len(indices) - n_needed)), n_needed), len(indices))
     ranked = sorted(indices, key=lambda i: (-rows[i].metadata["relevance"], key_bytes(rows[i], seed)))
-    window = ranked[: min(len(ranked), math.ceil(round(n_needed / relevance_for(source), 9)))]
+    chosen = set(ranked[:n_cand])
+    window = [i for i in indices if i in chosen]
     if caches is not None:
         caches.relevance_window += len(window)
     return window
@@ -845,8 +875,8 @@ def _take(
     caches: Caches | None = None,
 ) -> list[int]:
     '''
-    Fill one stratum's allotment. With the screen on: pre-select SCREEN_FACTOR x
-    the allotment by the source's own selection, drop what Hermes refused, and
+    Fill one stratum's allotment from its relevance window (_window). With the
+    screen on: pre-select SCREEN_FACTOR x the allotment by the source's own selection, drop what Hermes refused, and
     fill the allotment from the survivors by the same selection. A shortfall is
     an error while a wider pre-selection could still fill it, and accepted once
     the pre-selection already covers the whole stratum.
@@ -1117,8 +1147,8 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
             "strata": sample["strata"],
             "divergence": sample["divergence"],
         })
-        if report[source.name]["relevance_status"] == "scored":
-            report[source.name]["relevance"] = relevance_for(source)
+        if relevance_for(source) is not None:
+            report[source.name]["relevance"] = source.relevance
         if caches.relevance_window > window:
             report[source.name]["relevance_window"] = caches.relevance_window - window
         if source.screened():
@@ -1162,7 +1192,7 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
     screened = [source.name for source in for_risk(risk) if source.screened()]
     leaves = load_leaves()
     used_leaves = {stats["leaf"]: stats for stats in report.values()
-                   if stats.get("relevance_status") == "scored"}
+                   if stats.get("relevance_status") in ("scored", "uncalibrated")}
     meta = {
         "risk": risk,
         "rows": len(rows),
@@ -1183,8 +1213,9 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
         "leaves": {
             leaf_id: {
                 "cop_ref": leaves[leaf_id].cop_ref,
-                "threshold": stats["relevance_threshold"],
+                "threshold": stats.get("relevance_threshold"),
                 "anchors": len(anchor_texts(leaves[leaf_id])),
+                "anchor_keys": sorted(embed_key(text) for text in anchor_texts(leaves[leaf_id])),
                 "exemplars": stats["leaf_exemplars"],
             } for leaf_id, stats in sorted(used_leaves.items())
         },
@@ -1210,8 +1241,10 @@ def print_report(risk: str, report: dict, rows: list[Row]):
     warned_leaves = set()
     for name, stats in report.items():
         refused = stats.get("screen_refused", 0)
-        scored = stats.get("relevance_status") == "scored"
-        relevant = f"{stats['relevance_kept']}/{stats['relevance_pool']}" if scored else "-"
+        status = stats.get("relevance_status")
+        scored = status == "scored"
+        relevant = (f"{stats['relevance_kept']}/{stats['relevance_pool']}"
+                    if status in ("scored", "uncalibrated") else "-")
         theta = f"{stats['relevance_threshold_eff']:.3f}" if scored else "-"
         print(
             f"  {name:22s} {stats['loaded']:7d} {stats['exact_dropped']:6d} "
@@ -1219,13 +1252,13 @@ def print_report(risk: str, report: dict, rows: list[Row]):
             f"{relevant:>10s} {theta:>6s} {refused:6d} {stats.get('allotted', 0):6d} {stats['kept']:6d} "
             f"{stats.get('shortfall', 0):6d} {100 * stats['kept'] / total:5.1f}%"
         )
-        if scored:
-            if stats["relevance_floor_used"]:
-                print(f"  [WARNING] {name}: relevance floor used "
-                      f"(theta {stats['relevance_threshold']:.3f} did not bind)")
-            if stats["leaf_exemplars"] < 2 and stats["leaf"] not in warned_leaves:
-                warned_leaves.add(stats["leaf"])
-                print(f"  [WARNING] {stats['leaf']}: fewer than 2 exemplars; threshold 0.0")
+        if scored and stats["relevance_floor_used"]:
+            print(f"  [WARNING] {name}: relevance floor used "
+                  f"(theta {stats['relevance_threshold']:.3f} did not bind)")
+        if status == "uncalibrated" and stats["leaf"] not in warned_leaves:
+            warned_leaves.add(stats["leaf"])
+            print(f"  [WARNING] {stats['leaf']}: uncalibrated: fewer than 2 exemplars; no filtering")
+        if status in ("scored", "uncalibrated"):
             hits = stats["anchor_hits"]
             # One anchor always takes every hit, so a lone legal text cannot warn.
             if hits and stats["leaf_exemplars"] > 0:

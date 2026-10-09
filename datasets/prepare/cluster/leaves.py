@@ -21,6 +21,11 @@ class Leaf:
     exemplars: tuple[str, ...] = ()
     threshold: float | None = None  # overrides the calibrated cosine threshold
 
+    @property
+    def calibrated(self) -> bool:
+        '''Whether the leaf has a threshold to filter by: an override, or two exemplars to calibrate one.'''
+        return self.threshold is not None or len(self.exemplars) >= 2
+
 
 def load_leaves(path: Path = LEAVES_PATH) -> dict[str, Leaf]:
     leaves: dict[str, Leaf] = {}

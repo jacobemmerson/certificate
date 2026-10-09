@@ -1542,7 +1542,9 @@ class TestMeta(unittest.TestCase):
         })
         self.assertEqual((meta["budget"], meta["shortfall"]), (budget_for("loss_of_control"), budget_for("loss_of_control") - 1))
         self.assertEqual(meta["leaves"], {"x": {
-            "cop_ref": "App 1.3(1)", "threshold": 0.5, "anchors": 4, "exemplars": 3}})
+            "cop_ref": "App 1.3(1)", "threshold": 0.5, "anchors": 4,
+            "anchor_keys": sorted(prepare.embed_key(t) for t in ("law", "a", "b", "c")),
+            "exemplars": 3}})
         self.assertFalse({"jaccard_tau_default", "cosine_tau_default", "token_gate"} & set(meta))
 
 
@@ -1718,13 +1720,20 @@ class TestPrintReport(unittest.TestCase):
                 "relevance_threshold": 0.7, "relevance_threshold_eff": 0.6234,
                 "relevance_floor_used": True, "relevance_pool": 6036, "relevance_kept": 714,
                 "anchor_hits": {"legal": 20, "exemplar:0": 694}}
-        lines = self.render({"a": base, "b": dict(base), "c": {**base, "relevance_status": "unscored"}})
+        uncalibrated = {key: value for key, value in base.items() if not key.startswith("relevance_")}
+        uncalibrated.update(relevance_status="uncalibrated", relevance_pool=10, relevance_kept=10,
+                            anchor_hits={"legal": 10})
+        lines = self.render({"a": base, "b": uncalibrated, "d": dict(uncalibrated),
+                             "c": {**base, "relevance_status": "unscored"}})
         text = "\n".join(lines)
         row = next(l for l in lines if l.strip().startswith("a "))
         self.assertIn("714/6036", row)
         self.assertIn("0.623", row)
         self.assertIn("[WARNING] a: relevance floor used (theta 0.700 did not bind)", text)
-        self.assertEqual(text.count("[WARNING] lf: fewer than 2 exemplars; threshold 0.0"), 1)
+        self.assertEqual(text.count("[WARNING] lf: uncalibrated: fewer than 2 exemplars; no filtering"), 1)
+        self.assertNotIn("[WARNING] b: relevance floor", text)
+        row_b = next(l for l in lines if l.strip().startswith("b "))
+        self.assertEqual(row_b.split()[5:7], ["10/10", "-"])
         self.assertIn("[WARNING] a: 97% of kept rows match one anchor (exemplar:0)", text)
         unscored = next(l for l in lines if l.strip().startswith("c "))
         self.assertEqual(unscored.split()[5:7], ["-", "-"])
@@ -1737,9 +1746,8 @@ class TestPrintReport(unittest.TestCase):
 
     def test_zero_exemplar_leaf_skips_anchor_concentration_warning(self):
         stats = {"loaded": 9, "exact_dropped": 0, "near_dropped": 0, "cross_source_dropped": 0,
-                 "kept": 7, "relevance_status": "scored", "leaf": "lf", "leaf_exemplars": 0,
-                 "relevance_threshold": 0.0, "relevance_threshold_eff": 0.0,
-                 "relevance_floor_used": False, "relevance_pool": 10, "relevance_kept": 10,
+                 "kept": 7, "relevance_status": "uncalibrated", "leaf": "lf", "leaf_exemplars": 0,
+                 "relevance_pool": 10, "relevance_kept": 10,
                  "anchor_hits": {"legal": 10}}
         self.assertNotIn("match one anchor", "\n".join(self.render({"a": stats})))
 
@@ -2141,9 +2149,12 @@ class TestLeaves(unittest.TestCase):
     def test_every_source_leaf_resolves_and_relevance_in_range(self):
         from datasets.prepare.cluster.leaves import load_leaves
         leaves = load_leaves()
+        # persusafety's content is in its system prompt, which scoring does not read yet.
+        self.assertEqual({source.name for source in SOURCES if source.leaf is None}, {"persusafety"})
         for source in SOURCES:
             with self.subTest(source=source.name):
-                self.assertIn(source.leaf, leaves)
+                if source.leaf is not None:
+                    self.assertIn(source.leaf, leaves)
                 if source.relevance is not None:
                     self.assertGreater(source.relevance, 0)
                     self.assertLessEqual(source.relevance, 1)
@@ -2189,7 +2200,31 @@ class TestRelevanceFilter(unittest.TestCase):
         for vectors in ([(1, 0)], [(1, 0), (0, 1)]):
             leaf, cache = self.leaf(vectors)
             _, matrix = prepare.leaf_anchors(leaf, cache)
-            self.assertEqual(prepare.leaf_threshold(matrix, None), 0.0)
+            self.assertIsNone(prepare.leaf_threshold(matrix, None))
+            self.assertFalse(leaf.calibrated)
+        self.assertTrue(self.leaf([(1, 0)], threshold=0.5)[0].calibrated)
+
+    def test_an_uncalibrated_leaf_scores_but_drops_nothing(self):
+        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0)])  # one exemplar
+        rows, embeddings = self.rows("src", [(1, 0, 0)] * 3 + [(0, 0, 1)] * 2000)
+        pools, dropped, report = self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 1)
+        self.assertEqual(len(pools[0][1]), 2003)
+        self.assertEqual(dropped, [])
+        self.assertEqual(report["src"]["relevance_status"], "uncalibrated")
+        self.assertNotIn("relevance_floor_used", report["src"])
+        self.assertEqual(report["src"]["score_quantiles"]["max"], 1.0)
+        self.assertEqual(rows[0].metadata["relevance"], 1.0)
+
+    def test_strata_before_the_filter_are_recorded(self):
+        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
+        rows, embeddings = self.rows("src", [(1, 0, 0)] * 3 + [(0, 0, 1)] * 2000)
+        for i, row in enumerate(rows):
+            row.metadata = {"kind": "near" if i < 3 else "far", "tag": "t"}
+        source = self.source(stratify=["kind", "tag"])
+        pools, _, report = self.run_filter([(source, rows)], embeddings, leaf, cache, 1)
+        self.assertEqual(report["src"]["relevance_strata_before"], {"far|t": 2000, "near|t": 3})
+        self.assertNotIn("relevance_strata_before",
+                         self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 1)[2]["src"])
 
     def test_a_missing_anchor_raises_cache_miss(self):
         leaf, _ = self.leaf([(1, 0), (0, 1)])
@@ -2202,39 +2237,41 @@ class TestRelevanceFilter(unittest.TestCase):
         pools, dropped, report = self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 2)
         self.assertEqual(len(pools[0][1]), 5)
         self.assertEqual(dropped, [])
-        self.assertTrue(report["src"]["relevance_floor_used"])
+        # The floor lowered the threshold but cut nothing, so it was not "used".
+        self.assertLess(report["src"]["relevance_threshold_eff"], report["src"]["relevance_threshold"])
+        self.assertFalse(report["src"]["relevance_floor_used"])
 
     def planted(self, n_planted):
         '''2,000 rows: n_planted copies of the legal anchor, the rest with distinct low scores.'''
         leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
         vectors = [(1, 0, 0) if i < n_planted else (i, 2000, 0) for i in range(2000)]
         rows, embeddings = self.rows("src", vectors)
-        # One source, budget 10 -> share 10 rows -> floor max(35, 20, 1) = 35.
+        # One source, budget 10 -> share 10 rows -> floor max(2 x 35, 20, 1) = 70.
         return self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 10)
 
     def test_look_alikes_above_the_floor_are_kept_exactly(self):
-        pools, dropped, report = self.planted(50)
-        self.assertEqual({row.sample_id for row in pools[0][1]}, {f"src:{i}" for i in range(50)})
+        pools, dropped, report = self.planted(80)
+        self.assertEqual({row.sample_id for row in pools[0][1]}, {f"src:{i}" for i in range(80)})
         self.assertFalse(report["src"]["relevance_floor_used"])
-        self.assertEqual(len(dropped), 1950)
-        self.assertEqual(report["src"]["anchor_hits"], {"legal": 50})
+        self.assertEqual(len(dropped), 1920)
+        self.assertEqual(report["src"]["anchor_hits"], {"legal": 80})
         self.assertEqual(pools[0][1][0].metadata["relevance_anchor"], "legal")
         self.assertEqual(pools[0][1][0].metadata["relevance"], 1.0)
 
     def test_too_few_look_alikes_fill_up_to_the_floor_by_rank(self):
         pools, _, report = self.planted(20)
-        top = {f"src:{i}" for i in range(1999, 1984, -1)}  # the 15 best-scoring others
+        top = {f"src:{i}" for i in range(1999, 1949, -1)}  # the 50 best-scoring others
         self.assertEqual({row.sample_id for row in pools[0][1]},
                          {f"src:{i}" for i in range(20)} | top)
         self.assertTrue(report["src"]["relevance_floor_used"])
-        self.assertEqual(report["src"]["relevance_kept"], 35)
+        self.assertEqual(report["src"]["relevance_kept"], 70)
         ids = [row.sample_id for row in pools[0][1]]
         self.assertEqual(ids, sorted(ids, key=lambda i: int(i.split(":")[1])))
 
     def test_the_one_percent_term_sets_the_floor_on_a_big_pool(self):
         leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
         rows, embeddings = self.rows("src", [(i, 5000, 0) for i in range(5000)])
-        # Budget 1 -> share 1 -> SCREEN_FACTOR term 4, while 1% of 5,000 is 50.
+        # Budget 1 -> share 1 -> 2 x SCREEN_FACTOR term 7, while 1% of 5,000 is 50.
         pools, _, report = self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 1)
         self.assertEqual({row.sample_id for row in pools[0][1]},
                          {f"src:{i}" for i in range(4950, 5000)})
@@ -2246,7 +2283,7 @@ class TestRelevanceFilter(unittest.TestCase):
         rows, embeddings = self.rows("src", [(1, 0, 0)] * 3)
         rows[2].query = "--"
         pools, _, report = self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 2)
-        self.assertEqual(len(pools[0][1]), 3)  # the floor (7) exceeds the pool
+        self.assertEqual(len(pools[0][1]), 3)  # the floor (14) exceeds the pool
         self.assertEqual(rows[2].metadata["relevance"], 0.0)
         self.assertIsNone(rows[2].metadata["relevance_anchor"])
         self.assertEqual(report["src"]["anchor_hits"], {"legal": 2})
@@ -2260,6 +2297,21 @@ class TestRelevanceFilter(unittest.TestCase):
         self.assertEqual(dropped, [])
         self.assertEqual(report["src"], {"leaf": None, "relevance_status": "unscored"})
         self.assertNotIn("relevance", rows[0].metadata)
+
+    def test_input_order_does_not_change_the_result(self):
+        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
+        vectors = [(1, 0, 0) if i < 20 else (i % 50, 2000, 0) for i in range(2000)]  # ties at the floor
+
+        def run(order):
+            rows, embeddings = self.rows("src", vectors)
+            pools, dropped, _ = self.run_filter(
+                [(self.source(), [rows[i] for i in order])], embeddings, leaf, cache, 10)
+            return (sorted(row.sample_id for row in pools[0][1]),
+                    sorted(dropped, key=lambda record: record["dropped"]))
+
+        shuffled = list(range(2000))
+        np.random.default_rng(1).shuffle(shuffled)
+        self.assertEqual(run(range(2000)), run(shuffled))
 
     def test_two_runs_are_identical(self):
         first, second = self.planted(20), self.planted(20)
@@ -2275,8 +2327,8 @@ class TestRelevanceFilter(unittest.TestCase):
         pools = [(self.source("a"), scored), (self.source("b", leaf=None), other)]
         # The floor keeps >= SCREEN_FACTOR x the provisional share, so a filtered source
         # still covers its share at the same budget: re-flow only happens for pools
-        # already below their floor. Hence filter at budget 20, re-allocate at 200.
-        filtered, _, _ = self.run_filter(pools, {**scored_vectors, **other_vectors}, leaf, cache, 20)
+        # already below their floor. Hence filter at budget 10 (floor 35), re-allocate at 200.
+        filtered, _, _ = self.run_filter(pools, {**scored_vectors, **other_vectors}, leaf, cache, 10)
         self.assertEqual(len(filtered[0][1]), 40)
         self.assertEqual(prepare.allocate_budget(pools, 200), {"a": 100, "b": 100})
         self.assertEqual(prepare.allocate_budget(filtered, 200), {"a": 40, "b": 160})
@@ -2286,18 +2338,18 @@ class TestRelevanceFilter(unittest.TestCase):
         rows = [make_row(sample_id=f"src:{g}-{arm}", query=f"scenario {g} arm {arm}",
                          metadata={"scenario": f"s{g}"})
                 for g in range(30) for arm in range(3)]
-        # One arm of each of the first five scenarios is a look-alike.
-        embeddings = embedded(rows, [(1, 0, 0) if g < 5 and arm == 1 else (0, 1, 0)
+        # One arm of each of the first eight scenarios is a look-alike.
+        embeddings = embedded(rows, [(1, 0, 0) if g < 8 and arm == 1 else (0, 1, 0)
                                      for g in range(30) for arm in range(3)])
         source = self.source(group_key="scenario")
-        # Budget 3 = one 3-arm group -> floor ceil(3.5 * 3) = 11 rows, below the 15 planted.
+        # Budget 3 = one 3-arm group -> floor ceil(2 * 3.5 * 3) = 21 rows, below the 24 planted.
         pools, _, report = self.run_filter([(source, rows)], embeddings, leaf, cache, 3)
         kept = pools[0][1]
-        self.assertEqual({row.metadata["scenario"] for row in kept}, {f"s{g}" for g in range(5)})
-        self.assertEqual(len(kept), 15)
+        self.assertEqual({row.metadata["scenario"] for row in kept}, {f"s{g}" for g in range(8)})
+        self.assertEqual(len(kept), 24)
         self.assertFalse(report["src"]["relevance_floor_used"])
         # The kept non-planted arms sit closer to the exemplar than to the legal anchor.
-        self.assertEqual(report["src"]["anchor_hits"], {"exemplar:0": 10, "legal": 5})
+        self.assertEqual(report["src"]["anchor_hits"], {"exemplar:0": 16, "legal": 8})
         # Every arm carries its group's best score, so the leader (arm 0, a weak arm)
         # ranks by the planted arm 1; each arm keeps its own score and anchor.
         self.assertTrue(all(row.metadata["relevance"] == 1.0 for row in kept))
@@ -2322,20 +2374,51 @@ class TestRelevanceWindow(unittest.TestCase):
                          metadata={"stratum": stratum(i), **({"relevance": score(i)} if score else {})})
                 for i in range(n)]
 
+    def setUp(self):
+        leaf = Leaf(id="lf", title="LF", cop_ref="Appendix 1.4(a)", legal_text="law", exemplars=("a", "b"))
+        patcher = mock.patch.object(prepare, "load_leaves", return_value={"lf": leaf})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def source(self, **overrides) -> Source:
-        return Source(name="src", risk="cbrn", question_type=GRADED, path="unused", quota=10, **overrides)
+        return Source(**{"name": "src", "risk": "cbrn", "question_type": GRADED, "path": "unused",
+                         "quota": 10, "leaf": "lf", **overrides})
 
     def take(self, rows, take, source=None, indices=None):
         return sorted(prepare._take(rows, indices or list(range(len(rows))), take, source or self.source(), 0))
 
-    def test_relevance_defaults_by_role(self):
-        self.assertEqual(prepare.relevance_for(self.source()), 1.0)
-        self.assertEqual(prepare.relevance_for(self.source(role="diagnostic")), 0.5)
+    def test_relevance_has_no_role_default(self):
+        self.assertIsNone(prepare.relevance_for(self.source()))
+        self.assertIsNone(prepare.relevance_for(self.source(role="diagnostic")))
         self.assertEqual(prepare.relevance_for(self.source(relevance=0.3)), 0.3)
 
-    def test_full_relevance_with_uniform_scores_matches_unscored(self):
-        scored = self.rows(100, lambda i: 0.7)
-        self.assertEqual(self.take(scored, 10), self.take(self.rows(100, None), 10))
+    def test_full_relevance_with_varied_scores_matches_unscored(self):
+        scored = self.rows(100, lambda i: (i * 37 % 11) / 11)
+        unscored = self.rows(100, None)
+        for source in (self.source(relevance=1.0), self.source(relevance=1.0, select="diverse")):
+            caches = prepare.Caches(embedded(scored, [(i, 1, i % 3) for i in range(100)]))
+            with self.subTest(select=source.select):
+                self.assertEqual(sorted(prepare._take(scored, list(range(100)), 10, source, 0, caches)),
+                                 sorted(prepare._take(unscored, list(range(100)), 10, source, 0, caches)))
+
+    def test_smallest_relevance_takes_exactly_the_top_by_score(self):
+        rows = self.rows(100, lambda i: (i * 37 % 101) / 101)
+        top = sorted(range(100), key=lambda i: -rows[i].metadata["relevance"])[:10]
+        self.assertEqual(self.take(rows, 10, self.source(relevance=0.0001)), sorted(top))
+
+    def test_half_relevance_window_size(self):
+        caches = prepare.Caches({})
+        prepare._take(self.rows(100, lambda i: i / 100), list(range(100)), 10,
+                      self.source(relevance=0.5), 0, caches)
+        self.assertEqual(caches.relevance_window, 55)  # 10 + round(0.5 x 90)
+
+    def test_an_uncalibrated_leaf_is_not_windowed(self):
+        leaf = Leaf(id="lf", title="LF", cop_ref="Appendix 1.4(a)", legal_text="law", exemplars=("a",))
+        caches = prepare.Caches({})
+        with mock.patch.object(prepare, "load_leaves", return_value={"lf": leaf}):
+            prepare._take(self.rows(100, lambda i: i / 100), list(range(100)), 10,
+                          self.source(relevance=0.0001), 0, caches)
+        self.assertEqual(caches.relevance_window, 0)
 
     def test_unscored_rows_are_untouched(self):
         rows = self.rows(100, None)
@@ -2344,17 +2427,17 @@ class TestRelevanceWindow(unittest.TestCase):
     def test_narrow_relevance_picks_only_from_the_top_window(self):
         rows = self.rows(100, lambda i: 1.0 if i < 10 else 0.1)
         caches = prepare.Caches({})
-        top = sorted(prepare._take(rows, list(range(100)), 2, self.source(relevance=0.25), 0, caches))
-        self.assertEqual(caches.relevance_window, 8)  # ceil(2 / 0.25)
+        top = sorted(prepare._take(rows, list(range(100)), 2, self.source(relevance=0.05), 0, caches))
+        self.assertEqual(caches.relevance_window, 7)  # 2 + round(0.05 x 98)
         self.assertTrue(all(i < 10 for i in top) and len(top) == 2)
 
     def test_window_is_per_stratum(self):
         rows = self.rows(100, lambda i: 1.0 if i % 10 < 2 else 0.1, stratum=lambda i: "a" if i < 50 else "b")
-        source = self.source(relevance=0.5, stratify=["stratum"])
+        source = self.source(relevance=0.0001, stratify=["stratum"])
         chosen, _ = prepare._row_sample(rows, source, 0, None, 8)
         self.assertEqual({row.metadata["stratum"] for row in chosen}, {"a", "b"})
         self.assertEqual(len(chosen), 8)
-        self.assertTrue(all(row.metadata["relevance"] == 1.0 for row in chosen))  # 4 per stratum, window 8 of 10 high
+        self.assertTrue(all(row.metadata["relevance"] == 1.0 for row in chosen))  # 4 per stratum, window 4 of 10 high
 
     def test_deterministic(self):
         rows = self.rows(100, lambda i: (i * 37 % 11) / 11 + 0.1)
@@ -2366,16 +2449,10 @@ class TestRelevanceWindow(unittest.TestCase):
             with self.subTest(r=bad), self.assertRaises(ValueError):
                 prepare.relevance_for(self.source(relevance=bad))
 
-    def test_window_size_ignores_float_overshoot(self):
-        rows = self.rows(100, lambda i: 1.0)
-        caches = prepare.Caches({})
-        prepare._take(rows, list(range(100)), 3, self.source(relevance=0.3), 0, caches)
-        self.assertEqual(caches.relevance_window, 10)  # 3 / 0.3 is 10.000000000000002 in floats
-
     def test_screen_shortfall_still_raises_at_full_relevance(self):
         rows = [make_row(sample_id=f"src:{i}", query=f"request {i}", metadata={"relevance": 1.0})
                 for i in range(100)]
-        source = self.source(elicitation_family=COMPLIANCE)
+        source = self.source(elicitation_family=COMPLIANCE, relevance=1.0)
         caches = prepare.Caches(embeddings={}, verdicts={
             prepare.screen_key(row): {"verdict": "refused", "model": "test/hermes"} for row in rows})
         with self.assertRaisesRegex(ValueError, "Raise SCREEN_FACTOR"):
@@ -2385,5 +2462,5 @@ class TestRelevanceWindow(unittest.TestCase):
         rows = self.rows(100, lambda i: 1.0, stratum=lambda i: "a" if i < 50 else "b")
         source = self.source(relevance=0.5, stratify=["stratum"])
         caches = prepare.Caches({})
-        prepare.stratified_sample(rows, source, 0, caches, quota=10)
-        self.assertEqual(caches.relevance_window, 20)  # 2 strata x ceil(5 / 0.5)
+        prepare.stratified_sample(rows, source, 0, caches, quota=20)
+        self.assertEqual(caches.relevance_window, 60)  # 2 strata x (10 + round(0.5 x 40))

@@ -1067,7 +1067,9 @@ SOURCES = [
     ),
     Source(
         name="persusafety", risk="manipulation", question_type=DETECTION,
-        leaf="manipulation_propensity",
+        # Relevance scoring reads the query; persusafety's content is in system_prompt,
+        # so score system+query before assigning a leaf (manipulation_propensity).
+        leaf=None,
         detector=ACCEPT_REJECT_TOKEN,
         elicitation_family=GENERIC,
         path="raw/persusafety/dataset/harmful_scenarios_full.json",
