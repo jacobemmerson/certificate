@@ -2250,6 +2250,20 @@ class TestRelevanceFilter(unittest.TestCase):
         self.assertFalse(report["src"]["relevance_floor_used"])
         # The kept non-planted arms sit closer to the exemplar than to the legal anchor.
         self.assertEqual(report["src"]["anchor_hits"], {"exemplar:0": 10, "legal": 5})
+        # Every arm carries its group's best score, so the leader (arm 0, a weak arm)
+        # ranks by the planted arm 1; each arm keeps its own score and anchor.
+        self.assertTrue(all(row.metadata["relevance"] == 1.0 for row in kept))
+        leader = next(row for row in kept if row.sample_id == "src:0-0")
+        self.assertLess(leader.metadata["relevance_own"], 0.1)
+        self.assertEqual(leader.metadata["relevance_anchor"], "exemplar:0")
+        planted = next(row for row in kept if row.sample_id == "src:0-1")
+        self.assertEqual(planted.metadata["relevance_own"], 1.0)
+
+    def test_ungrouped_rows_carry_no_own_score(self):
+        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
+        rows, embeddings = self.rows("src", [(1, 0, 0)] * 2)
+        self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 2)
+        self.assertNotIn("relevance_own", rows[0].metadata)
 
 
 class TestRelevanceWindow(unittest.TestCase):

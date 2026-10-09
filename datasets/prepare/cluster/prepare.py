@@ -649,8 +649,12 @@ def relevance_filter(
             if unit_score >= threshold_eff:
                 name = names[anchor] if anchor >= 0 else None
                 # A fresh dict: readers may share one metadata dict across rows.
-                row.metadata = {**row.metadata, "relevance": float(score),
+                # For a group, "relevance" is the group's best arm on every arm:
+                # the window ranks a group by its leader (first arm) alone.
+                row.metadata = {**row.metadata, "relevance": float(unit_score),
                                 "relevance_anchor": name}
+                if source.group_key:
+                    row.metadata["relevance_own"] = float(score)
                 kept.append(row)
                 if name:
                     hits[name] += 1
