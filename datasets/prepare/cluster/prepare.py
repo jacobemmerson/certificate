@@ -668,6 +668,7 @@ def relevance_filter(
         quantiles = np.percentile(scores, [0, 10, 50, 90, 100])
         report[source.name] = {
             "leaf": source.leaf,
+            "leaf_exemplars": len(leaf.exemplars),
             "relevance_status": "scored",
             "relevance_threshold": theta,
             "relevance_threshold_eff": threshold_eff,
@@ -1116,9 +1117,10 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
             "strata": sample["strata"],
             "divergence": sample["divergence"],
         })
+        if report[source.name]["relevance_status"] == "scored":
+            report[source.name]["relevance"] = relevance_for(source)
         if caches.relevance_window > window:
-            report[source.name].update(relevance=relevance_for(source),
-                                       relevance_window=caches.relevance_window - window)
+            report[source.name]["relevance_window"] = caches.relevance_window - window
         if source.screened():
             report[source.name]["screen_candidates"] = caches.candidates - candidates
             report[source.name]["screen_refused"] = len(caches.refused) - refused
@@ -1158,6 +1160,9 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
     frame.to_csv(csv_path, index=False)
 
     screened = [source.name for source in for_risk(risk) if source.screened()]
+    leaves = load_leaves()
+    used_leaves = {stats["leaf"]: stats for stats in report.values()
+                   if stats.get("relevance_status") == "scored"}
     meta = {
         "risk": risk,
         "rows": len(rows),
@@ -1175,6 +1180,14 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
             "candidate_factor": SCREEN_FACTOR,
             "refused_dropped": {name: report[name]["screen_refused"] for name in screened},
         },
+        "leaves": {
+            leaf_id: {
+                "cop_ref": leaves[leaf_id].cop_ref,
+                "threshold": stats["relevance_threshold"],
+                "anchors": len(anchor_texts(leaves[leaf_id])),
+                "exemplars": stats["leaf_exemplars"],
+            } for leaf_id, stats in sorted(used_leaves.items())
+        },
         "sources": report,
         "revisions": source_revisions(),
     }
@@ -1190,18 +1203,36 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
 def print_report(risk: str, report: dict, rows: list[Row]):
     print(f"\n=== {risk} ===")
     header = (f"  {'source':22s} {'loaded':>7s} {'exact':>6s} {'near':>6s} "
-              f"{'cross':>6s} {'screen':>6s} {'allot':>6s} {'kept':>6s} {'short':>6s} {'share':>6s}")
+              f"{'cross':>6s} {'relev':>10s} {'theta':>6s} {'screen':>6s} {'allot':>6s} {'kept':>6s} {'short':>6s} {'share':>6s}")
     print(header)
     print("  " + "-" * (len(header) - 2))
     total = len(rows) or 1
+    warned_leaves = set()
     for name, stats in report.items():
         refused = stats.get("screen_refused", 0)
+        scored = stats.get("relevance_status") == "scored"
+        relevant = f"{stats['relevance_kept']}/{stats['relevance_pool']}" if scored else "-"
+        theta = f"{stats['relevance_threshold_eff']:.3f}" if scored else "-"
         print(
             f"  {name:22s} {stats['loaded']:7d} {stats['exact_dropped']:6d} "
             f"{stats['near_dropped']:6d} {stats['cross_source_dropped']:6d} "
-            f"{refused:6d} {stats.get('allotted', 0):6d} {stats['kept']:6d} "
+            f"{relevant:>10s} {theta:>6s} {refused:6d} {stats.get('allotted', 0):6d} {stats['kept']:6d} "
             f"{stats.get('shortfall', 0):6d} {100 * stats['kept'] / total:5.1f}%"
         )
+        if scored:
+            if stats["relevance_floor_used"]:
+                print(f"  [WARNING] {name}: relevance floor used "
+                      f"(theta {stats['relevance_threshold']:.3f} did not bind)")
+            if stats["leaf_exemplars"] < 2 and stats["leaf"] not in warned_leaves:
+                warned_leaves.add(stats["leaf"])
+                print(f"  [WARNING] {stats['leaf']}: fewer than 2 exemplars; threshold 0.0")
+            hits = stats["anchor_hits"]
+            # One anchor always takes every hit, so a lone legal text cannot warn.
+            if hits and stats["leaf_exemplars"] > 0:
+                anchor, count = max(hits.items(), key=lambda item: item[1])
+                if count > 0.8 * stats["relevance_kept"]:
+                    print(f"  [WARNING] {name}: {100 * count / stats['relevance_kept']:.0f}% "
+                          f"of kept rows match one anchor ({anchor})")
         if stats.get("shortfall", 0) > 0:
             print(f"  [WARNING] {name}: short {stats['shortfall']} of {stats['allotted']}; "
                   f"its pool or a stratum ran dry")
@@ -1212,7 +1243,7 @@ def print_report(risk: str, report: dict, rows: list[Row]):
         if candidates and 2 * refused > candidates:
             print(f"  [WARNING] {name}: the screen refused {refused} of {candidates} "
                   f"candidates; raise SCREEN_FACTOR rather than shrink the share")
-    print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {'':6s} {'':6s} {'':6s} {total:6d}")
+    print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {'':6s} {'':10s} {'':6s} {'':6s} {'':6s} {total:6d}")
     budget = budget_for(risk)
     if len(rows) < budget:
         print(f"  [WARNING] {risk}: {len(rows)} rows against a budget of {budget}; "

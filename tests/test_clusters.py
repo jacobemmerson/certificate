@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 from datasets.prepare.cluster import prepare
+from datasets.prepare.cluster.leaves import Leaf
 from datasets.prepare.cluster.schema import (
     COLUMNS,
     COMPLIANCE,
@@ -1515,9 +1516,14 @@ class TestMeta(unittest.TestCase):
             "kept": 1, "strata": 1, "screen_candidates": 4, "screen_refused": 3,
         }}
         report["instrumentaleval"] = dict(report["advanced_ai_risk"])
+        report["advanced_ai_risk"].update(
+            leaf="x", leaf_exemplars=3, relevance_status="scored", relevance_threshold=0.5)
+        report["instrumentaleval"]["relevance_status"] = "unscored"
+        leaf = Leaf(id="x", title="X", cop_ref="App 1.3(1)", legal_text="law", exemplars=("a", "b", "c"))
         with tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.object(prepare, "OUT_DIR", Path(tmp)), \
-                mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+                mock.patch.object(prepare, "CACHE_DIR", Path(tmp)), \
+                mock.patch.object(prepare, "load_leaves", return_value={"x": leaf}):
             (Path(tmp) / "screen").mkdir()
             (Path(tmp) / "screen" / "loss_of_control.jsonl").write_text(json.dumps(
                 {"key": "k", "verdict": "refused", "model": "vllm/NousResearch/Hermes-4-70B"}
@@ -1535,6 +1541,8 @@ class TestMeta(unittest.TestCase):
             "refused_dropped": {"advanced_ai_risk": 3, "instrumentaleval": 3},
         })
         self.assertEqual((meta["budget"], meta["shortfall"]), (budget_for("loss_of_control"), budget_for("loss_of_control") - 1))
+        self.assertEqual(meta["leaves"], {"x": {
+            "cop_ref": "App 1.3(1)", "threshold": 0.5, "anchors": 4, "exemplars": 3}})
         self.assertFalse({"jaccard_tau_default", "cosine_tau_default", "token_gate"} & set(meta))
 
 
@@ -1694,6 +1702,32 @@ class TestPrintReport(unittest.TestCase):
         total = next(l for l in lines if "TOTAL" in l)
         self.assertEqual(total.split()[1], "7")
         self.assertEqual(total.index("7") + 1, header.index("kept") + len("kept"))
+
+
+    def render(self, report: dict) -> list[str]:
+        import contextlib
+        import io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            prepare.print_report(RISKS[0], report, [mock.Mock()] * 7)
+        return out.getvalue().splitlines()
+
+    def test_relevance_columns_and_warnings(self):
+        base = {"loaded": 9, "exact_dropped": 0, "near_dropped": 0, "cross_source_dropped": 0,
+                "kept": 7, "relevance_status": "scored", "leaf": "lf", "leaf_exemplars": 1,
+                "relevance_threshold": 0.7, "relevance_threshold_eff": 0.6234,
+                "relevance_floor_used": True, "relevance_pool": 6036, "relevance_kept": 714,
+                "anchor_hits": {"legal": 20, "exemplar:0": 694}}
+        lines = self.render({"a": base, "b": dict(base), "c": {**base, "relevance_status": "unscored"}})
+        text = "\n".join(lines)
+        row = next(l for l in lines if l.strip().startswith("a "))
+        self.assertIn("714/6036", row)
+        self.assertIn("0.623", row)
+        self.assertIn("[WARNING] a: relevance floor used (theta 0.700 did not bind)", text)
+        self.assertEqual(text.count("[WARNING] lf: fewer than 2 exemplars; threshold 0.0"), 1)
+        self.assertIn("[WARNING] a: 97% of kept rows match one anchor (exemplar:0)", text)
+        unscored = next(l for l in lines if l.strip().startswith("c "))
+        self.assertEqual(unscored.split()[5:7], ["-", "-"])
 
 
 class TestBuiltClusters(unittest.TestCase):

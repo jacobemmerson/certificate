@@ -601,9 +601,36 @@ each allotment.
 | 2 | **cosine near-dedup** per source on cached embeddings, `COSINE_TAU` = 0.92 (overridable by `Source.tau`); `distinct_on` and differing mcq `target` win at any similarity | one `V @ V.T` in row blocks |
 | 1b | cross-source exact dedup on the prompt *as delivered* (user + system text), after each source's whole pool so a source never collides with itself; runs before the budget is allocated so the copy's source backfills | free; `cross_source_dropped` is the number to watch |
 | 2b | **cross-source near-dedup** on the user query at `COSINE_TAU`, later source loses; sources with `dedup=False` are skipped | one more `V @ V.T` per cluster |
+| 2c | **relevance filter**: score each row by its best cosine to its leaf's anchors (legal text plus exemplars) and drop rows below the leaf threshold, never below the floor; unscored sources (no `leaf`) pass through | one `V @ A.T` per source; dropped rows in `dropped.jsonl` (`tier: relevance`) |
 | 3 | water-filled share, then `_allocate` per stratum, then per stratum pre-select `SCREEN_FACTOR` (3.5) × allotment by the source's `select`; `diverse` starts from the item farthest from anything the cluster has already kept | `O(take × stratum)` dot products |
 | 3b | **Hermes answerability screen**: drop candidates Hermes-4-70B refuses, then fill the allotment from the survivors by the same `select` | ~2.5k GPU calls for all clusters, cached |
 | 4 | emit `public/<risk>.csv`, `<risk>.meta.json`, `<risk>.dropped.jsonl` | |
+
+### Relevance tier
+
+Leaf assignments and legal texts in `leaves.toml` are **provisional** (drafted from the
+Code of Practice and each benchmark's annotation, for the annotators to correct).
+
+- **`leaves.toml` contract.** One `[[leaf]]` per legal group: `id` (slug), `title`, `cop_ref`,
+  non-empty `legal_text`, `exemplars` (hand-picked items), optional `threshold` override. A
+  `Source.leaf` names one id; the loader rejects duplicate ids, empty legal text and unknown leaves.
+- **Threshold.** theta is the 10th percentile of each exemplar's leave-one-out max cosine to the
+  other anchors, so the bar is "about as close as the exemplars are to each other". The legal
+  text is a neighbour but never a left-out point (legal prose sits far from user prompts). A
+  fixed 0.9 is not used: on MiniLM that is near-duplicate territory (near-dedup drops at 0.92),
+  so it would keep almost nothing and the floor would decide every time. A leaf with fewer than
+  2 exemplars gets theta 0.0 (a warning), and the floor still applies.
+- **Floor.** The filter keeps at least max(3.5 x the source's provisional share, 1% of the pool)
+  rows, so the screen still has its candidates. Where theta already keeps more, the floor does
+  not bind. The budget is not re-flowed except for pools that fall below the floor.
+- **Window (r).** `Source.relevance` r in (0, 1], default 1.0 pooled and 0.5 diagnostic. Selection
+  may only choose from the top ceil(n / r) kept rows by score, so r = 1 only reorders and
+  r = 0.25 restricts to the top 4x. A `group_key` source ranks a group by its best arm.
+- **Reporting.** `meta.json` gains `leaves` (`cop_ref`, `threshold`, `anchors`, `exemplars`) and,
+  per source, `relevance_status`, `relevance_threshold(_eff)`, `relevance_floor_used`,
+  `relevance_pool/kept`, `score_quantiles`, `anchor_hits`, `relevance` and `relevance_window`.
+  `print_report` adds `relev` (kept/pool) and `theta` columns and warns when the floor was
+  used, a leaf has under 2 exemplars, or over 80% of kept rows match one anchor.
 
 `select` is `uniform` (order by `blake2b(f"{seed}:{sample_id}")`, take the first
 N) or `diverse` (greedy farthest-point on embedding cosine, ties broken by the
@@ -741,7 +768,7 @@ vs kept, null when unstratified), `stratify_on`, `balanced`, `kept` and drop cou
 `cache`); the `screen` block (`model`, `applies_to`, `candidate_factor`,
 `refused_dropped` per source); and `revisions`. `<risk>.dropped.jsonl` holds
 every pair or item the dedup tiers removed and every candidate the screen dropped,
-tagged `tier` = `exact`, `near`, `exact_cross_source`, `near_cross_source` or `screen`, so a threshold is reviewable
+tagged `tier` = `exact`, `near`, `exact_cross_source`, `near_cross_source`, `relevance` or `screen`, so a threshold is reviewable
 rather than trusted.
 
 # Housekeeping

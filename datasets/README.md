@@ -38,7 +38,7 @@ Every source is read from `raw/` directly — there is no intermediate flattenin
 step, and no source-specific loader between the pipeline and its data.
 
 Each build writes `public/<risk>.csv`, a `<risk>.meta.json` (seed, budget and shortfall,
-per-source allotments, per-tier drop counts, strata skew, source revisions) and `<risk>.dropped.jsonl` (every pair or item
+per-source allotments, per-tier drop counts, strata skew, per-leaf relevance thresholds and per-source relevance stats, source revisions) and `<risk>.dropped.jsonl` (every pair or item
 dropped by cross-source dedup, cosine dedup or the screen, each tagged `exact`, `near`,
 `exact_cross_source`, `near_cross_source` or `screen`, so thresholds stay reviewable).
 

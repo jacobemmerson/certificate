@@ -87,6 +87,8 @@ Useful fields when the shape is awkward:
 | `transform` | a `DataFrame -> DataFrame` hook, for prompt construction or structural collapse |
 | `system_prompt` | benchmarks that steer the model deliberately (persona arms, assigned roles) |
 | `group_key` | rows only meaningful as a set — the share then counts groups, not rows |
+| `leaf` | slug from `datasets/prepare/cluster/leaves.toml`; required for relevance scoring (no leaf = unscored, passes through) |
+| `relevance` | r in (0, 1], how far down the relevance ranking selection may reach; `None` = role default (1.0 pooled, 0.5 diagnostic) |
 | `quota` | override the water-filled share from the cluster `BUDGET`; say why in a comment |
 | `balanced` | even allocation per stratum instead of proportional |
 | `distinct_on` | fields whose differing values mean "different items, however similar the text" |
