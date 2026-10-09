@@ -34,10 +34,11 @@ MODEL="NousResearch/Hermes-4-70B"
 
 # ---- vLLM server on Modal ---------------------------------------------------
 # `modal run` blocks while streaming the container's logs, so it runs in the
-# background; --detach keeps the app alive if this client dies.
+# background; --detach keeps the app alive if this client dies. COLUMNS keeps
+# Rich from wrapping the "View run at .../ap-<id>" line the app id is read from.
 mkdir -p logs
 LOG="logs/hermes-modal-$(date +%Y%m%d-%H%M%S).log"
-uvx modal run --detach scripts/hermes_modal.py::serve > "$LOG" 2>&1 &
+COLUMNS=200 uvx modal run --detach scripts/hermes_modal.py::serve > "$LOG" 2>&1 &
 CLIENT_PID=$!
 APP=""
 stop() {
@@ -47,20 +48,30 @@ stop() {
     elif [ -n "$APP" ]; then
         uvx modal app stop -y "$APP"
     else
-        echo "no HERMES_APP in $LOG; check \`uvx modal app list\` for a running hermes-vllm app"
+        echo "no app id in $LOG; check \`uvx modal app list\` for a running hermes-vllm app"
     fi
 }
 trap stop EXIT
 
-# Image build plus scheduling 4xH100 can take a while before the tunnel opens.
+# The client prints the app id as soon as the app exists, before the image
+# build and GPU scheduling, so the trap can stop it from here on.
+for i in $(seq 1 60); do
+    APP=$(grep -o -m1 'ap-[A-Za-z0-9]\{22\}' "$LOG" || true)
+    [ -n "$APP" ] && break
+    kill -0 $CLIENT_PID 2>/dev/null || break
+    sleep 5
+done
+[ -n "$APP" ] || { echo "no app id from modal run; see $LOG"; exit 1; }
+
+# Then the container opens the tunnel and prints HERMES_URL.
 for i in $(seq 1 120); do
-    grep -q 'HERMES_APP=ap-' "$LOG" && break
+    grep -q 'HERMES_URL=https' "$LOG" && break
     kill -0 $CLIENT_PID 2>/dev/null || break
     sleep 10
 done
 URL=$(grep -o -m1 'HERMES_URL=https://[^ ]*' "$LOG" | cut -d= -f2 || true)
-APP=$(grep -o -m1 'HERMES_APP=ap-[A-Za-z0-9]*' "$LOG" | cut -d= -f2 || true)
-[ -n "$URL" ] && [ -n "$APP" ] || { echo "no HERMES_URL/HERMES_APP from modal run; see $LOG"; exit 1; }
+[ -n "$URL" ] || { echo "no HERMES_URL from modal run; see $LOG"; exit 1; }
+grep -q "HERMES_APP=$APP" "$LOG" || echo "warning: container's HERMES_APP differs from $APP; see $LOG"
 echo "HERMES_URL=$URL HERMES_APP=$APP (log: $LOG)"
 
 # A cold start downloads ~140 GB of weights into the hf-cache volume, so give

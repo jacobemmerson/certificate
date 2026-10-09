@@ -56,20 +56,18 @@ app = modal.App("hermes-vllm")
     max_containers=1,
 )
 def serve():
-    # vLLM 0.21 on H100 defaults to prefix caching on, max-num-seqs 1024 and a
-    # per-step token budget of 8192. 512 seqs is still above any client
-    # --max-connections we use; 32768 lets long prompts prefill in fewer steps.
-    # 16384 covers the reasoning path's max_tokens=8192 plus the prompts.
+    # vLLM 0.21 on H100 already enables prefix caching and allows 1024 concurrent
+    # seqs; it caps per-step tokens at 8192, which 32768 raises so long prompts
+    # prefill in fewer steps. 16384 covers the reasoning path's max_tokens=8192
+    # plus the prompts.
     proc = subprocess.Popen([
         "vllm", "serve", MODEL,
         "--host", "0.0.0.0",
         "--port", "8000",
         "--tensor-parallel-size", "4",
         "--gpu-memory-utilization", "0.92",
-        "--max-num-seqs", "512",
         "--max-model-len", "16384",
         "--max-num-batched-tokens", "32768",
-        "--enable-prefix-caching",
         "--api-key", os.environ["VLLM_API_KEY"],
     ])
     with modal.forward(8000) as tunnel:
