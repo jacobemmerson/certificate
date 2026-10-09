@@ -580,22 +580,26 @@ def relevance_scores(
 def leaf_threshold(matrix: np.ndarray, override: float | None) -> float:
     '''
     The cosine a row must reach to count as on-topic for this leaf: the 10th
-    percentile of each anchor's leave-one-out max similarity to the others, so
-    the bar is "about as close to the leaf as its own anchors are to each
-    other". A fixed 0.9 is not the default because on MiniLM that is
-    near-duplicate territory (near-dedup drops at COSINE_TAU = 0.92): a row
-    scoring 0.9 against an exemplar is a rewording of it, so 0.9 would keep
-    almost nothing and the floor in relevance_filter would decide every time.
-    One anchor calibrates nothing, so it returns 0.0: only rows pointing away
-    from the anchor drop, and the floor still applies.
+    percentile of each exemplar's leave-one-out max similarity to the other
+    anchors, so the bar is "about as close to the leaf as its exemplars are to
+    each other". `matrix` is leaf_anchors' order: the legal text first, then
+    the exemplars. The legal text is a neighbour but never a left-out point:
+    legal prose sits far from user prompts on MiniLM, so its own score would
+    drag the percentile down to "anything vaguely related".
+    A fixed 0.9 is not the default because on MiniLM that is near-duplicate
+    territory (near-dedup drops at COSINE_TAU = 0.92): a row scoring 0.9
+    against an exemplar is a rewording of it, so 0.9 would keep almost nothing
+    and the floor in relevance_filter would decide every time.
+    Fewer than two exemplars calibrate nothing, so it returns 0.0: only rows
+    pointing away from every anchor drop, and the floor still applies.
     '''
     if override is not None:
         return override
-    if len(matrix) < 2:
+    if len(matrix) < 3:
         return 0.0
     similarity = np.round(matrix @ matrix.T, 9)
     np.fill_diagonal(similarity, -np.inf)
-    return round(float(np.percentile(similarity.max(axis=1), 10)), 9)
+    return round(float(np.percentile(similarity[1:].max(axis=1), 10)), 9)
 
 
 def relevance_filter(

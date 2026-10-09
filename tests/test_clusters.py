@@ -2124,17 +2124,24 @@ class TestRelevanceFilter(unittest.TestCase):
     def run_filter(self, pools, embeddings, leaf, cache, budget):
         return prepare.relevance_filter(pools, {"leaf": leaf}, embeddings, cache, budget)
 
-    def test_threshold_is_the_leave_one_out_tenth_percentile(self):
-        # Leave-one-out maxima: 0.6, 0.8, 0.8, 0.0 -> sorted 0, .6, .8, .8; p10 = 0.3 * 0.6.
+    def test_threshold_is_the_exemplars_leave_one_out_tenth_percentile(self):
+        # Legal (1, 0) is a neighbour only. Exemplar maxima: 0.8, 0.8, 0.0 -> p10 = 0.2 * 0.8.
         leaf, cache = self.leaf([(1, 0), (0.6, 0.8), (0, 1), (-1, 0)])
         _, matrix = prepare.leaf_anchors(leaf, cache)
-        self.assertAlmostEqual(prepare.leaf_threshold(matrix, None), 0.18, places=6)
+        self.assertAlmostEqual(prepare.leaf_threshold(matrix, None), 0.16, places=6)
         self.assertEqual(prepare.leaf_threshold(matrix, 0.9), 0.9)
 
-    def test_a_single_anchor_calibrates_nothing(self):
-        leaf, cache = self.leaf([(1, 0)])
+    def test_a_distant_legal_anchor_does_not_lower_the_threshold(self):
+        # Exemplar maxima 0.8, 0.96, 0.96 -> p10 0.832; counting legal's own max (0) would give 0.24.
+        leaf, cache = self.leaf([(0, -1), (1, 0), (0.8, 0.6), (0.6, 0.8)])
         _, matrix = prepare.leaf_anchors(leaf, cache)
-        self.assertEqual(prepare.leaf_threshold(matrix, None), 0.0)
+        self.assertAlmostEqual(prepare.leaf_threshold(matrix, None), 0.832, places=6)
+
+    def test_fewer_than_two_exemplars_calibrate_nothing(self):
+        for vectors in ([(1, 0)], [(1, 0), (0, 1)]):
+            leaf, cache = self.leaf(vectors)
+            _, matrix = prepare.leaf_anchors(leaf, cache)
+            self.assertEqual(prepare.leaf_threshold(matrix, None), 0.0)
 
     def test_a_missing_anchor_raises_cache_miss(self):
         leaf, _ = self.leaf([(1, 0), (0, 1)])
@@ -2142,7 +2149,7 @@ class TestRelevanceFilter(unittest.TestCase):
             prepare.leaf_anchors(leaf, {})
 
     def test_a_pool_smaller_than_the_floor_keeps_everything(self):
-        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0)])
+        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
         rows, embeddings = self.rows("src", [(0, i + 1, 1) for i in range(5)])
         pools, dropped, report = self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 2)
         self.assertEqual(len(pools[0][1]), 5)
@@ -2151,7 +2158,7 @@ class TestRelevanceFilter(unittest.TestCase):
 
     def planted(self, n_planted):
         '''2,000 rows: n_planted copies of the legal anchor, the rest with distinct low scores.'''
-        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0)])
+        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
         vectors = [(1, 0, 0) if i < n_planted else (i, 2000, 0) for i in range(2000)]
         rows, embeddings = self.rows("src", vectors)
         # One source, budget 10 -> share 10 rows -> floor max(35, 20, 1) = 35.
@@ -2194,7 +2201,7 @@ class TestRelevanceFilter(unittest.TestCase):
         self.assertEqual(first[2], second[2])
 
     def test_a_filtered_source_frees_budget_for_the_others(self):
-        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0)])
+        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
         scored, scored_vectors = self.rows("a", [(1, 0, 0) if i < 40 else (i, 2000, 0) for i in range(1000)])
         other, other_vectors = self.rows("b", [(0, 0, 1)] * 1000)
         pools = [(self.source("a"), scored), (self.source("b", leaf=None), other)]
@@ -2204,7 +2211,7 @@ class TestRelevanceFilter(unittest.TestCase):
         self.assertEqual(prepare.allocate_budget(filtered, 200), {"a": 40, "b": 160})
 
     def test_group_key_sources_keep_or_drop_whole_groups(self):
-        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0)])
+        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
         rows = [make_row(sample_id=f"src:{g}-{arm}", query=f"scenario {g} arm {arm}",
                          metadata={"scenario": f"s{g}"})
                 for g in range(30) for arm in range(3)]
