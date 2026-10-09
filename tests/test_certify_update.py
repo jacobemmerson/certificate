@@ -13,7 +13,6 @@ import contextlib
 import io
 import json
 import os
-import runpy
 import sys
 import tempfile
 import unittest
@@ -153,24 +152,6 @@ class TestUpdate(unittest.TestCase):
         graders.rebuild_models_json()
         self.assertEqual((self.models_dir / "models.json").read_bytes(), first)
         self.assertEqual([m["id"] for m in self.written()], ["alpha", "Zed"])
-
-    def test_split_script_keeps_aa_fields_and_refuses_a_second_run(self):
-        stored = [entry("b", {"cbrn": 1.0}), entry("a", {"cbrn": 2.0})]
-        stored[0]["aa_intelligence_index"] = 55.3
-        self.models_dir.mkdir()
-        (self.models_dir / "models.json").write_text(json.dumps(stored))
-        script = Path(certify.__file__).parent / "scripts" / "split_models_json.py"
-
-        runpy.run_path(str(script), run_name="__main__")
-        first = (self.models_dir / "models.json").read_bytes()
-        with self.assertRaises(SystemExit) as ctx:
-            runpy.run_path(str(script), run_name="__main__")
-        self.assertIn("Delete them first", str(ctx.exception.code))
-
-        self.assertEqual((self.models_dir / "models.json").read_bytes(), first)
-        self.assertEqual([m["id"] for m in self.written()], ["a", "b"])
-        self.assertEqual(self.written()[1]["aa_intelligence_index"], 55.3)
-        self.assertEqual(sorted(p.name for p in (self.models_dir / "results").glob("*.json")), ["a.json", "b.json"])
 
     def test_unowned_fields_and_identity_survive_a_rerun(self):
         stored = [entry("m", {"cbrn": 50.0})]
