@@ -1909,6 +1909,11 @@ class TestRedcodeRows(unittest.TestCase):
         self.assertTrue(row["prompt_template"].endswith("## USER INPUT ##\n" + ITEM))
         self.assertEqual(row["prompt_template"].replace(ITEM, row["item_text"]), row["query"])
 
+    def test_redcode_gen_skips_rewrite_families(self):
+        from datasets.prepare.cluster.sources.cyber import SOURCES
+        source = next(s for s in SOURCES if s.name == "redcode_gen")
+        self.assertEqual(source.families_for(source.system_prompt), ["framing", "reconsideration", "scenario"])
+
 
 class TestCbrnTransforms(unittest.TestCase):
 
@@ -1929,6 +1934,15 @@ class TestCbrnTransforms(unittest.TestCase):
         self.assertEqual(built.iloc[2]["prompt_template"], ITEM)
         for _, row in built.iterrows():
             self.assertEqual(row["prompt_template"].replace(ITEM, row["instruction"]), row["query"])
+
+    def test_fortress_keeps_cbrn_subdomains_only(self):
+        from datasets.prepare.cluster.sources.cbrn import CBRNE, fortress_rows
+        frame = pd.DataFrame({
+            "risk_domain": [CBRNE] * 5 + ["Political Violence & Terrorism"],
+            "risk_subdomain": ["Chemical: x", "Biological: x", "Radiological and Nuclear (WMD): x",
+                               "Explosives: x", "Terrorism: x", "Chemical: x"],
+        })
+        self.assertEqual(list(fortress_rows(frame).index), [0, 1, 2])
 
     def test_lab_bench_drops_image_and_over_eight_option_items_and_shuffles_stably(self):
         from datasets.prepare.cluster.sources.cbrn import lab_bench_rows

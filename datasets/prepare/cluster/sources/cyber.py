@@ -402,5 +402,7 @@ SOURCES = [
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["family"],
         stratify=["family"],
+        # Rewrites of a Python stub are not meaningful perturbations; persona is dropped by the system prompt anyway.
+        families=["framing", "reconsideration", "scenario"],
     ),
 ]

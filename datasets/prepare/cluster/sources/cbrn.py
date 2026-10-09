@@ -233,7 +233,9 @@ def fortress_rubric(row: dict) -> str:
 
 
 def fortress_rows(df: pd.DataFrame) -> pd.DataFrame:
-    return df[df["risk_domain"] == CBRNE]
+    # Explosives is conventional-weapons harm, not CBRN; the one "Terrorism" row filed under CBRNE is attack planning.
+    cbrn = df["risk_subdomain"].str.startswith(("Chemical", "Biological", "Radiological"))
+    return df[(df["risk_domain"] == CBRNE) & cbrn]
 
 
 # ----- LAB-Bench -----
