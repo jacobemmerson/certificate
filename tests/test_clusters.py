@@ -2312,3 +2312,30 @@ class TestRelevanceWindow(unittest.TestCase):
         rows = self.rows(100, lambda i: (i * 37 % 11) / 11 + 0.1)
         source = self.source(relevance=0.25)
         self.assertEqual(self.take(rows, 5, source), self.take(rows, 5, source))
+
+    def test_relevance_outside_unit_interval_is_rejected(self):
+        for bad in (0, -0.1, 1.5):
+            with self.subTest(r=bad), self.assertRaises(ValueError):
+                prepare.relevance_for(self.source(relevance=bad))
+
+    def test_window_size_ignores_float_overshoot(self):
+        rows = self.rows(100, lambda i: 1.0)
+        caches = prepare.Caches({})
+        prepare._take(rows, list(range(100)), 3, self.source(relevance=0.3), 0, caches)
+        self.assertEqual(caches.relevance_window, 10)  # 3 / 0.3 is 10.000000000000002 in floats
+
+    def test_screen_shortfall_still_raises_at_full_relevance(self):
+        rows = [make_row(sample_id=f"src:{i}", query=f"request {i}", metadata={"relevance": 1.0})
+                for i in range(100)]
+        source = self.source(elicitation_family=COMPLIANCE)
+        caches = prepare.Caches(embeddings={}, verdicts={
+            prepare.screen_key(row): {"verdict": "refused", "model": "test/hermes"} for row in rows})
+        with self.assertRaisesRegex(ValueError, "Raise SCREEN_FACTOR"):
+            prepare._take(rows, list(range(100)), 10, source, 0, caches)
+
+    def test_window_counter_sums_across_strata(self):
+        rows = self.rows(100, lambda i: 1.0, stratum=lambda i: "a" if i < 50 else "b")
+        source = self.source(relevance=0.5, stratify=["stratum"])
+        caches = prepare.Caches({})
+        prepare.stratified_sample(rows, source, 0, caches, quota=10)
+        self.assertEqual(caches.relevance_window, 20)  # 2 strata x ceil(5 / 0.5)

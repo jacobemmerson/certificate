@@ -813,7 +813,10 @@ def _payload_fn(dedup_on: str | None):
 
 
 def relevance_for(source: Source) -> float:
-    return source.relevance if source.relevance is not None else (0.5 if source.role == "diagnostic" else 1.0)
+    r = source.relevance if source.relevance is not None else (0.5 if source.role == "diagnostic" else 1.0)
+    if not 0 < r <= 1:
+        raise ValueError(f"{source.name}: relevance must be in (0, 1], got {r}")
+    return r
 
 
 def _window(
@@ -830,7 +833,7 @@ def _window(
     if not indices or any("relevance" not in rows[i].metadata for i in indices):
         return indices
     ranked = sorted(indices, key=lambda i: (-rows[i].metadata["relevance"], key_bytes(rows[i], seed)))
-    window = ranked[: min(len(ranked), math.ceil(n_needed / relevance_for(source)))]
+    window = ranked[: min(len(ranked), math.ceil(round(n_needed / relevance_for(source), 9)))]
     if caches is not None:
         caches.relevance_window += len(window)
     return window
@@ -850,10 +853,11 @@ def _take(
     if caches is None or caches.verdicts is None or not source.screened():
         return _select(rows, _window(rows, indices, take, source, seed, caches), take, source, seed, caches)
     n_screen = math.ceil(SCREEN_FACTOR * take)
-    indices = _window(rows, indices, n_screen, source, seed, caches)
-    pool = _select(rows, indices, n_screen, source, seed, caches)
+    stratum_size = len(indices)
+    window = _window(rows, indices, n_screen, source, seed, caches)
+    pool = _select(rows, window, n_screen, source, seed, caches)
     kept = _screen(rows, pool, caches)
-    if len(kept) < take and len(pool) < len(indices):
+    if len(kept) < take and len(pool) < stratum_size:
         raise ValueError(
             f"{source.name}: the screen kept {len(kept)} of {len(pool)} candidates for an "
             f"allotment of {take}; short by {take - len(kept)}. Raise SCREEN_FACTOR "
