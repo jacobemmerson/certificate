@@ -10,7 +10,7 @@
 # first run after a dataset rebuild, because --missing-only keeps rows for
 # sample ids that no longer exist. The app is stopped on exit unless
 # KEEP_WARM=1; a kept-warm app bills 4xH100 until
-# `uvx modal app stop -y <HERMES_APP>` or 24 h. The modal log (with HERMES_URL
+# `uv run modal app stop -y <HERMES_APP>` or 24 h. The modal log (with HERMES_URL
 # and HERMES_APP) is logs/hermes-modal-<timestamp>.log.
 #
 # Smoke tests, in order, before the full run (a throughput number is the deliverable):
@@ -19,7 +19,7 @@
 # 3. Only then: full `FORCE=1 scripts/generate_hermes_modal.sh`.
 # Record the requests/s from test 1. URL is the HERMES_URL line in the log.
 #
-# modal, like vllm, runs through uvx and stays out of uv.lock (see the
+# modal is a project dependency (uv run modal); vllm stays out of uv.lock (see the
 # venv-drift note in pyproject.toml). inspect's vllm/ provider sends
 # $VLLM_API_KEY as the bearer token.
 
@@ -28,7 +28,7 @@ cd "$(dirname "$0")/.."
 
 : "${VLLM_API_KEY:?set VLLM_API_KEY to the value stored in the hermes-vllm Modal secret}"
 export VLLM_API_KEY
-command -v uvx > /dev/null || { echo "uvx not on PATH"; exit 1; }
+command -v uv > /dev/null || { echo "uv not on PATH"; exit 1; }
 
 MODEL="NousResearch/Hermes-4-70B"
 
@@ -38,17 +38,17 @@ MODEL="NousResearch/Hermes-4-70B"
 # Rich from wrapping the "View run at .../ap-<id>" line the app id is read from.
 mkdir -p logs
 LOG="logs/hermes-modal-$(date +%Y%m%d-%H%M%S).log"
-COLUMNS=200 uvx modal run --detach scripts/hermes_modal.py::serve > "$LOG" 2>&1 &
+COLUMNS=200 uv run modal run --detach scripts/hermes_modal.py::serve > "$LOG" 2>&1 &
 CLIENT_PID=$!
 APP=""
 stop() {
     kill $CLIENT_PID 2>/dev/null || true
     if [ "${KEEP_WARM:-0}" = 1 ]; then
-        echo "KEEP_WARM=1: app $APP still running (4xH100 billing); stop it with: uvx modal app stop -y $APP"
+        echo "KEEP_WARM=1: app $APP still running (4xH100 billing); stop it with: uv run modal app stop -y $APP"
     elif [ -n "$APP" ]; then
-        uvx modal app stop -y "$APP"
+        uv run modal app stop -y "$APP"
     else
-        echo "no app id in $LOG; check \`uvx modal app list\` for a running hermes-vllm app"
+        echo "no app id in $LOG; check \`uv run modal app list\` for a running hermes-vllm app"
     fi
 }
 trap stop EXIT

@@ -2,13 +2,13 @@
 
 Modal only hosts the model. screen_answerability.py and generate.py run from
 this checkout and reach it via --model-base-url; scripts/generate_hermes_modal.sh
-does the whole job. Like vllm on slurm, modal runs through uvx and stays out of
+does the whole job. modal is a project dependency; vllm, as on slurm, stays out of
 uv.lock (see the venv-drift note in pyproject.toml).
 
     export VLLM_API_KEY=$(openssl rand -hex 32)   # once; save it (e.g. in .env), clients need it
-    uvx modal secret create hermes-vllm VLLM_API_KEY="$VLLM_API_KEY"
-    uvx modal run --detach scripts/hermes_modal.py::serve
-    uvx modal app stop -y <HERMES_APP>
+    uv run modal secret create hermes-vllm VLLM_API_KEY="$VLLM_API_KEY"
+    uv run modal run --detach scripts/hermes_modal.py::serve
+    uv run modal app stop -y <HERMES_APP>
 
 The server sits behind a modal.forward tunnel, not a web endpoint: Modal cuts
 web-endpoint requests at 150 s, and reasoning-mode scenario calls run longer.
@@ -16,7 +16,7 @@ web-endpoint requests at 150 s, and reasoning-mode scenario calls run longer.
 URL> and HERMES_APP=<app id>. --detach keeps the container up after the local
 client exits, until `modal app stop` or the 24 h function timeout. Stop it by
 the app id: `modal app stop <name>` only finds deployed apps, not this
-ephemeral one (`uvx modal app list` also shows it).
+ephemeral one (`uv run modal app list` also shows it).
 
 Cost: 4xH100 bill for the whole time the container is up, busy or idle
 (roughly $16/h at ~$4 per H100-hour; see modal.com/pricing). The first start
