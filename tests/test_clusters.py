@@ -2099,3 +2099,124 @@ class TestLeaves(unittest.TestCase):
                 if source.relevance is not None:
                     self.assertGreater(source.relevance, 0)
                     self.assertLessEqual(source.relevance, 1)
+
+
+class TestRelevanceFilter(unittest.TestCase):
+
+    def leaf(self, vectors, threshold=None):
+        '''A leaf whose legal text and exemplars embed to `vectors`, in order.'''
+        from datasets.prepare.cluster.leaves import Leaf, anchor_texts
+        leaf = Leaf(id="leaf", title="Leaf", cop_ref="Appendix 1.4(a)", legal_text="the law",
+                    exemplars=tuple(f"exemplar {i}" for i in range(len(vectors) - 1)),
+                    threshold=threshold)
+        cache = {prepare.embed_key(text): unit(*v) for text, v in zip(anchor_texts(leaf), vectors)}
+        return leaf, cache
+
+    def source(self, name="src", **overrides) -> Source:
+        return Source(**{"name": name, "risk": "cbrn", "question_type": GRADED,
+                         "path": "unused", "leaf": "leaf", **overrides})
+
+    def rows(self, name, vectors, **fields):
+        rows = [make_row(sample_id=f"{name}:{i}", source=name, query=f"{name} item {i}", **fields)
+                for i in range(len(vectors))]
+        return rows, embedded(rows, vectors)
+
+    def run_filter(self, pools, embeddings, leaf, cache, budget):
+        return prepare.relevance_filter(pools, {"leaf": leaf}, embeddings, cache, budget)
+
+    def test_threshold_is_the_leave_one_out_tenth_percentile(self):
+        # Leave-one-out maxima: 0.6, 0.8, 0.8, 0.0 -> sorted 0, .6, .8, .8; p10 = 0.3 * 0.6.
+        leaf, cache = self.leaf([(1, 0), (0.6, 0.8), (0, 1), (-1, 0)])
+        _, matrix = prepare.leaf_anchors(leaf, cache)
+        self.assertAlmostEqual(prepare.leaf_threshold(matrix, None), 0.18, places=6)
+        self.assertEqual(prepare.leaf_threshold(matrix, 0.9), 0.9)
+
+    def test_a_single_anchor_calibrates_nothing(self):
+        leaf, cache = self.leaf([(1, 0)])
+        _, matrix = prepare.leaf_anchors(leaf, cache)
+        self.assertEqual(prepare.leaf_threshold(matrix, None), 0.0)
+
+    def test_a_missing_anchor_raises_cache_miss(self):
+        leaf, _ = self.leaf([(1, 0), (0, 1)])
+        with self.assertRaises(prepare.CacheMiss):
+            prepare.leaf_anchors(leaf, {})
+
+    def test_a_pool_smaller_than_the_floor_keeps_everything(self):
+        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0)])
+        rows, embeddings = self.rows("src", [(0, i + 1, 1) for i in range(5)])
+        pools, dropped, report = self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 2)
+        self.assertEqual(len(pools[0][1]), 5)
+        self.assertEqual(dropped, [])
+        self.assertTrue(report["src"]["relevance_floor_used"])
+
+    def planted(self, n_planted):
+        '''2,000 rows: n_planted copies of the legal anchor, the rest with distinct low scores.'''
+        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0)])
+        vectors = [(1, 0, 0) if i < n_planted else (i, 2000, 0) for i in range(2000)]
+        rows, embeddings = self.rows("src", vectors)
+        # One source, budget 10 -> share 10 rows -> floor max(35, 20, 1) = 35.
+        return self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 10)
+
+    def test_look_alikes_above_the_floor_are_kept_exactly(self):
+        pools, dropped, report = self.planted(50)
+        self.assertEqual({row.sample_id for row in pools[0][1]}, {f"src:{i}" for i in range(50)})
+        self.assertFalse(report["src"]["relevance_floor_used"])
+        self.assertEqual(len(dropped), 1950)
+        self.assertEqual(report["src"]["anchor_hits"], {"legal": 50})
+        self.assertEqual(pools[0][1][0].metadata["relevance_anchor"], "legal")
+        self.assertEqual(pools[0][1][0].metadata["relevance"], 1.0)
+
+    def test_too_few_look_alikes_fill_up_to_the_floor_by_rank(self):
+        pools, _, report = self.planted(20)
+        top = {f"src:{i}" for i in range(1999, 1984, -1)}  # the 15 best-scoring others
+        self.assertEqual({row.sample_id for row in pools[0][1]},
+                         {f"src:{i}" for i in range(20)} | top)
+        self.assertTrue(report["src"]["relevance_floor_used"])
+        self.assertEqual(report["src"]["relevance_kept"], 35)
+        ids = [row.sample_id for row in pools[0][1]]
+        self.assertEqual(ids, sorted(ids, key=lambda i: int(i.split(":")[1])))
+
+    def test_a_leafless_source_passes_through_unscored(self):
+        leaf, cache = self.leaf([(1, 0), (0, 1)])
+        rows, embeddings = self.rows("src", [(1, 1)] * 3)
+        pools, dropped, report = self.run_filter(
+            [(self.source(leaf=None), rows)], embeddings, leaf, cache, 2)
+        self.assertIs(pools[0][1], rows)
+        self.assertEqual(dropped, [])
+        self.assertEqual(report["src"], {"leaf": None, "relevance": "unscored"})
+        self.assertNotIn("relevance", rows[0].metadata)
+
+    def test_two_runs_are_identical(self):
+        first, second = self.planted(20), self.planted(20)
+        self.assertEqual([row.sample_id for row in first[0][0][1]],
+                         [row.sample_id for row in second[0][0][1]])
+        self.assertEqual(first[1], second[1])
+        self.assertEqual(first[2], second[2])
+
+    def test_a_filtered_source_frees_budget_for_the_others(self):
+        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0)])
+        scored, scored_vectors = self.rows("a", [(1, 0, 0) if i < 40 else (i, 2000, 0) for i in range(1000)])
+        other, other_vectors = self.rows("b", [(0, 0, 1)] * 1000)
+        pools = [(self.source("a"), scored), (self.source("b", leaf=None), other)]
+        filtered, _, _ = self.run_filter(pools, {**scored_vectors, **other_vectors}, leaf, cache, 20)
+        self.assertEqual(len(filtered[0][1]), 40)
+        self.assertEqual(prepare.allocate_budget(pools, 200), {"a": 100, "b": 100})
+        self.assertEqual(prepare.allocate_budget(filtered, 200), {"a": 40, "b": 160})
+
+    def test_group_key_sources_keep_or_drop_whole_groups(self):
+        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0)])
+        rows = [make_row(sample_id=f"src:{g}-{arm}", query=f"scenario {g} arm {arm}",
+                         metadata={"scenario": f"s{g}"})
+                for g in range(30) for arm in range(3)]
+        # One arm of each of the first five scenarios is a look-alike.
+        embeddings = embedded(rows, [(1, 0, 0) if g < 5 and arm == 1 else (0, 1, 0)
+                                     for g in range(30) for arm in range(3)])
+        source = self.source(group_key="scenario")
+        # Budget 3 = one 3-arm group -> floor ceil(3.5 * 3) = 11 rows, below the 15 planted.
+        pools, _, report = self.run_filter([(source, rows)], embeddings, leaf, cache, 3)
+        kept = pools[0][1]
+        self.assertEqual({row.metadata["scenario"] for row in kept}, {f"s{g}" for g in range(5)})
+        self.assertEqual(len(kept), 15)
+        self.assertFalse(report["src"]["relevance_floor_used"])
+        # The kept non-planted arms sit closer to the exemplar than to the legal anchor.
+        self.assertEqual(report["src"]["anchor_hits"], {"exemplar:0": 10, "legal": 5})

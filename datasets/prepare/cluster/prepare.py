@@ -7,8 +7,9 @@ Build the risk-cluster datasets.
 Writes datasets/public/<risk>.csv plus a <risk>.meta.json sibling (provenance:
 seed, budget and shares, per-tier drop counts, embedding model and threshold, screen model
 and refusals, source revisions) and <risk>.dropped.jsonl (every pair tiers exact,
-near, exact_cross_source and near_cross_source removed and every candidate the
-screen dropped, each tagged with its `tier`, so thresholds are reviewable rather than trusted).
+near, exact_cross_source and near_cross_source removed, every row scored below
+its leaf's relevance threshold and every candidate the screen dropped, each
+tagged with its `tier`, so thresholds are reviewable rather than trusted).
 
 Reads two gitignored caches under datasets/cache/. On a miss it writes what is
 missing, prints the command that fills it and exits 2: embeddings first, then
@@ -31,7 +32,7 @@ import numpy as np
 import pandas as pd
 
 from . import readers
-from .leaves import anchor_texts, load_leaves
+from .leaves import Leaf, anchor_texts, load_leaves
 from .schema import (
     COLUMNS, ITEM, MCQ, Row, SchemaError, Source, normalised, validate,
 )
@@ -552,6 +553,118 @@ def cross_source_near_dedup(
     return kept_pools, dropped
 
 
+# ----- tier 2c: relevance to the source's legal-group leaf -----
+
+def leaf_anchors(leaf: Leaf, leaf_embeddings: dict[str, np.ndarray]) -> tuple[list[str], np.ndarray]:
+    '''Anchor names ("legal", then "exemplar:<i>") and their vectors as float64 rows.'''
+    names = ["legal", *(f"exemplar:{i}" for i in range(len(leaf.exemplars)))]
+    keys = [embed_key(text) for text in anchor_texts(leaf)]
+    missing = [name for name, key in zip(names, keys) if key not in leaf_embeddings]
+    if missing:
+        raise CacheMiss(f"leaf {leaf.id!r}: no embedding for anchors {missing}; "
+                        f"run: {EMBED_COMMAND.format(risk='leaves')}")
+    return names, np.array([leaf_embeddings[key] for key in keys], dtype=np.float64)
+
+
+def relevance_scores(
+    rows: list[Row], matrix: np.ndarray, embeddings: dict[str, np.ndarray]
+) -> tuple[np.ndarray, np.ndarray]:
+    '''Each row's max cosine over the anchors, and the index of the anchor that
+    attains it (the first, on a tie). Rounded so BLAS summation order cannot
+    reorder rows across machines.'''
+    vectors = _vectors(rows, _payload_fn(None), embeddings).astype(np.float64)
+    similarity = np.round(vectors @ matrix.T, 9)
+    return similarity.max(axis=1), similarity.argmax(axis=1)
+
+
+def leaf_threshold(matrix: np.ndarray, override: float | None) -> float:
+    '''
+    The cosine a row must reach to count as on-topic for this leaf: the 10th
+    percentile of each anchor's leave-one-out max similarity to the others, so
+    the bar is "about as close to the leaf as its own anchors are to each
+    other". A fixed 0.9 is not the default because on MiniLM that is
+    near-duplicate territory (near-dedup drops at COSINE_TAU = 0.92): a row
+    scoring 0.9 against an exemplar is a rewording of it, so 0.9 would keep
+    almost nothing and the floor in relevance_filter would decide every time.
+    One anchor calibrates nothing, so it returns 0.0: only rows pointing away
+    from the anchor drop, and the floor still applies.
+    '''
+    if override is not None:
+        return override
+    if len(matrix) < 2:
+        return 0.0
+    similarity = np.round(matrix @ matrix.T, 9)
+    np.fill_diagonal(similarity, -np.inf)
+    return round(float(np.percentile(similarity.max(axis=1), 10)), 9)
+
+
+def relevance_filter(
+    pools: list[tuple[Source, list[Row]]], leaves: dict[str, Leaf],
+    embeddings: dict[str, np.ndarray], leaf_embeddings: dict[str, np.ndarray], budget: int,
+) -> tuple[list[tuple[Source, list[Row]]], list[dict], dict[str, dict]]:
+    '''
+    Drop rows scoring below their leaf's threshold, but never below a floor of
+    max(SCREEN_FACTOR x provisional share, 1% of the pool) rows, so the screen
+    still has its candidates when the threshold bites hard. Kept rows carry
+    their score and best anchor in metadata. A group_key source is kept or
+    dropped by whole groups, scored by the group's best arm. Sources with no
+    leaf pass through unscored.
+    '''
+    shares = allocate_budget(pools, budget)
+    kept_pools, dropped, report = [], [], {}
+    for source, rows in pools:
+        if not source.leaf or not rows:
+            kept_pools.append((source, rows))
+            report[source.name] = {"leaf": source.leaf, "relevance": "unscored" if not source.leaf else "empty"}
+            continue
+        leaf = leaves[source.leaf]
+        names, matrix = leaf_anchors(leaf, leaf_embeddings)
+        theta = leaf_threshold(matrix, leaf.threshold)
+        scores, hit = relevance_scores(rows, matrix, embeddings)
+
+        unit_scores = scores
+        if source.group_key:
+            best: dict[str, float] = {}
+            group_of = [str(row.metadata.get(source.group_key, i)) for i, row in enumerate(rows)]
+            for group, score in zip(group_of, scores):
+                best[group] = max(best.get(group, -np.inf), float(score))
+            unit_scores = np.array([best[group] for group in group_of])
+
+        share_rows = shares[source.name] * _group_size(source, rows)
+        n_floor = max(math.ceil(SCREEN_FACTOR * share_rows), math.ceil(0.01 * len(rows)), 1)
+        ranked = np.sort(unit_scores)[::-1]
+        threshold_eff = min(theta, float(ranked[min(n_floor, len(rows)) - 1]))
+
+        kept, hits = [], defaultdict(int)
+        for row, unit_score, score, anchor in zip(rows, unit_scores, scores, hit):
+            if unit_score >= threshold_eff:
+                # A fresh dict: readers may share one metadata dict across rows.
+                row.metadata = {**row.metadata, "relevance": float(score),
+                                "relevance_anchor": names[anchor]}
+                kept.append(row)
+                hits[names[anchor]] += 1
+            else:
+                dropped.append({
+                    "tier": "relevance", "dropped": row.sample_id,
+                    "dropped_text": row.query[:300], "score": float(score),
+                    "threshold": threshold_eff, "leaf": source.leaf,
+                })
+        kept_pools.append((source, kept))
+        quantiles = np.percentile(scores, [0, 10, 50, 90, 100])
+        report[source.name] = {
+            "leaf": source.leaf,
+            "relevance_threshold": theta,
+            "relevance_threshold_eff": threshold_eff,
+            "relevance_floor_used": threshold_eff < theta,
+            "relevance_pool": len(rows),
+            "relevance_kept": len(kept),
+            "score_quantiles": dict(zip(("min", "p10", "p50", "p90", "max"),
+                                        (round(float(q), 9) for q in quantiles))),
+            "anchor_hits": dict(sorted(hits.items())),
+        }
+    return kept_pools, dropped, report
+
+
 # ----- tier 3: stratified quota -----
 
 def stratified_sample(
@@ -930,10 +1043,18 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
     all_dropped.extend(cross_dropped)
     pools, cross_near_dropped = cross_source_near_dedup(pools, embeddings)
     all_dropped.extend(cross_near_dropped)
+    for source, rows in pools:
+        report[source.name]["cross_source_dropped"] = sizes[source.name] - len(rows)
+
+    pools, relevance_dropped, relevance_report = relevance_filter(
+        pools, load_leaves(), embeddings, leaf_embeddings, budget_for(risk))
+    all_dropped.extend(relevance_dropped)
+    for name, stats in relevance_report.items():
+        report[name].update(stats)
+
     caches = Caches(embeddings, verdicts=load_screen(risk))
     allocation = allocate_budget(pools, budget_for(risk))
     for source, rows in pools:
-        report[source.name]["cross_source_dropped"] = sizes[source.name] - len(rows)
         refused, candidates = len(caches.refused), caches.candidates
         rows, sample = stratified_sample(rows, source, seed, caches, quota=allocation[source.name])
         report[source.name].update({
