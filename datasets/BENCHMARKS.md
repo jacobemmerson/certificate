@@ -622,7 +622,7 @@ Code of Practice and each benchmark's annotation, for the annotators to correct)
   2 exemplars gets theta 0.0 (a warning), and the floor still applies.
 - **Floor.** The filter keeps at least max(3.5 x the source's provisional share, 1% of the pool)
   rows, so the screen still has its candidates. Where theta already keeps more, the floor does
-  not bind. The budget is not re-flowed except for pools that fall below the floor.
+  not bind. The floor guarantees every kept pool is at least 3.5× its provisional share, so water-filling is unaffected by the filter in practice; it only removes off-topic candidates.
 - **Window (r).** `Source.relevance` r in (0, 1], default 1.0 pooled and 0.5 diagnostic. Selection
   may only choose from the top ceil(n / r) kept rows by score, so r = 1 only reorders and
   r = 0.25 restricts to the top 4x. A `group_key` source ranks a group by its best arm.

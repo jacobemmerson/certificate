@@ -1729,6 +1729,20 @@ class TestPrintReport(unittest.TestCase):
         unscored = next(l for l in lines if l.strip().startswith("c "))
         self.assertEqual(unscored.split()[5:7], ["-", "-"])
 
+    def test_report_without_relevance_keys_renders(self):
+        lines = self.render({"old": {"loaded": 9, "exact_dropped": 0, "near_dropped": 0,
+                                     "cross_source_dropped": 0, "kept": 7}})
+        self.assertTrue(any(line.strip().startswith("old ") for line in lines))
+        self.assertFalse(any("relevance" in line or "exemplars" in line for line in lines))
+
+    def test_zero_exemplar_leaf_skips_anchor_concentration_warning(self):
+        stats = {"loaded": 9, "exact_dropped": 0, "near_dropped": 0, "cross_source_dropped": 0,
+                 "kept": 7, "relevance_status": "scored", "leaf": "lf", "leaf_exemplars": 0,
+                 "relevance_threshold": 0.0, "relevance_threshold_eff": 0.0,
+                 "relevance_floor_used": False, "relevance_pool": 10, "relevance_kept": 10,
+                 "anchor_hits": {"legal": 10}}
+        self.assertNotIn("match one anchor", "\n".join(self.render({"a": stats})))
+
 
 class TestBuiltClusters(unittest.TestCase):
     '''Checks against the committed artifacts, skipped before a first build.'''
