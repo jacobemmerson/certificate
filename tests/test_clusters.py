@@ -740,7 +740,7 @@ class TestEmbeddingCache(unittest.TestCase):
         known = {prepare.embed_key("gamma"): unit(1, 0)}
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
             with self.assertRaises(prepare.CacheMiss) as raised:
-                prepare.require_embeddings("cbrn", [(self.source(), rows)], known)
+                prepare.require_embeddings("cbrn", [(self.source(), rows)], known, {})
             lines = (Path(tmp) / "cbrn.embed_input.jsonl").read_text().splitlines()
         self.assertEqual([json.loads(line) for line in lines],
                          [{"key": prepare.embed_key("alpha beta"), "text": "alpha beta"}])
@@ -750,12 +750,32 @@ class TestEmbeddingCache(unittest.TestCase):
     def test_nothing_missing_writes_nothing(self):
         rows = [make_row(query="gamma")]
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
-            prepare.require_embeddings("cbrn", [(self.source(), rows)], embedded(rows, [(1, 0)]))
+            prepare.require_embeddings("cbrn", [(self.source(), rows)], embedded(rows, [(1, 0)]), {})
             self.assertEqual(list(Path(tmp).iterdir()), [])
+
+    def test_missing_leaf_anchors_are_collected_separately(self):
+        from datasets.prepare.cluster.leaves import anchor_texts, load_leaves
+        leaves = load_leaves()
+        leaf_id = next(iter(leaves))
+        rows = [make_row(query="gamma")]
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            pools = [(self.source(leaf=leaf_id), rows)]
+            with self.assertRaises(prepare.CacheMiss) as raised:
+                prepare.require_embeddings("cbrn", pools, embedded(rows, [(1, 0)]), {})
+            written = [json.loads(line)["text"] for line in
+                       (Path(tmp) / "leaves.embed_input.jsonl").read_text().splitlines()]
+            self.assertEqual(sorted(written), sorted({prepare.normalised(t) for t in anchor_texts(leaves[leaf_id])}))
+            self.assertIn("--risk leaves", str(raised.exception))
+            present = {prepare.embed_key(t): unit(1, 0) for t in anchor_texts(leaves[leaf_id])}
+            prepare.require_embeddings("cbrn", pools, embedded(rows, [(1, 0)]), present)
+
+    def test_a_leafless_source_needs_no_anchors(self):
+        rows = [make_row(query="gamma")]
+        prepare.require_embeddings("cbrn", [(self.source(), rows)], embedded(rows, [(1, 0)]), {})
 
     def test_an_empty_payload_needs_no_embedding(self):
         rows = [make_row(query="", metadata={"event": ""})]
-        prepare.require_embeddings("cbrn", [(self.source(dedup_on="event"), rows)], {})
+        prepare.require_embeddings("cbrn", [(self.source(dedup_on="event"), rows)], {}, {})
 
     def test_load_embeddings_renormalises_and_tolerates_absence(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
@@ -1039,7 +1059,7 @@ class TestCrossSourceNearDedup(unittest.TestCase):
         embeddings = embedded([row], [(1, 0)], payload=lambda r: r.metadata["event"])
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
             with self.assertRaises(prepare.CacheMiss):
-                prepare.require_embeddings("cbrn", [(source, [row])], embeddings)
+                prepare.require_embeddings("cbrn", [(source, [row])], embeddings, {})
             written = [json.loads(line) for line in (Path(tmp) / "cbrn.embed_input.jsonl").read_text().splitlines()]
         self.assertEqual([w["text"] for w in written], ["the wrapper"])
 

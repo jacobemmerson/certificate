@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 
 from . import readers
+from .leaves import anchor_texts, load_leaves
 from .schema import (
     COLUMNS, ITEM, MCQ, Row, SchemaError, Source, normalised, validate,
 )
@@ -179,9 +180,9 @@ def load_embeddings(risk: str) -> dict[str, np.ndarray]:
 
 
 def require_embeddings(
-    risk: str, pools: list[tuple[Source, list[Row]]], embeddings: dict
+    risk: str, pools: list[tuple[Source, list[Row]]], embeddings: dict, leaf_embeddings: dict
 ) -> None:
-    '''Raise CacheMiss, after writing the embed input, if any payload lacks a vector.'''
+    '''Raise CacheMiss, after writing the embed input, if any payload or leaf anchor lacks a vector.'''
     missing = {}
     for source, rows in pools:
         payload = _payload_fn(source.dedup_on)
@@ -195,6 +196,19 @@ def require_embeddings(
             CACHE_DIR / f"{risk}.embed_input.jsonl",
             [{"key": key, "text": text} for key, text in sorted(missing.items())],
             EMBED_COMMAND.format(risk=risk),
+        )
+    leaves = load_leaves()
+    anchors = {
+        embed_key(text): normalised(text)
+        for leaf in {source.leaf for source, _ in pools if source.leaf}
+        for text in anchor_texts(leaves[leaf])
+    }
+    missing_anchors = {key: text for key, text in anchors.items() if key not in leaf_embeddings}
+    if missing_anchors:
+        raise _cache_miss(
+            CACHE_DIR / "leaves.embed_input.jsonl",
+            [{"key": key, "text": text} for key, text in sorted(missing_anchors.items())],
+            EMBED_COMMAND.format(risk="leaves"),
         )
 
 # Tier 2: cosine similarity of all-MiniLM-L6-v2 embeddings at or above this is a
@@ -890,7 +904,8 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
         pools.append((source, rows))
 
     embeddings = load_embeddings(risk)
-    require_embeddings(risk, pools, embeddings)
+    leaf_embeddings = load_embeddings("leaves")
+    require_embeddings(risk, pools, embeddings, leaf_embeddings)
 
     # Tier 2 is per-source, because tau, dedup_on and distinct_on are per-source
     # declarations. Tier 1b then runs over the assembled pools — before tier 3,
