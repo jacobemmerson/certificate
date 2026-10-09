@@ -7,8 +7,13 @@
 # SCREEN_ONLY=1 stops after the screen. KEEP_WARM=1 skips stopping the app on
 # exit; otherwise it scales to zero 15 min after the last request anyway.
 #
-# Smoke-test first, with the app deployed (KEEP_WARM=1 SCREEN_ONLY=1 works):
-#     uv run python generate.py --attacker vllm/$MODEL --model-base-url $URL/v1 --limit 5 --only cyber
+# Smoke-test first. KEEP_WARM=1 SCREEN_ONLY=1 deploys and runs the WHOLE screen,
+# then leaves the app up; take URL from the "*.modal.run" line deploy printed.
+# Modal web endpoints cut a request at 150 s, so exercise the slowest path
+# (reasoning-mode scenario trees) on one item:
+#     URL=https://<workspace>--hermes-vllm-serve.modal.run
+#     uv run python generate.py --attacker vllm/NousResearch/Hermes-4-70B \
+#         --model-base-url $URL/v1 --only cyber --limit 1 --no-perturb --simulate --reasoning
 #
 # modal, like vllm, runs through uvx and stays out of uv.lock (see the
 # venv-drift note in pyproject.toml). inspect's vllm/ provider sends
@@ -27,7 +32,7 @@ MODEL="NousResearch/Hermes-4-70B"
 URL=$(uvx modal deploy scripts/hermes_modal.py | tee /dev/stderr \
     | grep -o 'https://[^ ]*\.modal\.run' | head -1 || true)
 [ -n "$URL" ] || { echo "no *.modal.run URL in deploy output"; exit 1; }
-[ "${KEEP_WARM:-0}" = 1 ] || trap 'uvx modal app stop hermes-vllm' EXIT
+[ "${KEEP_WARM:-0}" = 1 ] || trap 'uvx modal app stop -y hermes-vllm' EXIT
 
 # The first request starts the container; a cold start downloads ~140 GB of
 # weights into the hf-cache volume, so give it up to ~40 min.
