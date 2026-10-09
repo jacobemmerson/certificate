@@ -73,6 +73,7 @@ class Caches:
     missing: dict[str, dict] = field(default_factory=dict)  # screen inputs still needed
     refused: list[dict] = field(default_factory=list)       # "screen" tier drop records
     candidates: int = 0                                      # rows sent through the screen
+    relevance_window: int = 0                                # candidates left after the relevance window
     selected: list[np.ndarray] = field(default_factory=list)  # query vectors of rows already kept
 
     def anchors(self) -> np.ndarray | None:
@@ -800,6 +801,30 @@ def _payload_fn(dedup_on: str | None):
     return lambda row: row.query
 
 
+def relevance_for(source: Source) -> float:
+    return source.relevance if source.relevance is not None else (0.5 if source.role == "diagnostic" else 1.0)
+
+
+def _window(
+    rows: list[Row], indices: list[int], n_needed: int, source: Source, seed: int,
+    caches: Caches | None,
+) -> list[int]:
+    '''
+    The most relevant ceil(n_needed / r) candidates, so r is the fraction of the
+    window the selection fills: r = 1 only reorders, r < 1 widens the pool
+    the selection (and screen) may choose from. A source without scores, or any
+    row without one, is left as it is. Grouped sources window over their
+    leaders, so a group ranks by its first row's score.
+    '''
+    if not indices or any("relevance" not in rows[i].metadata for i in indices):
+        return indices
+    ranked = sorted(indices, key=lambda i: (-rows[i].metadata["relevance"], key_bytes(rows[i], seed)))
+    window = ranked[: min(len(ranked), math.ceil(n_needed / relevance_for(source)))]
+    if caches is not None:
+        caches.relevance_window += len(window)
+    return window
+
+
 def _take(
     rows: list[Row], indices: list[int], take: int, source: Source, seed: int,
     caches: Caches | None = None,
@@ -812,8 +837,10 @@ def _take(
     the pre-selection already covers the whole stratum.
     '''
     if caches is None or caches.verdicts is None or not source.screened():
-        return _select(rows, indices, take, source, seed, caches)
-    pool = _select(rows, indices, math.ceil(SCREEN_FACTOR * take), source, seed, caches)
+        return _select(rows, _window(rows, indices, take, source, seed, caches), take, source, seed, caches)
+    n_screen = math.ceil(SCREEN_FACTOR * take)
+    indices = _window(rows, indices, n_screen, source, seed, caches)
+    pool = _select(rows, indices, n_screen, source, seed, caches)
     kept = _screen(rows, pool, caches)
     if len(kept) < take and len(pool) < len(indices):
         raise ValueError(
@@ -1060,6 +1087,7 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
     allocation = allocate_budget(pools, budget_for(risk))
     for source, rows in pools:
         refused, candidates = len(caches.refused), caches.candidates
+        window = caches.relevance_window
         rows, sample = stratified_sample(rows, source, seed, caches, quota=allocation[source.name])
         report[source.name].update({
             "kept": len(rows),
@@ -1068,6 +1096,9 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
             "strata": sample["strata"],
             "divergence": sample["divergence"],
         })
+        if caches.relevance_window > window:
+            report[source.name].update(relevance=relevance_for(source),
+                                       relevance_window=caches.relevance_window - window)
         if source.screened():
             report[source.name]["screen_candidates"] = caches.candidates - candidates
             report[source.name]["screen_refused"] = len(caches.refused) - refused

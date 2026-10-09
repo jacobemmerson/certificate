@@ -2227,3 +2227,51 @@ class TestRelevanceFilter(unittest.TestCase):
         self.assertFalse(report["src"]["relevance_floor_used"])
         # The kept non-planted arms sit closer to the exemplar than to the legal anchor.
         self.assertEqual(report["src"]["anchor_hits"], {"exemplar:0": 10, "legal": 5})
+
+
+class TestRelevanceWindow(unittest.TestCase):
+    '''The window narrows what selection may choose from; r = 1 and unscored rows change nothing.'''
+
+    def rows(self, n: int, score, stratum=lambda i: "a") -> list[Row]:
+        return [make_row(sample_id=f"src:{i}", query=f"item {i}",
+                         metadata={"stratum": stratum(i), **({"relevance": score(i)} if score else {})})
+                for i in range(n)]
+
+    def source(self, **overrides) -> Source:
+        return Source(name="src", risk="cbrn", question_type=GRADED, path="unused", quota=10, **overrides)
+
+    def take(self, rows, take, source=None, indices=None):
+        return sorted(prepare._take(rows, indices or list(range(len(rows))), take, source or self.source(), 0))
+
+    def test_relevance_defaults_by_role(self):
+        self.assertEqual(prepare.relevance_for(self.source()), 1.0)
+        self.assertEqual(prepare.relevance_for(self.source(role="diagnostic")), 0.5)
+        self.assertEqual(prepare.relevance_for(self.source(relevance=0.3)), 0.3)
+
+    def test_full_relevance_with_uniform_scores_matches_unscored(self):
+        scored = self.rows(100, lambda i: 0.7)
+        self.assertEqual(self.take(scored, 10), self.take(self.rows(100, None), 10))
+
+    def test_unscored_rows_are_untouched(self):
+        rows = self.rows(100, None)
+        self.assertEqual(self.take(rows, 10, self.source(relevance=0.25)), self.take(rows, 10))
+
+    def test_narrow_relevance_picks_only_from_the_top_window(self):
+        rows = self.rows(100, lambda i: 1.0 if i < 10 else 0.1)
+        caches = prepare.Caches({})
+        top = sorted(prepare._take(rows, list(range(100)), 2, self.source(relevance=0.25), 0, caches))
+        self.assertEqual(caches.relevance_window, 8)  # ceil(2 / 0.25)
+        self.assertTrue(all(i < 10 for i in top) and len(top) == 2)
+
+    def test_window_is_per_stratum(self):
+        rows = self.rows(100, lambda i: 1.0 if i % 10 < 2 else 0.1, stratum=lambda i: "a" if i < 50 else "b")
+        source = self.source(relevance=0.5, stratify=["stratum"])
+        chosen, _ = prepare._row_sample(rows, source, 0, None, 8)
+        self.assertEqual({row.metadata["stratum"] for row in chosen}, {"a", "b"})
+        self.assertEqual(len(chosen), 8)
+        self.assertTrue(all(row.metadata["relevance"] == 1.0 for row in chosen))  # 4 per stratum, window 8 of 10 high
+
+    def test_deterministic(self):
+        rows = self.rows(100, lambda i: (i * 37 % 11) / 11 + 0.1)
+        source = self.source(relevance=0.25)
+        self.assertEqual(self.take(rows, 5, source), self.take(rows, 5, source))
