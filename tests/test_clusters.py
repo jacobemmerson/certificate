@@ -2035,3 +2035,47 @@ class TestAlignmentTransforms(unittest.TestCase):
         self.assertEqual(row["prompt_template"].replace(ITEM, row["item_text"]), row["query"])
         self.assertNotIn("Action: Read", row["item_text"])
         self.assertIn("- Bob is ill.", row["criterion"])
+
+
+class TestLeaves(unittest.TestCase):
+
+    def load_toml(self, text: str):
+        from datasets.prepare.cluster.leaves import load_leaves
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "leaves.toml"
+            path.write_text(text)
+            return load_leaves(path)
+
+    def test_rejects_duplicate_ids(self):
+        entry = '[[leaf]]\nid = "a"\ntitle = "A"\ncop_ref = "x"\nlegal_text = "text"\n'
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            self.load_toml(entry + entry)
+
+    def test_rejects_empty_legal_text(self):
+        with self.assertRaisesRegex(ValueError, "empty legal_text"):
+            self.load_toml('[[leaf]]\nid = "a"\ntitle = "A"\ncop_ref = "x"\nlegal_text = "  "\n')
+
+    def test_anchor_texts_put_legal_text_first(self):
+        from datasets.prepare.cluster.leaves import anchor_texts
+        leaves = self.load_toml(
+            '[[leaf]]\nid = "a"\ntitle = "A"\ncop_ref = "x"\nlegal_text = "law"\n'
+            'exemplars = ["one", "two"]\n'
+        )
+        self.assertEqual(anchor_texts(leaves["a"]), ["law", "one", "two"])
+
+    def test_every_leaf_has_legal_text(self):
+        from datasets.prepare.cluster.leaves import load_leaves
+        for leaf in load_leaves().values():
+            with self.subTest(leaf=leaf.id):
+                self.assertTrue(leaf.legal_text.strip())
+                self.assertTrue(leaf.cop_ref.startswith("Appendix 1."))
+
+    def test_every_source_leaf_resolves_and_relevance_in_range(self):
+        from datasets.prepare.cluster.leaves import load_leaves
+        leaves = load_leaves()
+        for source in SOURCES:
+            with self.subTest(source=source.name):
+                self.assertIn(source.leaf, leaves)
+                if source.relevance is not None:
+                    self.assertGreater(source.relevance, 0)
+                    self.assertLessEqual(source.relevance, 1)

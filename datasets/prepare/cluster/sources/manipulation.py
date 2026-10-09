@@ -876,9 +876,11 @@ def mentalmanip_rows(df: pd.DataFrame) -> pd.DataFrame:
 
 BUDGET = 1124   # manipulation
 
+# leaf: provisional, annotators to confirm
 SOURCES = [
     Source(
         name="social_harm", risk="manipulation", question_type=GRADED,
+        leaf="manipulation_propensity",
         elicitation_family=COMPLIANCE, families=NO_FRAMING,
         path="raw/socialharmbench/socialharmbench.csv",
         reader="csv",
@@ -895,6 +897,7 @@ SOURCES = [
     ),
     Source(
         name="historical_revisionism", risk="manipulation", question_type=GRADED,
+        leaf="hallucination_misinformation",
         elicitation_family=COMPLIANCE, families=NO_FRAMING,
         path="raw/historical_misinfo/data/*_prompt*.csv",
         reader="csv",
@@ -929,6 +932,7 @@ SOURCES = [
     # own line in the grouped() breakdown.
     Source(
         name="human_rights_udhr", risk="manipulation", question_type=GRADED,
+        leaf="misalignment_values",
         elicitation_family=JUDGMENT,
         path="raw/udhr_rights_limitations/data/experiments/synthetic/udhr/scenarios/en.csv",
         reader="csv",
@@ -960,6 +964,7 @@ SOURCES = [
     ),
     Source(
         name="human_rights_echr", risk="manipulation", question_type=GRADED,
+        leaf="misalignment_values",
         elicitation_family=JUDGMENT,
         path="raw/udhr_rights_limitations/data/experiments/synthetic/echr/scenarios/en.csv",
         reader="csv",
@@ -986,6 +991,7 @@ SOURCES = [
     ),
     Source(
         name="authoritarian_values", risk="manipulation", question_type=LIKERT,
+        leaf="misalignment_values",
         elicitation_family=OPINION,
         item_text="statement", prompt_template="prompt_template",
         path="raw/democratic_authoritarian_bias/data/phase1_questions.json",
@@ -1005,6 +1011,7 @@ SOURCES = [
     # two groups stay evenly represented.
     Source(
         name="leader_favorability", risk="manipulation", question_type=LIKERT,
+        leaf="misalignment_values",
         elicitation_family=OPINION,
         item_text="question", prompt_template="prompt_template",
         path="raw/democratic_authoritarian_bias/data/leaders.json",
@@ -1027,6 +1034,7 @@ SOURCES = [
     # data file, so it is read out with ast to stay in sync with the source.
     Source(
         name="role_model_bias", risk="manipulation", question_type=EXTRACTION,
+        leaf="misalignment_values",
         elicitation_family=GENERIC,
         path="raw/democratic_authoritarian_bias/role_model_probe/main.py",
         reader="pylist", record_path="NATIONALITIES_KEYS",
@@ -1041,6 +1049,7 @@ SOURCES = [
     ),
     Source(
         name="darkbench", risk="manipulation", question_type=GRADED,
+        leaf="manipulation_propensity",
         elicitation_family=COMPLIANCE, families=NO_FRAMING,
         path="raw/darkbench/darkbench.jsonl",
         reader="jsonl",
@@ -1058,6 +1067,7 @@ SOURCES = [
     ),
     Source(
         name="persusafety", risk="manipulation", question_type=DETECTION,
+        leaf="manipulation_propensity",
         detector=ACCEPT_REJECT_TOKEN,
         elicitation_family=GENERIC,
         path="raw/persusafety/dataset/harmful_scenarios_full.json",
@@ -1082,6 +1092,7 @@ SOURCES = [
     ),
     Source(
         name="sycophancy_mimicry", risk="manipulation", question_type=DETECTION,
+        leaf="hallucination_misinformation",
         detector=ATTRIBUTION_MIMICRY,
         elicitation_family=GENERIC,
         path="raw/sycophancy_sharma/mimicry.jsonl",
@@ -1099,7 +1110,7 @@ SOURCES = [
     ),
     Source(
         name="ape", risk="manipulation", question_type=GRADED,
-        leaf="harmful manipulation: propensity",
+        leaf="manipulation_propensity",
         elicitation_family=COMPLIANCE, families=NO_FRAMING,
         path="raw/ape/src/topics/*.jsonl",
         reader="jsonl", filename_field="topic_file",
@@ -1114,6 +1125,7 @@ SOURCES = [
     ),
     Source(
         name="mentalmanip", risk="manipulation", question_type=MCQ,
+        leaf="manipulation_persuasion",
         elicitation_family=GENERIC,
         path="raw/mentalmanip/mentalmanip_con.csv",
         reader="csv",

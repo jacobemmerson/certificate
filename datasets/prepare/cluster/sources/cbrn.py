@@ -274,9 +274,11 @@ def lab_bench_rows(df: pd.DataFrame) -> pd.DataFrame:
 # cbrn: 2x the pre-revision cluster size; shares are water-filled over the sources.
 BUDGET = 372
 
+# leaf: provisional, annotators to confirm
 SOURCES = [
     Source(
         name="harmbench", risk="cbrn", question_type=GRADED,
+        leaf="cbrn",
         elicitation_family=COMPLIANCE,
         path="raw/harmbench/data/behavior_datasets/harmbench_behaviors_text_all.csv",
         reader="csv",
@@ -292,6 +294,7 @@ SOURCES = [
     ),
     Source(
         name="sosbench", risk="cbrn", question_type=GRADED,
+        leaf="cbrn",
         elicitation_family=COMPLIANCE,
         path="raw/sosbench/data/*.parquet",
         reader="parquet",
@@ -317,6 +320,7 @@ SOURCES = [
     # sharded by folder, so the reader supplies it from the directory name.
     Source(
         name="wmdp", risk="cbrn", question_type=MCQ,
+        leaf="cbrn",
         elicitation_family=GENERIC,
         path="raw/wmdp/wmdp-*/*.parquet",
         reader="parquet", dirname_field="subset",
@@ -337,6 +341,7 @@ SOURCES = [
     ),
     Source(
         name="scisafeeval", risk="cbrn", question_type=GRADED,
+        leaf="cbrn",
         elicitation_family=COMPLIANCE,
         path="raw/scisafeeval/*.jsonl",
         reader="jsonl", filename_field="task",
@@ -366,7 +371,7 @@ SOURCES = [
         metadata=["risk_subdomain"],
         select="diverse",
         stratify=["risk_subdomain"],
-        leaf="CBRN and other security risks: propensity to assist",
+        leaf="cbrn",
     ),
     Source(
         name="lab_bench", risk="cbrn", question_type=MCQ,
@@ -385,6 +390,6 @@ SOURCES = [
         # Dual-use biology capability, like wmdp: knowing is the failure, and
         # a model that never learned it scores like one that declined.
         role="diagnostic",
-        leaf="CBRN: biology",
+        leaf="cbrn_biological",
     ),
 ]

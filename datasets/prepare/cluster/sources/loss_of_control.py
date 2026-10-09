@@ -221,9 +221,11 @@ def advanced_ai_risk_rows(df: pd.DataFrame) -> pd.DataFrame:
 
 BUDGET = 280   # loss_of_control
 
+# leaf: provisional, annotators to confirm
 SOURCES = [
     Source(
         name="advanced_ai_risk", risk="loss_of_control", question_type=MCQ,
+        leaf="power_seeking",
         # No framing family fits a forced choice between two supplied answers —
         # the same reason wmdp is generic.
         elicitation_family=GENERIC,
@@ -246,6 +248,7 @@ SOURCES = [
     ),
     Source(
         name="instrumentaleval", risk="loss_of_control", question_type=GRADED,
+        leaf="power_seeking",
         elicitation_family=GENERIC,
         path="raw/instrumentaleval/benchmark/*.csv",
         reader="csv", columns=["task"],

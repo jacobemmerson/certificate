@@ -223,9 +223,11 @@ SYSTEMIC = False   # provisional cluster: scored per risk, excluded from model-l
 
 # sorry_bench and decodingtrust are HF-gated and not fetched yet; register them
 # here once they are.
+# leaf: provisional, annotators to confirm
 SOURCES = [
     Source(
         name="beavertails", risk="alignment", question_type=GRADED,
+        leaf="harmful_deployment",
         elicitation_family=COMPLIANCE,
         path="raw/beavertails/v1/test.jsonl.xz",
         reader="jsonl",
@@ -241,6 +243,7 @@ SOURCES = [
     # and the nine translations are the same 315 items.
     Source(
         name="multijail", risk="alignment", question_type=GRADED,
+        leaf="harmful_deployment",
         elicitation_family=COMPLIANCE,
         path="raw/multijail/MultiJail.csv",
         reader="csv",
@@ -255,6 +258,7 @@ SOURCES = [
     ),
     Source(
         name="medsafetybench", risk="alignment", question_type=GRADED,
+        leaf="lawlessness",
         elicitation_family=COMPLIANCE,
         path="raw/medsafetybench/datasets/test/*/med_safety_demonstrations_category_*.csv",
         reader="csv", filename_field="category", dirname_field="generator",
@@ -269,6 +273,7 @@ SOURCES = [
     ),
     Source(
         name="bbq", risk="alignment", question_type=MCQ,
+        leaf="discriminatory_bias",
         path="raw/bbq/data/*.jsonl",
         reader="jsonl",
         transform=bbq_rows,
@@ -287,6 +292,7 @@ SOURCES = [
     ),
     Source(
         name="truthfulqa", risk="alignment", question_type=GRADED,
+        leaf="hallucination_misinformation",
         path="raw/truthfulqa/generation/*.parquet",
         reader="parquet",
         query="question",
@@ -305,6 +311,7 @@ SOURCES = [
     ),
     Source(
         name="confaide", risk="alignment", question_type=GRADED,
+        leaf="lawlessness",
         path="raw/confaide/benchmark/tier_[34].txt",
         reader="text", filename_field="tier",
         transform=confaide_rows,
@@ -319,6 +326,7 @@ SOURCES = [
     ),
     Source(
         name="privacylens", risk="alignment", question_type=GRADED,
+        leaf="lawlessness",
         path="raw/privacylens/main_data.json",
         reader="json",
         transform=privacylens_rows,

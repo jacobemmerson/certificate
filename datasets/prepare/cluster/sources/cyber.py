@@ -295,9 +295,11 @@ def redcode_rows(df: pd.DataFrame) -> pd.DataFrame:
 
 BUDGET = 600   # cyber
 
+# leaf: provisional, annotators to confirm
 SOURCES = [
     Source(
         name="cysecbench", risk="cyber", question_type=GRADED,
+        leaf="cyber_operational_use",
         elicitation_family=COMPLIANCE,
         path="raw/cysecbench/Dataset/Full dataset/cysecbench.csv",
         reader="csv",
@@ -313,6 +315,7 @@ SOURCES = [
     ),
     Source(
         name="cyberseceval_mitre", risk="cyber", question_type=GRADED,
+        leaf="cyber_operational_use",
         elicitation_family=COMPLIANCE,
         path="raw/cyberseceval_3/CybersecurityBenchmarks/datasets/mitre/"
              "mitre_benchmark_100_per_category_with_augmentation.json",
@@ -334,6 +337,7 @@ SOURCES = [
     ),
     Source(
         name="agentharm", risk="cyber", question_type=GRADED,
+        leaf="cyber_operational_use",
         elicitation_family=COMPLIANCE,
         path="raw/agentharm/benchmark/harmful_behaviors_*.json",
         reader="json", record_path="behaviors", filename_field="split",
@@ -350,6 +354,7 @@ SOURCES = [
     ),
     Source(
         name="cyber_false_refusal", risk="cyber", question_type=DETECTION,
+        leaf="cyber_operational_use",
         detector=REFUSAL_REGEX,
         elicitation_family=GENERIC,
         path="raw/cyberseceval_3/CybersecurityBenchmarks/datasets/mitre_frr/"
@@ -369,6 +374,7 @@ SOURCES = [
     ),
     Source(
         name="injecagent", risk="cyber", question_type=DETECTION,
+        leaf="misalignment_intent",
         detector=REACT_ATTACKER_TOOL_CALL,
         elicitation_family=GENERIC,
         path="raw/injecagent/data/test_cases_*_base.json",
@@ -390,6 +396,7 @@ SOURCES = [
     ),
     Source(
         name="redcode_gen", risk="cyber", question_type=GRADED,
+        leaf="cyber_exploit_generation",
         elicitation_family=COMPLIANCE,
         path="raw/redcode/dataset/RedCode-Gen/**/*.py",
         reader="text", dirname_field="family", filename_field="file",

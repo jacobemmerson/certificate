@@ -358,7 +358,8 @@ class Source:
     # unpaired and make the comparison meaningless.
     group_key: str | None = None
     balanced: bool = False   # even allocation per stratum, not proportional
-    leaf: str | None = None  # taxonomy leaf this source serves, copied into meta.sources
+    leaf: str | None = None  # id of the leaves.toml leaf this source serves, copied into meta.sources
+    relevance: float | None = None  # how representative of its leaf, in (0, 1]; None = role default
 
     # How a stratum's allotment is filled, once `_allocate` has decided how many
     # rows it gets.
