@@ -47,8 +47,8 @@ class ManifestTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIn(row["status"], STATUSES)
                 if not row["id"]:
-                    # ids are blank for on-disk sources and for rows added after the export.
-                    self.assertTrue(row["status"] in ON_DISK_STATUSES or name in self.added)
+                    # ids are blank for on-disk sources and for excluded rows, whose tasks were deleted.
+                    self.assertIn(row["status"], ON_DISK_STATUSES | {"excluded"})
                 self.assertIn(row["host"], HOSTS)
                 if row["host"] != "none":
                     # files may be empty with a host: partial rows whose prompts are rendered (note says how).
@@ -66,11 +66,11 @@ class ManifestTest(unittest.TestCase):
                     self.assertTrue(entry)
                 self.assertIsInstance(row["revision"], str)
 
-    def test_excluded_rows_keep_their_join(self):
+    def test_excluded_rows_have_no_task(self):
         for row in self.rows:
             if row["status"] == "excluded":
                 with self.subTest(name=row["name"]):
-                    self.assertTrue(row["id"])
+                    self.assertFalse(row["id"], "excluded tasks were deleted from Label Studio")
                     self.assertTrue(row["note"].startswith("Excluded 2026-10-07:"))
 
     def test_fetched_revisions_match(self):
