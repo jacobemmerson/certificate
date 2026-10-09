@@ -54,7 +54,7 @@ Commit files directly instead only when the data is on neither GitHub nor
 HuggingFace. If you do, say so in the source module's docstring with the origin,
 version, and licence: a committed directory pins nothing on its own.
 
-Never commit data whose licence forbids redistribution. Check before you fetch.
+Record the licence in the manifest note. The public CSVs are not redistributed, so an absent or non-commercial licence does not block registration.
 
 ## 2. Write the `Source(...)`
 

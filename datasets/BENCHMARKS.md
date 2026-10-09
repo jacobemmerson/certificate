@@ -321,11 +321,12 @@ than running or scoring the code, and families are stratified.
 - **`injecagent` measures susceptibility, not intent**: resisting a hijack of a
   benign task is a different capability from refusing a harmful request.
 
-## loss_of_control: 1 benchmark
+## loss_of_control: 2 benchmarks
 
 | Benchmark | Type | Model must produce | Scale | Original evaluation | Ours | Divergence |
 |---|---|---|---|---|---|---|
 | `advanced_ai_risk` | mcq | a letter | matching behaviour 0.0 / declining 1.0 | logprob comparison of `" (A)"` vs `" (B)"` | forced choice, letter match | logprobs unavailable through the router |
+| `instrumentaleval` | graded | free text | behaviour absent 0.0 / present 1.0 | LLM judge, upstream's per-file prompt | single judge call, upstream prompt as rubric | one call, no multi-judge or retry |
 
 Seven behaviours × 20, balanced: `power-seeking-inclination`,
 `wealth-seeking-inclination`, `survival-instinct`, `coordinate-itself`,
@@ -338,7 +339,13 @@ upstream's own `answer_matching_behavior` definition, and untrustworthy polarity
 is worse than no source. 169 of 6,468 rows are dropped (concatenated questions,
 `<META_START>` artifacts, truncations, unfilled templates, unintelligible rows).
 
-One source, because MASK needs tools and multiple turns and belongs in stage 3
+`instrumentaleval` (`yf-he/InstrumentalEval`) adds 76 single-turn task prompts
+across 6 CSVs, each probing one instrumental-convergence behaviour. Line 1 of
+each file is upstream's judge description of that behaviour; it becomes our
+rubric. Upstream ships no licence, which the manifest note records; the public
+CSVs are not redistributed.
+
+Two sources, because MASK needs tools and multiple turns and belongs in stage 3
 (agentic_misalignment and InstrumentalEval were later re-ruled single-turn, see
 Rejected sources); advanced-ai-risk asks the propensity
 half directly in one generation. GDM stealth / self-reasoning /
@@ -453,6 +460,7 @@ of our prompt against that artifact:
 | fortress | arXiv 2506.14922; HF `ScaleAI/fortress_public` card | adapted (any-yes) |
 | lab_bench | arXiv 2407.10362; `Future-House/LAB-Bench` | adapted (generative, no refusal option) |
 | redcode_gen | `raw/redcode/evaluation/RedCode_Gen/prompts.py::CODE_GENERATION_PROMPT`, read live; system prompt and assembly in `evaluation.py::evaluate_model` | prompt verbatim; judge adapted (compliance, not upstream's 0-10 functionality score) |
+| instrumentaleval | `raw/instrumentaleval/benchmark/*.csv`, first line of each file (the judge prompt) | single judge call; upstream judge prompt reused as rubric |
 | ape | `raw/ape/src/prompts/base_prompts_all.yaml::prompt_assistant_no_user_degree`, read live; default per `configs/config.yaml`, filled as `main.py` does for "for" | system prompt verbatim; user turn ours (no simulated persuadee) |
 | mentalmanip | HF `audreyeleven/MentalManip` card (consensus split) | adapted (question and option wording ours; two-option MCQ) |
 | beavertails | HF `PKU-Alignment/BeaverTails-Evaluation` card | adapted (judge replaces the QA-moderation classifier) |
@@ -535,10 +543,8 @@ no `subset` column: the adapter supplies it from the config's directory name.
   *capability*, not a harmful behaviour, so there is nothing to grade; it needs
   a diagnostic-shaped source, deferred.
 
-- **BioLP-bench** (`raw/biolp_bench`) has no licence in its GitHub repo; the HF
-  mirror's CC-BY-NC-SA-4.0 card holds no data. The fetched CSV is the answer
-  key only; the prompts are .docx protocols under `protocols/`. Registering
-  needs both a licence and those files.
+- **BioLP-bench** (`raw/biolp_bench`): deferred. The prompts are .docx
+  protocols with no text form; registering needs a .docx reader.
 
 ## Rejected sources
 
@@ -551,10 +557,6 @@ no `subset` column: the adapter supplies it from the config's directory name.
   `reconsideration` family.
 - **SecCodePLT, Cybench, CyberGym, CVEBench**: sandboxed or executed tasks.
 - **MASK**: agentic; see loss_of_control.
-- **InstrumentalEval** (`yf-he/InstrumentalEval`): rejected for now. Upstream
-  ships no licence, so redistributing its 76 single-turn scenario prompts is not
-  permitted. Registrable in shape (6 CSVs, line 1 = test description, then one
-  scenario per row; graded YES_NO) if permission is obtained.
 - **agentic_misalignment**: deferred. Once rejected as agentic, re-ruled
   single-turn by the intake triage, but the rendered templates are not built;
   stage 3.
@@ -564,12 +566,11 @@ no `subset` column: the adapter supplies it from the config's directory name.
   `system_prompt` pressure, so each item needs two generations, which the
   one-row-one-prompt schema cannot express. Candidates for stage 3.
 - **ai_sandbagging**: deferred. Its signal is the gap against a paired WMDP arm.
-- **PersuasionBench**: not registered. The HF card carries no licence, and the
-  parquet has only tweet ids (no text), so it is not prompt-shaped without
-  Twitter hydration.
+- **PersuasionBench**: not registered. The parquet has only tweet ids (no
+  text), so it is not prompt-shaped without Twitter hydration.
 - **ELEPHANT**: blocked. The GitHub repo has 10-row samples only; the full OEQ
   (OSF `osf.io/r3dmj`) is not fetched.
-- **GPQA Diamond**: rejected. Its terms forbid posting the plaintext.
+- **GPQA Diamond**: pending. HF-gated; needs `HF_TOKEN`.
 - **GAIA**: rejected. Its terms forbid resharing.
 - **RedCode-Exec**: needs code execution in Docker; not registered.
 - **SORRY-Bench** and **DecodingTrust**: HF-gated and not fetched yet (pending).
@@ -741,5 +742,6 @@ rather than trusted.
 
 # Housekeeping
 
-1. Licences marked "check" must be confirmed before redistribution; Anthropic's
+1. Licences marked "check" are recorded in the manifest note; they do not gate
+   registration. Anthropic's
    persuasion set is CC-BY-NC-SA-4.0 if it is ever registered.
