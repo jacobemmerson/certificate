@@ -61,7 +61,7 @@ Review `datasets/public/cbrn.dropped.jsonl` (new `screen` tier) and `refused_dro
 
 ```bash
 sbatch scripts/generate_hermes_slurm.sh      # vLLM Hermes-4-70B: screen → rewrites → scenario trees, all risks
-scripts/generate_hermes_modal.sh             # same job with Hermes served on Modal (scripts/hermes_modal.py)
+scripts/generate_hermes_modal.sh             # same job, Hermes on Modal via modal run --detach (scripts/hermes_modal.py); FORCE=1 after a rebuild
 uv run python3 generate.py --only cyber --perturb paraphrase multilingual   # API attacker, subset
 uv run python3 generate.py --missing-only    # fill gaps after a preempted job
 ```

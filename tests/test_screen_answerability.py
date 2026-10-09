@@ -105,5 +105,17 @@ class TestScreen(unittest.TestCase):
         self.assertEqual((failed, lines), (1, []))
 
 
+class TestMain(unittest.TestCase):
+
+    def test_inspect_concurrency_matches_max_connections(self):
+        argv = ["screen_answerability.py", "--risk", "cbrn", "--max-connections", "96"]
+        with mock.patch("sys.argv", argv), \
+             mock.patch.object(screen_answerability, "get_model",
+                               side_effect=StopIteration) as get_model:
+            with self.assertRaises(StopIteration):
+                screen_answerability.main()
+        self.assertEqual(get_model.call_args.kwargs["config"].max_connections, 96)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from inspect_ai.model import get_model
+from inspect_ai.model import GenerateConfig, get_model
 
 from datasets.prepare.cluster.schema import MCQ
 from pipeline.generation import _attacker_call
@@ -89,10 +89,11 @@ def main():
     parser.add_argument("--model", default="openrouter/nousresearch/hermes-4-70b")
     parser.add_argument("--model-base-url", default=None,
                         help="Base URL of a running server, e.g. vLLM on slurm.")
-    parser.add_argument("--max-connections", type=int, default=20)
+    parser.add_argument("--max-connections", type=int, default=64)
     args = parser.parse_args()
 
-    model = get_model(args.model, base_url=args.model_base_url)
+    model = get_model(args.model, base_url=args.model_base_url,
+                      config=GenerateConfig(max_connections=args.max_connections))
     failed = 0
     for risk in args.risk:
         with open(CACHE_DIR / f"{risk}.screen_input.jsonl", encoding="utf-8") as f:

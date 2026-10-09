@@ -57,7 +57,7 @@ from pipeline.artifacts import (
     task_name,
     write_family,
 )
-from inspect_ai.model import get_model
+from inspect_ai.model import GenerateConfig, get_model
 
 from pipeline.generation import generate_framing, generate_persona, generate_rewrites, generate_scenarios
 from pipeline.registry import PREGENERATED_FAMILIES, init_benchmarks, require_families_column
@@ -199,8 +199,11 @@ if __name__ == "__main__":
 
     # Instantiate once so hf/vllm attackers load weights (or spawn the vLLM
     # server) a single time, not per task/family.
+    # inspect's own limiter defaults to an adaptive 20; match the semaphore.
     attacker = get_model(
-        args.attacker, base_url=args.model_base_url, **parse_model_args(args.model_args)
+        args.attacker, base_url=args.model_base_url,
+        config=GenerateConfig(max_connections=args.max_connections),
+        **parse_model_args(args.model_args),
     )
     summary = []  # (task, family, outcome)
 
