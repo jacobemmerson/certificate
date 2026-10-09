@@ -1,0 +1,511 @@
+{
+  "risk": "alignment",
+  "rows": 600,
+  "budget": 600,
+  "shortfall": 0,
+  "seed": 0,
+  "embedding": {
+    "model": "sentence-transformers/all-MiniLM-L6-v2",
+    "tau_cosine": 0.92,
+    "cache": "datasets/cache/embeddings/alignment.npz"
+  },
+  "screen": {
+    "model": [
+      "vllm/NousResearch/Hermes-4-70B"
+    ],
+    "applies_to": [
+      "beavertails",
+      "multijail",
+      "medsafetybench"
+    ],
+    "candidate_factor": 3.5,
+    "refused_dropped": {
+      "beavertails": 29,
+      "multijail": 59,
+      "medsafetybench": 53
+    }
+  },
+  "sources": {
+    "beavertails": {
+      "loaded": 700,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "cross_source_dropped": 0,
+      "quota": null,
+      "stratify_on": [
+        "category"
+      ],
+      "balanced": false,
+      "leaf": null,
+      "question_type": "graded",
+      "path": "raw/beavertails/v1/test.jsonl.xz",
+      "kept": 86,
+      "allotted": 86,
+      "shortfall": 0,
+      "strata": {
+        "animal_abuse": {
+          "pool": 50,
+          "kept": 7
+        },
+        "child_abuse": {
+          "pool": 50,
+          "kept": 7
+        },
+        "controversial_topics,politics": {
+          "pool": 50,
+          "kept": 6
+        },
+        "discrimination,stereotype,injustice": {
+          "pool": 50,
+          "kept": 6
+        },
+        "drug_abuse,weapons,banned_substance": {
+          "pool": 50,
+          "kept": 6
+        },
+        "financial_crime,property_crime,theft": {
+          "pool": 50,
+          "kept": 6
+        },
+        "hate_speech,offensive_language": {
+          "pool": 50,
+          "kept": 6
+        },
+        "misinformation_regarding_ethics,laws_and_safety": {
+          "pool": 50,
+          "kept": 6
+        },
+        "non_violent_unethical_behavior": {
+          "pool": 50,
+          "kept": 6
+        },
+        "privacy_violation": {
+          "pool": 50,
+          "kept": 6
+        },
+        "self_harm": {
+          "pool": 50,
+          "kept": 6
+        },
+        "sexually_explicit,adult_content": {
+          "pool": 50,
+          "kept": 6
+        },
+        "terrorism,organized_crime": {
+          "pool": 50,
+          "kept": 6
+        },
+        "violence,aiding_and_abetting,incitement": {
+          "pool": 50,
+          "kept": 6
+        }
+      },
+      "divergence": 0.02,
+      "screen_candidates": 302,
+      "screen_refused": 29
+    },
+    "multijail": {
+      "loaded": 315,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "cross_source_dropped": 1,
+      "quota": null,
+      "stratify_on": [],
+      "balanced": false,
+      "leaf": null,
+      "question_type": "graded",
+      "path": "raw/multijail/MultiJail.csv",
+      "kept": 85,
+      "allotted": 85,
+      "shortfall": 0,
+      "strata": {},
+      "divergence": null,
+      "screen_candidates": 298,
+      "screen_refused": 59
+    },
+    "medsafetybench": {
+      "loaded": 900,
+      "exact_dropped": 0,
+      "near_dropped": 40,
+      "cross_source_dropped": 0,
+      "quota": null,
+      "stratify_on": [
+        "category"
+      ],
+      "balanced": false,
+      "leaf": null,
+      "question_type": "graded",
+      "path": "raw/medsafetybench/datasets/test/*/med_safety_demonstrations_category_*.csv",
+      "kept": 86,
+      "allotted": 86,
+      "shortfall": 0,
+      "strata": {
+        "med_safety_demonstrations_category_1": {
+          "pool": 109,
+          "kept": 11
+        },
+        "med_safety_demonstrations_category_2": {
+          "pool": 104,
+          "kept": 10
+        },
+        "med_safety_demonstrations_category_3": {
+          "pool": 79,
+          "kept": 8
+        },
+        "med_safety_demonstrations_category_4": {
+          "pool": 98,
+          "kept": 10
+        },
+        "med_safety_demonstrations_category_5": {
+          "pool": 96,
+          "kept": 10
+        },
+        "med_safety_demonstrations_category_6": {
+          "pool": 74,
+          "kept": 7
+        },
+        "med_safety_demonstrations_category_7": {
+          "pool": 103,
+          "kept": 10
+        },
+        "med_safety_demonstrations_category_8": {
+          "pool": 99,
+          "kept": 10
+        },
+        "med_safety_demonstrations_category_9": {
+          "pool": 98,
+          "kept": 10
+        }
+      },
+      "divergence": 0.013,
+      "screen_candidates": 302,
+      "screen_refused": 53
+    },
+    "bbq": {
+      "loaded": 15678,
+      "exact_dropped": 6,
+      "near_dropped": 9982,
+      "cross_source_dropped": 0,
+      "quota": null,
+      "stratify_on": [
+        "category"
+      ],
+      "balanced": false,
+      "leaf": null,
+      "question_type": "mcq",
+      "path": "raw/bbq/data/*.jsonl",
+      "kept": 86,
+      "allotted": 86,
+      "shortfall": 0,
+      "strata": {
+        "Age": {
+          "pool": 306,
+          "kept": 5
+        },
+        "Disability_status": {
+          "pool": 291,
+          "kept": 4
+        },
+        "Gender_identity": {
+          "pool": 1168,
+          "kept": 18
+        },
+        "Nationality": {
+          "pool": 687,
+          "kept": 10
+        },
+        "Physical_appearance": {
+          "pool": 227,
+          "kept": 3
+        },
+        "Race_ethnicity": {
+          "pool": 1450,
+          "kept": 22
+        },
+        "Religion": {
+          "pool": 250,
+          "kept": 4
+        },
+        "SES": {
+          "pool": 1167,
+          "kept": 18
+        },
+        "Sexual_orientation": {
+          "pool": 144,
+          "kept": 2
+        }
+      },
+      "divergence": 0.016
+    },
+    "truthfulqa": {
+      "loaded": 817,
+      "exact_dropped": 0,
+      "near_dropped": 4,
+      "cross_source_dropped": 0,
+      "quota": null,
+      "stratify_on": [
+        "category"
+      ],
+      "balanced": false,
+      "leaf": null,
+      "question_type": "graded",
+      "path": "raw/truthfulqa/generation/*.parquet",
+      "kept": 86,
+      "allotted": 86,
+      "shortfall": 0,
+      "strata": {
+        "Misconceptions": {
+          "pool": 100,
+          "kept": 11
+        },
+        "Proverbs": {
+          "pool": 18,
+          "kept": 2
+        },
+        "Misquotations": {
+          "pool": 16,
+          "kept": 2
+        },
+        "Conspiracies": {
+          "pool": 25,
+          "kept": 3
+        },
+        "Superstitions": {
+          "pool": 22,
+          "kept": 2
+        },
+        "Paranormal": {
+          "pool": 26,
+          "kept": 3
+        },
+        "Fiction": {
+          "pool": 30,
+          "kept": 3
+        },
+        "Myths and Fairytales": {
+          "pool": 21,
+          "kept": 2
+        },
+        "Indexical Error: Identity": {
+          "pool": 9,
+          "kept": 1
+        },
+        "Indexical Error: Other": {
+          "pool": 21,
+          "kept": 2
+        },
+        "Indexical Error: Time": {
+          "pool": 16,
+          "kept": 2
+        },
+        "Indexical Error: Location": {
+          "pool": 11,
+          "kept": 1
+        },
+        "Distraction": {
+          "pool": 14,
+          "kept": 1
+        },
+        "Subjective": {
+          "pool": 9,
+          "kept": 1
+        },
+        "Advertising": {
+          "pool": 13,
+          "kept": 1
+        },
+        "Religion": {
+          "pool": 15,
+          "kept": 1
+        },
+        "Logical Falsehood": {
+          "pool": 14,
+          "kept": 1
+        },
+        "Stereotypes": {
+          "pool": 24,
+          "kept": 3
+        },
+        "Misconceptions: Topical": {
+          "pool": 4,
+          "kept": 1
+        },
+        "Education": {
+          "pool": 10,
+          "kept": 1
+        },
+        "Nutrition": {
+          "pool": 16,
+          "kept": 1
+        },
+        "Health": {
+          "pool": 55,
+          "kept": 6
+        },
+        "Psychology": {
+          "pool": 19,
+          "kept": 2
+        },
+        "Sociology": {
+          "pool": 52,
+          "kept": 6
+        },
+        "Economics": {
+          "pool": 31,
+          "kept": 3
+        },
+        "Politics": {
+          "pool": 10,
+          "kept": 1
+        },
+        "Law": {
+          "pool": 64,
+          "kept": 7
+        },
+        "Science": {
+          "pool": 9,
+          "kept": 1
+        },
+        "History": {
+          "pool": 24,
+          "kept": 3
+        },
+        "Language": {
+          "pool": 20,
+          "kept": 2
+        },
+        "Weather": {
+          "pool": 17,
+          "kept": 2
+        },
+        "Confusion: People": {
+          "pool": 23,
+          "kept": 2
+        },
+        "Confusion: Places": {
+          "pool": 15,
+          "kept": 1
+        },
+        "Confusion: Other": {
+          "pool": 8,
+          "kept": 1
+        },
+        "Finance": {
+          "pool": 9,
+          "kept": 1
+        },
+        "Misinformation": {
+          "pool": 12,
+          "kept": 1
+        },
+        "Statistics": {
+          "pool": 5,
+          "kept": 1
+        },
+        "Mandela Effect": {
+          "pool": 6,
+          "kept": 1
+        }
+      },
+      "divergence": 0.064
+    },
+    "confaide": {
+      "loaded": 290,
+      "exact_dropped": 0,
+      "near_dropped": 11,
+      "cross_source_dropped": 0,
+      "quota": null,
+      "stratify_on": [
+        "tier"
+      ],
+      "balanced": false,
+      "leaf": null,
+      "question_type": "graded",
+      "path": "raw/confaide/benchmark/tier_[34].txt",
+      "kept": 85,
+      "allotted": 85,
+      "shortfall": 0,
+      "strata": {
+        "3": {
+          "pool": 270,
+          "kept": 82
+        },
+        "4": {
+          "pool": 9,
+          "kept": 3
+        }
+      },
+      "divergence": 0.003
+    },
+    "privacylens": {
+      "loaded": 493,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "cross_source_dropped": 0,
+      "quota": null,
+      "stratify_on": [
+        "source_type"
+      ],
+      "balanced": false,
+      "leaf": null,
+      "question_type": "graded",
+      "path": "raw/privacylens/main_data.json",
+      "kept": 86,
+      "allotted": 86,
+      "shortfall": 0,
+      "strata": {
+        "crowdsourcing": {
+          "pool": 337,
+          "kept": 59
+        },
+        "regulation": {
+          "pool": 69,
+          "kept": 12
+        },
+        "literature": {
+          "pool": 87,
+          "kept": 15
+        }
+      },
+      "divergence": 0.002
+    }
+  },
+  "revisions": {
+    "repo": "302aa44eca5d452b619f616ad70d993bde8b966b",
+    "datasets/raw/agentharm": "e23b3fe60a0da9037314b88e5ee3a0c054970dad",
+    "datasets/raw/anthropic_persuasion": "b520c793895e7bea0090816551e9f395f9256082",
+    "datasets/raw/ape": "f2ca0a9900d5bcd1b0238a49a335a1988cbc09a9",
+    "datasets/raw/bbq": "bea11bd97d79217245b5871acd247b9d6eb24598",
+    "datasets/raw/beavertails": "a93205d9ba6cc9dc398a34466da3602abddd2d40",
+    "datasets/raw/biolp_bench": "148d5a2dd90c185ce2859c77c368b79c2173d907",
+    "datasets/raw/cogmanip": "d2207932ccaff6d5df1258037d154ac469731aa4",
+    "datasets/raw/confaide": "3174c63e689226189675a740b7bf9053f10bae50",
+    "datasets/raw/ctrl_alt_deceit": "60c1dff47a4615aedaceb2a14d4f1daa3afad990",
+    "datasets/raw/cyberseceval_3": "acfdd58f7c605eec53af4eed3f7ecf302267f0f8",
+    "datasets/raw/cysecbench": "ea3868f63961833e33d3e81933dd1024505dabe0",
+    "datasets/raw/deception_bench": "9c6c67b3d2a2d9c226ea0dd2120f1bb0899d779d",
+    "datasets/raw/democratic_authoritarian_bias": "583a1e4a8d440c421ab2ef06a6ac8afd5473c9e0",
+    "datasets/raw/elephant": "61f7044fc0e11defc971dfaa9bc84d7340fa88eb",
+    "datasets/raw/fortress": "0c096becbc75bb12065c8059a53960c7f0d4d35c",
+    "datasets/raw/harmbench": "8e1604d1171fe8a48d8febecd22f600e462bdcdd",
+    "datasets/raw/historical_misinfo": "5d327d24c8e6f0c82b598fecf9ca9f1b46bf3c64",
+    "datasets/raw/injecagent": "f19c9f2c79a41046eb13c03c51a24c567a8ffa07",
+    "datasets/raw/instrumentaleval": "269678168cf0388bf5dd7d10dfaed4af07905c49",
+    "datasets/raw/lab_bench": "5c77cec648430f30611808808861eb86f81d5eaa",
+    "datasets/raw/medsafetybench": "dc5d88e4c0100deada5a96f065a302959e6523a7",
+    "datasets/raw/mentalmanip": "86e800cebf9ee2baa8f5999845027cc3f50e8fd5",
+    "datasets/raw/mlgym": "9d40c1b5035202018cd7091fb4e83a9c68b377c0",
+    "datasets/raw/model_written_evaluations": "84fcc677e52e1902d696c32cd1a6b663e70d3993",
+    "datasets/raw/multijail": "93d65c778925d55973b9ff30c7bccc8545494eb6",
+    "datasets/raw/paper_bench": "51052cede8cc608f95bb00346635e03759013e5a",
+    "datasets/raw/persuasionbench": "a8fa77f0c57435aa0db66b26c2ecf5a485eb20ad",
+    "datasets/raw/persusafety": "892bf057f2974c1d1624f37d1110dcb4924e4fd6",
+    "datasets/raw/privacylens": "7dc406e8d1e882e5b0c6ea4be697b2b7a5dee805",
+    "datasets/raw/redcode": "c84b6db88fd8bd258e29f12e692ccfd4287a454d",
+    "datasets/raw/sad": "dfc5c9831a9bcc5c9a9dbdcaa2955aae983cd1d3",
+    "datasets/raw/scisafeeval": "2c2296660a9c340593b049fdf0aa7900ae53f0eb",
+    "datasets/raw/sycophancy_sharma": "18f18160e9998e524bbf027c4475bfa7fdeb6949",
+    "datasets/raw/truthfulqa": "741b8276f2d1982aa3d5b832d3ee81ed3b896490",
+    "datasets/raw/udhr_rights_limitations": "65171d7c5ec20255256e5d0500dc118c8f7904ef"
+  }
+}

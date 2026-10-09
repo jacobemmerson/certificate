@@ -1,70 +1,309 @@
 {
   "risk": "cbrn",
-  "rows": 186,
+  "rows": 363,
+  "budget": 372,
+  "shortfall": 9,
   "seed": 0,
-  "jaccard_tau_default": 0.9,
-  "token_gate": 25,
+  "embedding": {
+    "model": "sentence-transformers/all-MiniLM-L6-v2",
+    "tau_cosine": 0.92,
+    "cache": "datasets/cache/embeddings/cbrn.npz"
+  },
+  "screen": {
+    "model": [
+      "vllm/NousResearch/Hermes-4-70B"
+    ],
+    "applies_to": [
+      "harmbench",
+      "sosbench",
+      "wmdp",
+      "scisafeeval",
+      "fortress",
+      "lab_bench"
+    ],
+    "candidate_factor": 3.5,
+    "refused_dropped": {
+      "harmbench": 9,
+      "sosbench": 16,
+      "wmdp": 1,
+      "scisafeeval": 4,
+      "fortress": 10,
+      "lab_bench": 0
+    }
+  },
   "sources": {
     "harmbench": {
       "loaded": 56,
       "exact_dropped": 0,
-      "near_dropped": 0,
+      "near_dropped": 8,
       "cross_source_dropped": 0,
-      "quota": 56,
+      "quota": null,
       "stratify_on": [
         "FunctionalCategory"
       ],
       "balanced": false,
+      "leaf": null,
       "question_type": "graded",
-      "path": "raw/cbrn/HarmBench/data/behavior_datasets/harmbench_behaviors_text_all.csv",
-      "kept": 56,
-      "strata": 0
+      "path": "raw/harmbench/data/behavior_datasets/harmbench_behaviors_text_all.csv",
+      "kept": 39,
+      "allotted": 48,
+      "shortfall": 9,
+      "strata": {},
+      "divergence": null,
+      "screen_candidates": 48,
+      "screen_refused": 9
     },
     "sosbench": {
       "loaded": 3000,
       "exact_dropped": 0,
-      "near_dropped": 0,
+      "near_dropped": 74,
       "cross_source_dropped": 0,
-      "quota": 70,
+      "quota": null,
       "stratify_on": [
         "subject"
       ],
       "balanced": false,
+      "leaf": null,
       "question_type": "graded",
-      "path": "raw/cbrn/SOSBench/data/*.parquet",
-      "kept": 70,
-      "strata": 6
+      "path": "raw/sosbench/data/*.parquet",
+      "kept": 65,
+      "allotted": 65,
+      "shortfall": 0,
+      "strata": {
+        "biology": {
+          "pool": 488,
+          "kept": 11
+        },
+        "chemistry": {
+          "pool": 464,
+          "kept": 10
+        },
+        "medical": {
+          "pool": 499,
+          "kept": 11
+        },
+        "pharmacy": {
+          "pool": 495,
+          "kept": 11
+        },
+        "physics": {
+          "pool": 496,
+          "kept": 11
+        },
+        "psychology": {
+          "pool": 484,
+          "kept": 11
+        }
+      },
+      "divergence": 0.006,
+      "screen_candidates": 230,
+      "screen_refused": 16
     },
     "wmdp": {
       "loaded": 3668,
       "exact_dropped": 0,
-      "near_dropped": 0,
+      "near_dropped": 76,
       "cross_source_dropped": 0,
-      "quota": 60,
+      "quota": null,
       "stratify_on": [
         "subset"
       ],
       "balanced": false,
+      "leaf": null,
       "question_type": "mcq",
-      "path": "raw/cbrn/wmdp/wmdp-*/*.parquet",
-      "kept": 60,
-      "strata": 3
+      "path": "raw/wmdp/wmdp-*/*.parquet",
+      "kept": 65,
+      "allotted": 65,
+      "shortfall": 0,
+      "strata": {
+        "wmdp-bio": {
+          "pool": 1273,
+          "kept": 23
+        },
+        "wmdp-chem": {
+          "pool": 408,
+          "kept": 7
+        },
+        "wmdp-cyber": {
+          "pool": 1911,
+          "kept": 35
+        }
+      },
+      "divergence": 0.006,
+      "screen_candidates": 229,
+      "screen_refused": 1
+    },
+    "scisafeeval": {
+      "loaded": 28146,
+      "exact_dropped": 14,
+      "near_dropped": 2413,
+      "cross_source_dropped": 0,
+      "quota": null,
+      "stratify_on": [
+        "task"
+      ],
+      "balanced": false,
+      "leaf": null,
+      "question_type": "graded",
+      "path": "raw/scisafeeval/*.jsonl",
+      "kept": 65,
+      "allotted": 65,
+      "shortfall": 0,
+      "strata": {
+        "biology_gene-classification": {
+          "pool": 1730,
+          "kept": 4
+        },
+        "biology_gene-generation": {
+          "pool": 1657,
+          "kept": 4
+        },
+        "biology_protein-function-prediction": {
+          "pool": 2465,
+          "kept": 6
+        },
+        "biology_protein-sequence-generation": {
+          "pool": 1742,
+          "kept": 4
+        },
+        "biology_protein-structure-prediction": {
+          "pool": 2460,
+          "kept": 6
+        },
+        "chemistry_molecule-generation": {
+          "pool": 4968,
+          "kept": 13
+        },
+        "chemistry_property-prediction": {
+          "pool": 4957,
+          "kept": 13
+        },
+        "chemistry_reaction-prediction": {
+          "pool": 4967,
+          "kept": 13
+        },
+        "physics_knowledge-retrieval": {
+          "pool": 773,
+          "kept": 2
+        }
+      },
+      "divergence": 0.022,
+      "screen_candidates": 229,
+      "screen_refused": 4
+    },
+    "fortress": {
+      "loaded": 114,
+      "exact_dropped": 0,
+      "near_dropped": 1,
+      "cross_source_dropped": 0,
+      "quota": null,
+      "stratify_on": [
+        "risk_subdomain"
+      ],
+      "balanced": false,
+      "leaf": "CBRN and other security risks: propensity to assist",
+      "question_type": "graded",
+      "path": "raw/fortress/data/train-*.parquet",
+      "kept": 64,
+      "allotted": 64,
+      "shortfall": 0,
+      "strata": {
+        "Radiological and Nuclear (WMD): nuclear material acquisition advice, weapon design assistance, enhanced radiation weapon development": {
+          "pool": 47,
+          "kept": 27
+        },
+        "Chemical: chemical synthesis guidance, disclosure of exposure pathways, assistance to obtain restricted chemicals, strategies to overcome decontamination measures, etc.": {
+          "pool": 36,
+          "kept": 20
+        },
+        "Biological: pathogen engineering assistance for malicious purposes, bioweapon design assistance, dissemination strategy optimization, synthetic biology automation": {
+          "pool": 30,
+          "kept": 17
+        }
+      },
+      "divergence": 0.006,
+      "screen_candidates": 113,
+      "screen_refused": 10
+    },
+    "lab_bench": {
+      "loaded": 1458,
+      "exact_dropped": 0,
+      "near_dropped": 115,
+      "cross_source_dropped": 0,
+      "quota": null,
+      "stratify_on": [
+        "subset"
+      ],
+      "balanced": false,
+      "leaf": "CBRN: biology",
+      "question_type": "mcq",
+      "path": "raw/lab_bench/*/train-*.parquet",
+      "kept": 65,
+      "allotted": 65,
+      "shortfall": 0,
+      "strata": {
+        "CloningScenarios": {
+          "pool": 32,
+          "kept": 2
+        },
+        "DbQA": {
+          "pool": 479,
+          "kept": 23
+        },
+        "LitQA2": {
+          "pool": 196,
+          "kept": 9
+        },
+        "ProtocolQA": {
+          "pool": 108,
+          "kept": 5
+        },
+        "SeqQA": {
+          "pool": 528,
+          "kept": 26
+        }
+      },
+      "divergence": 0.014,
+      "screen_candidates": 229,
+      "screen_refused": 0
     }
   },
   "revisions": {
-    "repo": "34c6cbc7f1d4ab5026d0a4dac38b9ca72549860e",
-    "datasets/raw/cbrn/HarmBench": "8e1604d1171fe8a48d8febecd22f600e462bdcdd",
-    "datasets/raw/cyber/AgentHarm": "e23b3fe60a0da9037314b88e5ee3a0c054970dad",
-    "datasets/raw/cyber/CySecBench": "ea3868f63961833e33d3e81933dd1024505dabe0",
-    "datasets/raw/cyber/InjecAgent": "f19c9f2c79a41046eb13c03c51a24c567a8ffa07",
-    "datasets/raw/cyber/PurpleLlama": "acfdd58f7c605eec53af4eed3f7ecf302267f0f8",
-    "datasets/raw/loss_of_control/evals": "84fcc677e52e1902d696c32cd1a6b663e70d3993",
-    "datasets/raw/loss_of_control/sad": "dfc5c9831a9bcc5c9a9dbdcaa2955aae983cd1d3",
-    "datasets/raw/manipulation/Democratic-Authoritarian-Bias-LLMs": "583a1e4a8d440c421ab2ef06a6ac8afd5473c9e0",
-    "datasets/raw/manipulation/PersuSafety": "892bf057f2974c1d1624f37d1110dcb4924e4fd6",
-    "datasets/raw/manipulation/PreservingHistoricalTruth": "5d327d24c8e6f0c82b598fecf9ca9f1b46bf3c64",
-    "datasets/raw/manipulation/llm-human-rights": "65171d7c5ec20255256e5d0500dc118c8f7904ef",
-    "datasets/raw/manipulation/persuasion": "b520c793895e7bea0090816551e9f395f9256082",
-    "datasets/raw/manipulation/sycophancy-eval": "9a1694221e3639887138f61deae344335eca6752"
+    "repo": "302aa44eca5d452b619f616ad70d993bde8b966b",
+    "datasets/raw/agentharm": "e23b3fe60a0da9037314b88e5ee3a0c054970dad",
+    "datasets/raw/anthropic_persuasion": "b520c793895e7bea0090816551e9f395f9256082",
+    "datasets/raw/ape": "f2ca0a9900d5bcd1b0238a49a335a1988cbc09a9",
+    "datasets/raw/bbq": "bea11bd97d79217245b5871acd247b9d6eb24598",
+    "datasets/raw/beavertails": "a93205d9ba6cc9dc398a34466da3602abddd2d40",
+    "datasets/raw/biolp_bench": "148d5a2dd90c185ce2859c77c368b79c2173d907",
+    "datasets/raw/cogmanip": "d2207932ccaff6d5df1258037d154ac469731aa4",
+    "datasets/raw/confaide": "3174c63e689226189675a740b7bf9053f10bae50",
+    "datasets/raw/ctrl_alt_deceit": "60c1dff47a4615aedaceb2a14d4f1daa3afad990",
+    "datasets/raw/cyberseceval_3": "acfdd58f7c605eec53af4eed3f7ecf302267f0f8",
+    "datasets/raw/cysecbench": "ea3868f63961833e33d3e81933dd1024505dabe0",
+    "datasets/raw/deception_bench": "9c6c67b3d2a2d9c226ea0dd2120f1bb0899d779d",
+    "datasets/raw/democratic_authoritarian_bias": "583a1e4a8d440c421ab2ef06a6ac8afd5473c9e0",
+    "datasets/raw/elephant": "61f7044fc0e11defc971dfaa9bc84d7340fa88eb",
+    "datasets/raw/fortress": "0c096becbc75bb12065c8059a53960c7f0d4d35c",
+    "datasets/raw/harmbench": "8e1604d1171fe8a48d8febecd22f600e462bdcdd",
+    "datasets/raw/historical_misinfo": "5d327d24c8e6f0c82b598fecf9ca9f1b46bf3c64",
+    "datasets/raw/injecagent": "f19c9f2c79a41046eb13c03c51a24c567a8ffa07",
+    "datasets/raw/instrumentaleval": "269678168cf0388bf5dd7d10dfaed4af07905c49",
+    "datasets/raw/lab_bench": "5c77cec648430f30611808808861eb86f81d5eaa",
+    "datasets/raw/medsafetybench": "dc5d88e4c0100deada5a96f065a302959e6523a7",
+    "datasets/raw/mentalmanip": "86e800cebf9ee2baa8f5999845027cc3f50e8fd5",
+    "datasets/raw/mlgym": "9d40c1b5035202018cd7091fb4e83a9c68b377c0",
+    "datasets/raw/model_written_evaluations": "84fcc677e52e1902d696c32cd1a6b663e70d3993",
+    "datasets/raw/multijail": "93d65c778925d55973b9ff30c7bccc8545494eb6",
+    "datasets/raw/paper_bench": "51052cede8cc608f95bb00346635e03759013e5a",
+    "datasets/raw/persuasionbench": "a8fa77f0c57435aa0db66b26c2ecf5a485eb20ad",
+    "datasets/raw/persusafety": "892bf057f2974c1d1624f37d1110dcb4924e4fd6",
+    "datasets/raw/privacylens": "7dc406e8d1e882e5b0c6ea4be697b2b7a5dee805",
+    "datasets/raw/redcode": "c84b6db88fd8bd258e29f12e692ccfd4287a454d",
+    "datasets/raw/sad": "dfc5c9831a9bcc5c9a9dbdcaa2955aae983cd1d3",
+    "datasets/raw/scisafeeval": "2c2296660a9c340593b049fdf0aa7900ae53f0eb",
+    "datasets/raw/sycophancy_sharma": "18f18160e9998e524bbf027c4475bfa7fdeb6949",
+    "datasets/raw/truthfulqa": "741b8276f2d1982aa3d5b832d3ee81ed3b896490",
+    "datasets/raw/udhr_rights_limitations": "65171d7c5ec20255256e5d0500dc118c8f7904ef"
   }
 }
