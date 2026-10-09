@@ -67,11 +67,16 @@ curl -sf "http://localhost:$PORT/health" > /dev/null || { echo "vLLM never becam
 for input in datasets/cache/*.screen_input.jsonl; do
     [ -e "$input" ] || continue
     risk=$(basename "$input" .screen_input.jsonl)
-    uv run python scripts/screen_answerability.py --risk "$risk" \
-        --model "vllm/$MODEL" \
-        --model-base-url "http://localhost:$PORT/v1" \
-        --max-connections 32
-    uv run python -m datasets.prepare.cluster.prepare --risk "$risk"
+    # prepare exits 2 and rewrites the input when the fill tier needs more
+    # candidates than the first pass screened, so screen until it exits 0.
+    for round in $(seq 1 10); do
+        uv run python scripts/screen_answerability.py --risk "$risk" \
+            --model "vllm/$MODEL" \
+            --model-base-url "http://localhost:$PORT/v1" \
+            --max-connections "32"
+        uv run python -m datasets.prepare.cluster.prepare --risk "$risk" && break
+        [ -e "$input" ] || { echo "$risk: prepare failed without a new screen input"; exit 1; }
+    done
 done
 # sbatch --export=ALL,SCREEN_ONLY=1 stops here, so refused_dropped in
 # datasets/public/<risk>.meta.json can be reviewed before any generation.
