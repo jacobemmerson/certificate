@@ -571,11 +571,14 @@ def relevance_scores(
     rows: list[Row], matrix: np.ndarray, embeddings: dict[str, np.ndarray]
 ) -> tuple[np.ndarray, np.ndarray]:
     '''Each row's max cosine over the anchors, and the index of the anchor that
-    attains it (the first, on a tie). Rounded so BLAS summation order cannot
-    reorder rows across machines.'''
+    attains it (the first, on a tie; -1 for a row with no words, which scores
+    0.0 against everything and so matched no anchor). Rounded so BLAS
+    summation order cannot reorder rows across machines.'''
     vectors = _vectors(rows, _payload_fn(None), embeddings).astype(np.float64)
     similarity = np.round(vectors @ matrix.T, 9)
-    return similarity.max(axis=1), similarity.argmax(axis=1)
+    hit = similarity.argmax(axis=1)
+    hit[~vectors.any(axis=1)] = -1
+    return similarity.max(axis=1), hit
 
 
 def leaf_threshold(matrix: np.ndarray, override: float | None) -> float:
@@ -620,7 +623,8 @@ def relevance_filter(
     for source, rows in pools:
         if not source.leaf or not rows:
             kept_pools.append((source, rows))
-            report[source.name] = {"leaf": source.leaf, "relevance": "unscored" if not source.leaf else "empty"}
+            report[source.name] = {"leaf": source.leaf,
+                                   "relevance_status": "unscored" if not source.leaf else "empty"}
             continue
         leaf = leaves[source.leaf]
         names, matrix = leaf_anchors(leaf, leaf_embeddings)
@@ -630,7 +634,7 @@ def relevance_filter(
         unit_scores = scores
         if source.group_key:
             best: dict[str, float] = {}
-            group_of = [str(row.metadata.get(source.group_key, i)) for i, row in enumerate(rows)]
+            group_of = _group_ids(source, rows)
             for group, score in zip(group_of, scores):
                 best[group] = max(best.get(group, -np.inf), float(score))
             unit_scores = np.array([best[group] for group in group_of])
@@ -643,11 +647,13 @@ def relevance_filter(
         kept, hits = [], defaultdict(int)
         for row, unit_score, score, anchor in zip(rows, unit_scores, scores, hit):
             if unit_score >= threshold_eff:
+                name = names[anchor] if anchor >= 0 else None
                 # A fresh dict: readers may share one metadata dict across rows.
                 row.metadata = {**row.metadata, "relevance": float(score),
-                                "relevance_anchor": names[anchor]}
+                                "relevance_anchor": name}
                 kept.append(row)
-                hits[names[anchor]] += 1
+                if name:
+                    hits[name] += 1
             else:
                 dropped.append({
                     "tier": "relevance", "dropped": row.sample_id,
@@ -658,6 +664,7 @@ def relevance_filter(
         quantiles = np.percentile(scores, [0, 10, 50, 90, 100])
         report[source.name] = {
             "leaf": source.leaf,
+            "relevance_status": "scored",
             "relevance_threshold": theta,
             "relevance_threshold_eff": threshold_eff,
             "relevance_floor_used": threshold_eff < theta,
@@ -699,8 +706,8 @@ def _grouped_sample(
     groups, not rows — a quota of 20 over 3-arm groups yields 60 rows.
     '''
     groups: defaultdict[str, list[int]] = defaultdict(list)
-    for index, row in enumerate(rows):
-        groups[str(row.metadata.get(source.group_key, index))].append(index)
+    for index, group in enumerate(_group_ids(source, rows)):
+        groups[group].append(index)
 
     # Select over one representative row per group, so groups are picked by the
     # same stratification the source declares, then expand back to every member.
@@ -967,10 +974,15 @@ def _allocate(buckets: dict, quota: int, *, balanced: bool) -> dict:
 
 # ----- driver -----
 
+def _group_ids(source: Source, rows: list[Row]) -> list[str]:
+    '''Each row's group; a row without the group_key field is its own group.'''
+    return [str(row.metadata.get(source.group_key, i)) for i, row in enumerate(rows)]
+
+
 def _group_count(source: Source, rows: list[Row]) -> int:
     if not source.group_key:
         return len(rows)
-    return len({str(row.metadata.get(source.group_key, i)) for i, row in enumerate(rows)})
+    return len(set(_group_ids(source, rows)))
 
 
 def _group_size(source: Source, rows: list[Row]) -> int:

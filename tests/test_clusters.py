@@ -2183,6 +2183,26 @@ class TestRelevanceFilter(unittest.TestCase):
         ids = [row.sample_id for row in pools[0][1]]
         self.assertEqual(ids, sorted(ids, key=lambda i: int(i.split(":")[1])))
 
+    def test_the_one_percent_term_sets_the_floor_on_a_big_pool(self):
+        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
+        rows, embeddings = self.rows("src", [(i, 5000, 0) for i in range(5000)])
+        # Budget 1 -> share 1 -> SCREEN_FACTOR term 4, while 1% of 5,000 is 50.
+        pools, _, report = self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 1)
+        self.assertEqual({row.sample_id for row in pools[0][1]},
+                         {f"src:{i}" for i in range(4950, 5000)})
+        self.assertTrue(report["src"]["relevance_floor_used"])
+        self.assertEqual(report["src"]["relevance_status"], "scored")
+
+    def test_a_row_with_no_words_matches_no_anchor(self):
+        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
+        rows, embeddings = self.rows("src", [(1, 0, 0)] * 3)
+        rows[2].query = "--"
+        pools, _, report = self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 2)
+        self.assertEqual(len(pools[0][1]), 3)  # the floor (7) exceeds the pool
+        self.assertEqual(rows[2].metadata["relevance"], 0.0)
+        self.assertIsNone(rows[2].metadata["relevance_anchor"])
+        self.assertEqual(report["src"]["anchor_hits"], {"legal": 2})
+
     def test_a_leafless_source_passes_through_unscored(self):
         leaf, cache = self.leaf([(1, 0), (0, 1)])
         rows, embeddings = self.rows("src", [(1, 1)] * 3)
@@ -2190,7 +2210,7 @@ class TestRelevanceFilter(unittest.TestCase):
             [(self.source(leaf=None), rows)], embeddings, leaf, cache, 2)
         self.assertIs(pools[0][1], rows)
         self.assertEqual(dropped, [])
-        self.assertEqual(report["src"], {"leaf": None, "relevance": "unscored"})
+        self.assertEqual(report["src"], {"leaf": None, "relevance_status": "unscored"})
         self.assertNotIn("relevance", rows[0].metadata)
 
     def test_two_runs_are_identical(self):
@@ -2205,6 +2225,9 @@ class TestRelevanceFilter(unittest.TestCase):
         scored, scored_vectors = self.rows("a", [(1, 0, 0) if i < 40 else (i, 2000, 0) for i in range(1000)])
         other, other_vectors = self.rows("b", [(0, 0, 1)] * 1000)
         pools = [(self.source("a"), scored), (self.source("b", leaf=None), other)]
+        # The floor keeps >= SCREEN_FACTOR x the provisional share, so a filtered source
+        # still covers its share at the same budget: re-flow only happens for pools
+        # already below their floor. Hence filter at budget 20, re-allocate at 200.
         filtered, _, _ = self.run_filter(pools, {**scored_vectors, **other_vectors}, leaf, cache, 20)
         self.assertEqual(len(filtered[0][1]), 40)
         self.assertEqual(prepare.allocate_budget(pools, 200), {"a": 100, "b": 100})
