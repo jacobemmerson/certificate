@@ -1733,6 +1733,13 @@ class TestBuiltClusters(unittest.TestCase):
         invariant moves to the axis that does vary there — the source's own
         stratification — rather than being skipped. loss_of_control is that
         case: one benchmark, seven behaviours.
+
+        With several sources the cap is the larger of 40%, an equal share,
+        and the source's own allotment from the budget (meta.json), so a
+        small source's pool can force a big one past the equal share but
+        nothing may exceed what the budget gave it. `allotted` counts rows,
+        except for group_key sources where it counts groups, so those keep
+        the plain cap.
         '''
         for risk in RISKS:
             if not (PUBLIC_DIR / f"{risk}.csv").exists():
@@ -1749,8 +1756,14 @@ class TestBuiltClusters(unittest.TestCase):
                 for row in rows:
                     key = slice_of(row)
                     counts[key] = counts.get(key, 0) + 1
-                largest = max(counts.values()) / len(rows)
-                self.assertLessEqual(largest, max(0.40, 1 / len(sources)), f"{counts} in {risk}")
+                allotted = {}
+                if len(sources) > 1:
+                    meta = json.loads((PUBLIC_DIR / f"{risk}.meta.json").read_text())["sources"]
+                    allotted = {s.name: meta[s.name]["allotted"] / len(rows)
+                                for s in sources if not s.group_key}
+                for key, count in counts.items():
+                    cap = max(0.40, 1 / len(sources), allotted.get(key, 0))
+                    self.assertLessEqual(count / len(rows), cap, f"{counts} in {risk}")
 
 
 class TestDeterminism(unittest.TestCase):

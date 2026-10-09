@@ -585,7 +585,10 @@ class TestPropensityMcq(unittest.TestCase):
         self.assertEqual(result.value, 1.0)
 
     def test_every_built_row_targets_one_of_its_own_choices(self):
-        for sample in clusters.cluster("loss_of_control").dataset:
+        mcq = [s for s in clusters.cluster("loss_of_control").dataset
+               if s.metadata["question_type"] == "mcq"]
+        self.assertTrue(mcq)
+        for sample in mcq:
             with self.subTest(sample=sample.id):
                 self.assertIn(sample.metadata["target"], sample.metadata["choices"])
                 self.assertEqual(len(sample.metadata["choices"]), 2)

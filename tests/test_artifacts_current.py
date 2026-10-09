@@ -33,8 +33,6 @@ class TestArtifactsAreCurrent(unittest.TestCase):
     def setUpClass(cls):
         cls.tasks = {risk: cluster(risk, grader="openai/gpt-4o") for risk in RISKS if available(risk)}
 
-    # Red until Task 9 regenerates artifacts (needs WS-A families column, WS-C scenario v4); remove then.
-    @unittest.expectedFailure
     def test_csv_header_is_the_schema(self):
         for risk in self.tasks:
             with self.subTest(risk=risk), open(CSV_DIR / f"{risk}.csv", newline="") as f:
