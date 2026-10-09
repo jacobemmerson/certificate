@@ -18,6 +18,7 @@ from statistics import fmean
 from inspect_ai.log import EvalLog
 from inspect_ai.scorer import Score, SampleScore
 
+from datasets.prepare.cluster.sources import HEADLINE_RISKS, RISKS
 from pipeline.stage1_evaluation.scorers.source_metrics import (
     NEUTRAL_ARM, POOL_DERIVED, SUMMARIES, contract, summarise,
 )
@@ -482,8 +483,9 @@ def model_aggregate(tree: dict) -> dict:
     '''The top of the tree: one figure per reduction, across the risks.'''
     return {
         how: _round(_mean([
-            risk["aggregate"][how] for risk in tree.values()
-            if risk.get("aggregate") and risk["aggregate"].get(how) is not None
+            risk["aggregate"][how] for name, risk in tree.items()
+            if (name not in RISKS or name in HEADLINE_RISKS)
+            and risk.get("aggregate") and risk["aggregate"].get(how) is not None
         ]))
         for how in ("average", "worst", "tail")
     }

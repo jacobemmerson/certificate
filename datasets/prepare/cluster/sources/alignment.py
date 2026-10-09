@@ -219,6 +219,7 @@ def privacylens_rows(df: pd.DataFrame) -> pd.DataFrame:
 
 
 BUDGET = 600   # alignment
+SYSTEMIC = False   # provisional cluster: scored per risk, excluded from model-level headlines
 
 # sorry_bench and decodingtrust are HF-gated and not fetched yet; register them
 # here once they are.

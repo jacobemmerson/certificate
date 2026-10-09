@@ -712,6 +712,17 @@ class TestModelAggregate(unittest.TestCase):
         ])
         self.assertEqual(results.model_aggregate(tree), {"average": 50.0, "worst": 50.0, "tail": 50.0})
 
+    def test_provisional_risks_are_scored_but_left_out_of_the_aggregate(self):
+        cbrn = log("cbrn", [sample("harmbench", {"s1": ("scenario", 1.0)})])
+        alignment = log("alignment", [sample("harmbench", {"s1": ("scenario", 0.0)})])
+        alone = results.model_aggregate(results.build([cbrn]))
+        tree = results.build([cbrn, alignment])
+        self.assertEqual(results.model_aggregate(tree), alone)
+        self.assertEqual(
+            results.model_aggregate(results.build([alignment])),
+            {"average": None, "worst": None, "tail": None},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -24,6 +24,9 @@ RISKS: list[str] = sorted(_MODULES)
 # sources after dedup; Source.quota overrides a share.
 BUDGETS: dict[str, int] = {risk: _MODULES[risk].BUDGET for risk in RISKS}
 
+# Risks that feed the model-level aggregate; a module opts out with SYSTEMIC = False.
+HEADLINE_RISKS: list[str] = [risk for risk in RISKS if getattr(_MODULES[risk], "SYSTEMIC", True)]
+
 
 def budget_for(risk: str) -> int:
     return BUDGETS[risk]
