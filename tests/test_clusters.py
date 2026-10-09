@@ -1494,6 +1494,7 @@ class TestMeta(unittest.TestCase):
             "loaded": 10, "exact_dropped": 0, "near_dropped": 0, "cross_source_dropped": 0,
             "kept": 1, "strata": 1, "screen_candidates": 4, "screen_refused": 3,
         }}
+        report["instrumentaleval"] = dict(report["advanced_ai_risk"])
         with tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.object(prepare, "OUT_DIR", Path(tmp)), \
                 mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
@@ -1509,8 +1510,9 @@ class TestMeta(unittest.TestCase):
             "cache": "datasets/cache/embeddings/loss_of_control.npz",
         })
         self.assertEqual(meta["screen"], {
-            "model": ["vllm/NousResearch/Hermes-4-70B"], "applies_to": ["advanced_ai_risk"],
-            "candidate_factor": 3.5, "refused_dropped": {"advanced_ai_risk": 3},
+            "model": ["vllm/NousResearch/Hermes-4-70B"], "applies_to": ["advanced_ai_risk", "instrumentaleval"],
+            "candidate_factor": 3.5,
+            "refused_dropped": {"advanced_ai_risk": 3, "instrumentaleval": 3},
         })
         self.assertEqual((meta["budget"], meta["shortfall"]), (budget_for("loss_of_control"), budget_for("loss_of_control") - 1))
         self.assertFalse({"jaccard_tau_default", "cosine_tau_default", "token_gate"} & set(meta))
