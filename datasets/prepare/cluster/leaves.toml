@@ -10,6 +10,8 @@
 # the 1.4 definition of the specified risk it belongs to.
 # definition (1.3.2 leaves) is our provisional reading of what the Code describes,
 # written from the Code and the Act only; the generation script decomposes it.
+# label is the Label Studio choice text annotators pick (annotations.json);
+# absent on the CBRN leaves, which the label config did not offer.
 # exemplars are the "Input to model" part of a sample item in annotations.csv,
 # taken only where that benchmark unambiguously instantiates the leaf; the
 # comment above each list names the benchmarks. Empty = for the annotators.
@@ -17,6 +19,7 @@
 [[leaf]]
 id = "misalignment_intent"
 title = "Misalignment with human intent"
+label = "misalignment with human intent"
 cop_ref = "Appendix 1.3.2(1)"
 legal_text = "Model propensities, which encompass inclinations or tendencies of a model to exhibit some behaviours or patterns, include: misalignment with human intent."
 definition = "A model's inclination to pursue something other than what the person directing it actually asked for or meant. The model substitutes its own reading of the task, follows the letter of an instruction while defeating its purpose, optimises a proxy of the stated goal, or quietly omits or alters parts of the task it was given. The Code lists this propensity among the sources of loss of control, where humans lose the ability to reliably direct, modify or shut down a model: a model that does not reliably do what it is told cannot be reliably directed."
@@ -37,6 +40,7 @@ exemplars = [
 [[leaf]]
 id = "misalignment_values"
 title = "Misalignment with human values"
+label = "misalignment with human values (e.g. disregard for fundamental rights)"
 cop_ref = "Appendix 1.3.2(2)"
 legal_text = "Model propensities, which encompass inclinations or tendencies of a model to exhibit some behaviours or patterns, include: misalignment with human values (e.g. disregard for fundamental rights)."
 definition = "A model's inclination to act or advise in ways that conflict with human values, in particular by disregarding fundamental rights such as dignity, liberty, equality, privacy, freedom of expression and the rule of law. It shows when a model treats such rights as negotiable, endorses or helps carry out measures that override them without justification, or weighs outcomes in ways most people would find unacceptable. The Code lists this propensity among the sources of loss of control, since a model whose values diverge from ours cannot be trusted to act as intended when unsupervised."
@@ -61,6 +65,7 @@ exemplars = [
 [[leaf]]
 id = "harmful_deployment"
 title = "Tendency to deploy capabilities in harmful ways"
+label = "tendency to deploy capabilities in harmful ways (e.g. to manipulate or deceive)"
 cop_ref = "Appendix 1.3.2(3)"
 legal_text = "Model propensities, which encompass inclinations or tendencies of a model to exhibit some behaviours or patterns, include: tendency to deploy capabilities in harmful ways (e.g. to manipulate or deceive)."
 definition = "A model's inclination to turn its capabilities to harmful ends, for example by manipulating or deceiving the people it interacts with. The capability itself may be benign; the propensity is that the model chooses, or readily agrees, to use it against someone's interests: steering a person's beliefs or decisions by exploiting their trust, emotions or circumstances, misrepresenting facts or its own intentions, or producing content designed to mislead or coerce. The Code ties this propensity to harmful manipulation, the strategic distortion of human behaviour or beliefs through persuasion, deception or personalised targeting."
@@ -81,6 +86,7 @@ exemplars = [
 [[leaf]]
 id = "hallucination_misinformation"
 title = "Hallucination and misinformation"
+label = "tendency to \"hallucinate\", to produce misinformation, or to obscure sources of information"
 cop_ref = "Appendix 1.3.2(4)"
 legal_text = "Model propensities, which encompass inclinations or tendencies of a model to exhibit some behaviours or patterns, include: tendency to “hallucinate”, to produce misinformation, or to obscure sources of information."
 definition = "A model's inclination to produce false content: to state fabricated facts, citations, events or figures with confidence, to assert claims that are untrue or unsupported, or to hide where information comes from so that its reliability cannot be checked. It covers both error the model presents as fact and content that repeats common misconceptions or falsehoods. The Act treats the dissemination of false content and the facilitation of disinformation as systemic risks because of their effects on democratic processes, public security and public health."
@@ -105,6 +111,7 @@ exemplars = [
 [[leaf]]
 id = "discriminatory_bias"
 title = "Discriminatory bias"
+label = "discriminatory bias"
 cop_ref = "Appendix 1.3.2(5)"
 legal_text = "Model propensities, which encompass inclinations or tendencies of a model to exhibit some behaviours or patterns, include: discriminatory bias."
 definition = "A model's inclination to treat people differently, or to reason about them differently, on the basis of protected characteristics such as race, ethnicity, sex, gender, age, disability, religion, sexual orientation, nationality or social origin. It shows when a model relies on stereotypes to fill gaps in what it has been told, attributes traits or culpability to a person because of their group, or produces outputs whose quality or tone varies with the group a person belongs to. The Act lists harmful bias and discrimination as systemic risks because of the harm they do to individuals, communities and societies, and the discriminatory content they spread."
@@ -129,6 +136,7 @@ exemplars = [
 [[leaf]]
 id = "unreliability"
 title = "Lack of performance reliability"
+label = "lack of performance reliability"
 cop_ref = "Appendix 1.3.2(6)"
 legal_text = "Model propensities, which encompass inclinations or tendencies of a model to exhibit some behaviours or patterns, include: lack of performance reliability."
 definition = "A model's inclination to perform inconsistently: to give different answers to the same or equivalent questions, to fail on inputs that differ only superficially from ones it handles well, to degrade without warning on tasks outside its usual conditions, or to express confidence that does not track whether it is right. The concern is not any single error but the absence of dependable performance, which makes the model's behaviour hard to predict and its failures hard to anticipate. The Code lists this propensity because unpredictable behaviour in widely deployed models can lead to major accidents and disruptions in critical sectors."
@@ -149,6 +157,7 @@ exemplars = [
 [[leaf]]
 id = "lawlessness"
 title = "Lawlessness"
+label = "lawlessness, i.e. acting without reasonable regard to legal duties that would be imposed on similarly situated persons, or without reasonable regard to the legally protected interests of affected persons"
 cop_ref = "Appendix 1.3.2(7)"
 legal_text = "Model propensities, which encompass inclinations or tendencies of a model to exhibit some behaviours or patterns, include: lawlessness, i.e. acting without reasonable regard to legal duties that would be imposed on similarly situated persons, or without reasonable regard to the legally protected interests of affected persons."
 definition = "A model's inclination to act without reasonable regard to the legal duties that would bind a similarly situated person, or to the legally protected interests of the people its actions affect. It shows when a model, given a task, treats legal obligations as obstacles rather than constraints: it helps break contracts, infringe intellectual property, evade regulation or taxation, violate privacy or confidentiality, or harm third parties whose interests the law protects, without recognising or weighing the duty involved. The Code lists this propensity because a model that does not internalise legal duties can cause harm at scale when it acts or advises on behalf of many people."
@@ -169,6 +178,7 @@ exemplars = [
 [[leaf]]
 id = "power_seeking"
 title = "Goal-pursuing, resistance to goal modification, power-seeking"
+label = "\"goal-pursuing\", harmful resistance to goal modification, or \"power-seeking\""
 cop_ref = "Appendix 1.3.2(8)"
 legal_text = "Model propensities, which encompass inclinations or tendencies of a model to exhibit some behaviours or patterns, include: “goal-pursuing”, harmful resistance to goal modification, or “power-seeking”."
 definition = "A model's inclination to pursue its objectives beyond what the task calls for: to keep pursuing a goal after it has been changed or withdrawn, to resist or circumvent attempts to modify, correct, pause or stop it, or to acquire resources, influence, capabilities or options that are useful for many goals rather than needed for the one assigned. Such behaviour can be instrumental, arising because staying active and well resourced helps achieve almost any objective. The Code lists goal-pursuing, harmful resistance to goal modification and power-seeking among the sources of loss of control, where humans lose the ability to reliably direct, modify or shut down a model."
@@ -193,6 +203,7 @@ exemplars = [
 [[leaf]]
 id = "collusion"
 title = "Colluding with other AI models/systems"
+label = "\"colluding\" with other AI models/systems"
 cop_ref = "Appendix 1.3.2(9)"
 legal_text = "Model propensities, which encompass inclinations or tendencies of a model to exhibit some behaviours or patterns, include: “colluding” with other AI models/systems."
 definition = "A model's inclination to coordinate with other AI models or systems against the interests of the humans who deploy or oversee them: to agree, explicitly or tacitly, on joint action that evades monitoring, divides responsibilities so that no single system appears to misbehave, exchanges information that each was meant to keep separate, or covers for another system's failures or violations. The Code lists this propensity because systems that collude can defeat oversight arrangements that rely on each system being checked, or checking the others, independently."
@@ -213,6 +224,7 @@ exemplars = [
 [[leaf]]
 id = "miscoordination"
 title = "Mis-coordination or conflict with other AI models/systems"
+label = "mis-coordination or conflict with other AI models/systems"
 cop_ref = "Appendix 1.3.2(10)"
 legal_text = "Model propensities, which encompass inclinations or tendencies of a model to exhibit some behaviours or patterns, include: mis-coordination or conflict with other AI models/systems."
 definition = "A model's inclination to coordinate poorly with other AI models or systems, or to come into conflict with them: to act on inconsistent assumptions, to pursue its own objective in ways that undermine another system's, to escalate disagreements rather than resolve them, or to fail to hand over, share or reconcile information needed for joint tasks. The Code lists this propensity because, as more decisions pass through interacting automated systems, uncoordinated or conflicting behaviour between them can produce failures none of them would produce alone, including accidents and disruptions in critical sectors."
@@ -281,6 +293,7 @@ exemplars = [
 [[leaf]]
 id = "cyber_vulnerability_discovery"
 title = "Cyber offence: automated vulnerability discovery"
+label = "automated vulnerability discovery"
 cop_ref = "Appendix 1.4(3); 1.3.1(1)"
 legal_text = "Model capabilities include: offensive cyber capabilities. Cyber offence: Risks from enabling large-scale sophisticated cyber-attacks, including on critical systems (e.g. critical infrastructure). This includes significantly lowering the barriers to entry for malicious actors, or significantly increasing the potential impact achieved in offensive cyber operations, e.g. through automated vulnerability discovery, exploit generation, operational use, and attack scaling."
 exemplars = []
@@ -288,6 +301,7 @@ exemplars = []
 [[leaf]]
 id = "cyber_exploit_generation"
 title = "Cyber offence: exploit generation"
+label = "exploit generation"
 cop_ref = "Appendix 1.4(3); 1.3.1(1)"
 legal_text = "Model capabilities include: offensive cyber capabilities. Cyber offence: Risks from enabling large-scale sophisticated cyber-attacks, including on critical systems (e.g. critical infrastructure). This includes significantly lowering the barriers to entry for malicious actors, or significantly increasing the potential impact achieved in offensive cyber operations, e.g. through automated vulnerability discovery, exploit generation, operational use, and attack scaling."
 # exemplars: CyberGym
@@ -300,6 +314,7 @@ exemplars = [
 [[leaf]]
 id = "cyber_operational_use"
 title = "Cyber offence: operational use"
+label = "operational use"
 cop_ref = "Appendix 1.4(3); 1.3.1(1)"
 legal_text = "Model capabilities include: offensive cyber capabilities. Cyber offence: Risks from enabling large-scale sophisticated cyber-attacks, including on critical systems (e.g. critical infrastructure). This includes significantly lowering the barriers to entry for malicious actors, or significantly increasing the potential impact achieved in offensive cyber operations, e.g. through automated vulnerability discovery, exploit generation, operational use, and attack scaling."
 # exemplars: AutoPenBench
@@ -312,6 +327,7 @@ exemplars = [
 [[leaf]]
 id = "cyber_attack_scaling"
 title = "Cyber offence: attack scaling"
+label = "attack scaling"
 cop_ref = "Appendix 1.4(3); 1.3.1(1)"
 legal_text = "Model capabilities include: offensive cyber capabilities. Cyber offence: Risks from enabling large-scale sophisticated cyber-attacks, including on critical systems (e.g. critical infrastructure). This includes significantly lowering the barriers to entry for malicious actors, or significantly increasing the potential impact achieved in offensive cyber operations, e.g. through automated vulnerability discovery, exploit generation, operational use, and attack scaling."
 exemplars = []
@@ -319,6 +335,7 @@ exemplars = []
 [[leaf]]
 id = "loc_oversight_evasion"
 title = "Loss of control: evading human oversight"
+label = "evading oversight"
 cop_ref = "Appendix 1.4(2); 1.3.1(9)"
 legal_text = "Model capabilities include: capabilities to evade human oversight. Loss of control: Risks from humans losing the ability to reliably direct, modify, or shut down a model. Such risks may emerge from misalignment with human intent or values, self-reasoning, self-replication, self-improvement, deception, resistance to goal modification, power-seeking behaviour, or autonomously creating or improving AI models or AI systems."
 # exemplars: SHADE-Arena
@@ -331,6 +348,7 @@ exemplars = [
 [[leaf]]
 id = "loc_self_replication"
 title = "Loss of control: self-replication"
+label = "self-replication"
 cop_ref = "Appendix 1.4(2); 1.3.1(10)"
 legal_text = "Model capabilities include: capabilities to self-replicate, self-improve, or modify its own implementation environment. Loss of control: Risks from humans losing the ability to reliably direct, modify, or shut down a model. Such risks may emerge from misalignment with human intent or values, self-reasoning, self-replication, self-improvement, deception, resistance to goal modification, power-seeking behaviour, or autonomously creating or improving AI models or AI systems."
 # exemplars: RepliBench, Self-Replication (Pan et al.)
@@ -344,6 +362,7 @@ exemplars = [
 [[leaf]]
 id = "loc_ai_rnd"
 title = "Loss of control: autonomous AI research and development"
+label = "autonomous AI R&D"
 cop_ref = "Appendix 1.4(2); 1.3.1(11)"
 legal_text = "Model capabilities include: capabilities to automate AI research and development. Loss of control: Risks from humans losing the ability to reliably direct, modify, or shut down a model. Such risks may emerge from misalignment with human intent or values, self-reasoning, self-replication, self-improvement, deception, resistance to goal modification, power-seeking behaviour, or autonomously creating or improving AI models or AI systems."
 # exemplars: RE-Bench
@@ -356,6 +375,7 @@ exemplars = [
 [[leaf]]
 id = "loc_deception"
 title = "Loss of control: deception"
+label = "deception"
 cop_ref = "Appendix 1.4(2); 1.3.1(4)"
 legal_text = "Model capabilities include: capabilities to manipulate, persuade, or deceive. Loss of control: Risks from humans losing the ability to reliably direct, modify, or shut down a model. Such risks may emerge from misalignment with human intent or values, self-reasoning, self-replication, self-improvement, deception, resistance to goal modification, power-seeking behaviour, or autonomously creating or improving AI models or AI systems."
 # exemplars: DeceptionBench
@@ -368,6 +388,7 @@ exemplars = [
 [[leaf]]
 id = "loc_shutdown_resistance"
 title = "Loss of control: resisting modification or shutdown"
+label = "resisting modification or shutdown"
 cop_ref = "Appendix 1.4(2); 1.3.2(8)"
 legal_text = "Model propensities, which encompass inclinations or tendencies of a model to exhibit some behaviours or patterns, include: “goal-pursuing”, harmful resistance to goal modification, or “power-seeking”. Loss of control: Risks from humans losing the ability to reliably direct, modify, or shut down a model. Such risks may emerge from misalignment with human intent or values, self-reasoning, self-replication, self-improvement, deception, resistance to goal modification, power-seeking behaviour, or autonomously creating or improving AI models or AI systems."
 # exemplars: Shutdown Resistance (Incomplete Tasks Induce Shutdown Resistance)
@@ -380,6 +401,7 @@ exemplars = [
 [[leaf]]
 id = "manipulation_persuasion"
 title = "Harmful manipulation: persuasion capability"
+label = "persuasion capability"
 cop_ref = "Appendix 1.4(4); 1.3.1(4)"
 legal_text = "Model capabilities include: capabilities to manipulate, persuade, or deceive. Harmful manipulation: Risks from enabling the strategic distortion of human behaviour or beliefs by targeting large populations or high-stakes decision-makers through persuasion, deception, or personalised targeting. This includes significantly enhancing capabilities for persuasion, deception, and personalised targeting, particularly through multi-turn interactions and where individuals are unaware of or cannot reasonably detect such influence. Such capabilities could undermine democratic processes and fundamental rights, including exploitation based on protected characteristics."
 # exemplars: Anthropic Persuasion
@@ -392,6 +414,7 @@ exemplars = [
 [[leaf]]
 id = "manipulation_propensity"
 title = "Harmful manipulation: manipulation propensity"
+label = "manipulation propensity"
 cop_ref = "Appendix 1.4(4); 1.3.2(3)"
 legal_text = "Model propensities, which encompass inclinations or tendencies of a model to exhibit some behaviours or patterns, include: tendency to deploy capabilities in harmful ways (e.g. to manipulate or deceive). Harmful manipulation: Risks from enabling the strategic distortion of human behaviour or beliefs by targeting large populations or high-stakes decision-makers through persuasion, deception, or personalised targeting. This includes significantly enhancing capabilities for persuasion, deception, and personalised targeting, particularly through multi-turn interactions and where individuals are unaware of or cannot reasonably detect such influence. Such capabilities could undermine democratic processes and fundamental rights, including exploitation based on protected characteristics."
 # exemplars: Attempt to Persuade Eval (APE), PersuSafety

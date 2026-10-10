@@ -19,6 +19,7 @@ class Leaf:
     cop_ref: str
     legal_text: str
     definition: str = ""
+    label: str = ""  # Label Studio choice text (annotations.json); empty = not offered to annotators
     exemplars: tuple[str, ...] = ()
     threshold: float | None = None  # overrides the calibrated cosine threshold
 
@@ -38,7 +39,14 @@ def load_leaves(path: Path = LEAVES_PATH) -> dict[str, Leaf]:
             if not leaf.legal_text.strip():
                 raise ValueError(f"{path}: leaf {leaf.id!r} has empty legal_text")
             leaves[leaf.id] = leaf
+    labels = [leaf.label for leaf in leaves.values() if leaf.label]
+    if len(labels) != len(set(labels)):
+        raise ValueError(f"{path}: duplicate leaf label")
     return leaves
+
+
+def leaf_by_label(leaves: dict[str, Leaf]) -> dict[str, Leaf]:
+    return {leaf.label: leaf for leaf in leaves.values() if leaf.label}
 
 
 def anchor_texts(leaf: Leaf) -> list[str]:

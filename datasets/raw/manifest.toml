@@ -1,11 +1,11 @@
 # Download manifest: one [[benchmark]] per annotated benchmark plus registered sources not in the export, with where to fetch it.
 # status: registered|vendored (in datasets/<path>), prompt|partial (fetchable), agentic|human_study|unreleased (no prompt set), excluded (dropped by the 2026-10-07 revision and deleted from Label Studio; note says why).
-# ids join annotations.csv (column "id"); id "" marks a registered source not in annotations.csv, or an excluded row whose task was deleted from Label Studio 2026-10-07.
+# ids join annotations.json (task "id"); id "" marks a registered source not in the export, or an excluded row whose task was deleted from Label Studio 2026-10-07.
 # registered/vendored rows are provenance records for data that lives at `path` today.
 # scripts/fetch_raw.py fetches into datasets/raw/<name>/ (use --dry-run to preview).
 # See datasets/BENCHMARKS.md Part 4.
 #
-# Rows follow annotations.csv order; registered sources not in the export follow, then the 2026-10-07 additions. Generated 2026-10-06, revised 2026-10-07.
+# Rows follow the annotation export order; registered sources not in the export follow, then the 2026-10-07 additions. Generated 2026-10-06, revised 2026-10-07.
 
 [[benchmark]]
 name = "agent_safetybench"

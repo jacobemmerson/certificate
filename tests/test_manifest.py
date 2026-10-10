@@ -1,4 +1,4 @@
-'''datasets/raw/manifest.toml stays consistent with annotations.csv and the datasets tree.'''
+'''datasets/raw/manifest.toml stays consistent with annotations.json and the datasets tree.'''
 import csv
 import json
 import re
@@ -26,14 +26,15 @@ class ManifestTest(unittest.TestCase):
         assert marker, "manifest lost its '# Added 2026-10-07' marker"
         cls.added = set(re.findall(r'^name = "([^"]+)"', added_section, re.M))
 
-    @unittest.skipUnless((REPO_ROOT / "annotations.csv").exists(),
-                         "annotations.csv (annotation export) not in checkout")
-    def test_ids_match_annotations(self):
-        with open(REPO_ROOT / "annotations.csv", newline="", encoding="utf-8") as handle:
-            annotation_ids = {row["id"] for row in csv.DictReader(handle)}
+    @unittest.skipUnless((REPO_ROOT / "annotations.json").exists(),
+                         "annotations.json (annotation export) not in checkout")
+    def test_ids_cover_annotations(self):
+        with open(REPO_ROOT / "annotations.json", encoding="utf-8") as handle:
+            annotation_ids = {str(task["id"]) for task in json.load(handle)}
         ids = [row["id"] for row in self.rows if row["id"]]
         self.assertEqual(len(ids), len(set(ids)), "duplicate id")
-        self.assertEqual(set(ids), annotation_ids)
+        # Tasks deleted from Label Studio after the manifest was written keep their id.
+        self.assertTrue(annotation_ids <= set(ids), annotation_ids - set(ids))
 
     def test_names(self):
         names = [row["name"] for row in self.rows]
