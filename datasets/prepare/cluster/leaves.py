@@ -18,6 +18,7 @@ class Leaf:
     title: str
     cop_ref: str
     legal_text: str
+    definition: str = ""
     exemplars: tuple[str, ...] = ()
     threshold: float | None = None  # overrides the calibrated cosine threshold
 
