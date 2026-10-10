@@ -586,202 +586,112 @@ no `subset` column: the adapter supplies it from the config's directory name.
 > **Scope: `datasets/raw/` only.** Nothing here reads `datasets/generated/`; those
 > artifacts are near-duplicates of their base item by construction.
 
-Every registered source contributes to its cluster, always. Each `sources/<risk>.py`
-declares one `BUDGET` (rows for the cluster); `prepare.py::allocate_budget` water-fills it
-across the risk's sources after dedup, smallest pool first, so a small source keeps
-everything and its unused share flows to the larger ones. `Source.quota` overrides a share.
-`_allocate` then splits each share across strata; everything below decides *which* rows fill
-each allotment.
-`datasets/prepare/cluster/prepare.py::build_risk`, in order:
+Every registered source contributes to its cluster. There is no budget: how much a source
+contributes follows from how many of its items resemble the examples of the legal-group
+leaves it serves. `datasets/prepare/cluster/prepare.py::build_risk`, in order:
 
-| Tier | What it does | Cost |
+| Step | What it does | Cost |
 |---|---|---|
 | 0 | `transform`, the source's own structural collapse (PreservingHistoricalTruth 5,478 → 498 case ids; llm-human-rights 1,440 multilingual rows → 144 English) | free |
-| 1 | `exact_dedup`: normalise (lowercase, `[a-z0-9]+` tokens) and drop repeats | free; pairs in `dropped.jsonl` (`tier: exact`) |
-| 2 | **cosine near-dedup** per source on cached embeddings, `COSINE_TAU` = 0.92 (overridable by `Source.tau`); `distinct_on` and differing mcq `target` win at any similarity | one `V @ V.T` in row blocks |
-| 1b | cross-source exact dedup on the prompt *as delivered* (user + system text), after each source's whole pool so a source never collides with itself; runs before the budget is allocated so the copy's source backfills | free; `cross_source_dropped` is the number to watch |
-| 2b | **cross-source near-dedup** on the user query at `COSINE_TAU`, later source loses; sources with `dedup=False` are skipped | one more `V @ V.T` per cluster |
-| 2c | **relevance filter**: score each row by its best cosine to its leaf's anchors (legal text plus exemplars) and drop rows below the leaf threshold, never below the floor; unscored sources (no `leaf`) pass through | one `V @ A.T` per source; dropped rows in `dropped.jsonl` (`tier: relevance`) |
-| 3 | water-filled share, then `_allocate` per stratum, then per stratum pre-select `SCREEN_FACTOR` (3.5) × allotment by the source's `select`; `diverse` starts from the item farthest from anything the cluster has already kept | `O(take × stratum)` dot products |
-| 3b | **Hermes answerability screen**: drop candidates Hermes-4-70B refuses, then fill the allotment from the survivors by the same `select` | ~2.5k GPU calls for all clusters, cached |
-| 4 | emit `public/<risk>.csv`, `<risk>.meta.json`, `<risk>.dropped.jsonl` | |
+| 1 | `exact_dedup`: normalise (lowercase, `[a-z0-9]+` tokens) and drop repeats inside a source; `distinct_on` fields mean different items at any text | free; `dropped.jsonl` (`tier: exact`) |
+| 1b | `cross_source_dedup` on the prompt *as delivered* (user + system text), after each source's whole pool so a source never collides with itself; earlier source wins | free (`tier: exact_cross_source`) |
+| 2 | **score**: for each leaf the source serves, max cosine of the query embedding to the leaf's anchors (legal text and exemplars), smoothed by the (source, leaf) relevance; a row's score is its best leaf | one `V @ A.T` per (source, leaf) |
+| 3 | **threshold** per source: `theta = min(0.9, score at rank ceil(1% of units))` | free |
+| 4 | **one pass per risk** in score order with a redundancy penalty against everything already kept | one `v @ K.T` per unit |
+| 5 | emit `public/<risk>.csv`, `<risk>.meta.json`, `<risk>.dropped.jsonl` | |
 
-### Relevance tier
+### Leaves and relevance
 
-Leaf assignments and legal texts in `leaves.toml` are **provisional** (drafted from the
-Code of Practice and each benchmark's annotation, for the annotators to correct).
-
-- **`leaves.toml` contract.** One `[[leaf]]` per legal group: `id` (slug), `title`, `cop_ref`,
-  non-empty `legal_text`, `exemplars` (hand-picked items), optional `threshold` override. A
-  `Source.leaf` names one id; the loader rejects duplicate ids, empty legal text and unknown leaves.
-- **Threshold.** theta is the 10th percentile of each exemplar's leave-one-out max cosine to the
-  other anchors, so the bar is "about as close as the exemplars are to each other". The legal
-  text is a neighbour but never a left-out point (legal prose sits far from user prompts). A
-  fixed 0.9 is not used: on MiniLM that is near-duplicate territory (near-dedup drops at 0.92),
-  so it would keep almost nothing and the floor would decide every time. A leaf with fewer than
-  2 exemplars and no `threshold` override is **uncalibrated**: its rows are scored and reported,
-  but nothing is dropped and no window applies (a warning).
-- **Floor.** The filter keeps at least max(2 x 3.5 x the source's provisional share, 1% of the
-  pool) rows, so the screen still has its candidates plus headroom for its refusals. Where theta
-  already keeps more, the floor does not bind. The floor guarantees every kept pool is at least
-  7× its provisional share, so water-filling is unaffected by the filter in practice; it only
-  removes off-topic candidates. `relevance_floor_used` is true only when the floor lowered the
-  threshold and rows were still cut.
-- **Window (r).** `Source.relevance` r in (0, 1]; `None` (the default) means no window. Per
-  stratum, selection may only choose from the top n + round(r x (stratum - n)) kept rows by
-  score, where n is the pre-selection size: r = 1 is the whole stratum (identical to no window),
-  r -> 0 is exactly the top n. A `group_key` source ranks a group by its best arm.
+- **`leaves.toml`** holds one `[[leaf]]` per legal group: `id`, `title`, `cop_ref`, `legal_text`,
+  `label` (the Label Studio choice text), `definition` (1.3.2 leaves: our reading of the Code,
+  no benchmark named) and `exemplars`. Anchors are the legal text plus the exemplars.
+- **Which leaves a source serves** comes from `annotations.json` (the Label Studio export)
+  through `annotations.py`: tasks join `datasets/raw/manifest.toml` by `id`, a `Source` joins
+  the manifest by the first directory of its `path`. Labels are the union over annotators.
+  `Source.leaves` is the hand fallback and override: the CBRN cluster uses it because the
+  label config offered no CBRN choice, `cysecbench` because it was not annotated.
+- **Relevance r** of a (source, leaf) is the mean confidence of the annotators who chose the
+  leaf times the share of the task's annotators who chose it (one of two at 0.8 → 0.4; both at
+  0.9 and 0.7 → 0.8). Hand leaves score `DEFAULT_RELEVANCE` = 0.5.
+- **Temperature.** `s' = s ** (1 / (0.5 + r))`, rank-preserving within a (source, leaf):
+  r = 0.5 is the identity, r → 1 lifts scores toward 1 so more cross 0.9 (a representative
+  benchmark), r → 0 pushes them down so only the closest survive (a proxy). Negative cosines
+  clip to 0.
+- **Threshold and floor.** A source keeps every unit at or above 0.9; when fewer than 1% of its
+  units reach it, theta drops to the score of its ceil(1%)-th unit, so no source is emptied by
+  the constant (`floor_used` in meta). On MiniLM raw cosines sit at 0.2 to 0.6, so the floor
+  decides for every source today and cluster sizes follow pool sizes; the constants live in
+  `prepare.py` (`THRESHOLD`, `FLOOR_FRACTION`).
+- **Units.** A `group_key` source is scored and kept by whole groups: the group's score is its
+  best arm, written to every arm as `relevance` (`relevance_own` keeps the arm's own).
 - **Query only.** Scoring embeds the user query. Sources whose content sits in the system
-  prompt score on a constant or partial text: `persusafety` (constant query) has no `leaf` until
-  scoring reads system + query; `ape`, `human_rights_*`, `redcode_gen` and, in part,
-  `injecagent` score on the query alone and should be read with that in mind.
-- **Reporting.** `meta.json` gains `leaves` (`cop_ref`, `threshold`, `anchors`, `anchor_keys`,
-  `exemplars`) and, per source, `relevance_status` (`scored`, `uncalibrated`, `unscored`,
-  `empty`), `relevance_threshold(_eff)`, `relevance_floor_used`, `relevance_pool/kept`,
-  `relevance_strata_before` (stratified sources), `score_quantiles`, `anchor_hits`, and
-  `relevance`/`relevance_window` when r is set. Row metadata carries `relevance` (and
-  `relevance_own` for grouped arms) rounded to 6 d.p. `print_report` adds `relev` (kept/pool)
-  and `theta` columns and warns when the floor was used, a leaf is uncalibrated, or over 80% of
-  kept rows match one anchor.
+  prompt score on a constant text: `persusafety`'s fixed greeting makes every row a near-copy
+  of the first kept one, so the penalty drops all but one.
 
-`select` is `uniform` (order by `blake2b(f"{seed}:{sample_id}")`, take the first
-N) or `diverse` (greedy farthest-point on embedding cosine, ties broken by the
-same hash). Both are deterministic: the same inputs and caches build
-byte-identical CSVs, and one extra upstream row displaces at most one `uniform`
-incumbent (`diverse` can shift its greedy path). Any change here re-draws the
-affected sources and invalidates their stage-2/3 artifacts: land it **before**
-paying to regenerate them.
+### The redundancy penalty
 
-## Why embeddings replaced Jaccard
+Near-duplicate dedup is gone; similar queries are not necessarily bad. Instead the one pass
+walks every unit of the risk best score first (ties by `blake2b(f"{seed}:{sample_id}")`) and
+keeps a unit when
 
-Pools are heading to ~100k items, so the selection must pick *diverse* items from a
-pool it cannot keep whole, and token-set Jaccard fails on long text both ways:
-on PreservingHistoricalTruth's rendered prompts (median 117 tokens) the top pair
-at 0.598 was boilerplate between two *different* events, and ECHR's true
-near-duplicates (median 104 tokens) reached only 0.41. The old per-pair token
-gate (texts under ~25 tokens only) left long-text pools undeduplicated.
+    score - PENALTY * max(0, maxsim - PENALTY_FREE) >= theta_source
+
+with `maxsim` the highest cosine between any of its rows and any row already kept, from any
+source. `PENALTY_FREE` = 0.8 makes moderate similarity free; `PENALTY` = 1.0 means a 0.9-similar
+row loses 0.1, so it drops only if it was within 0.1 of its threshold anyway. Between two
+near-copies in different benchmarks the higher-scoring one is kept and no benchmark order is
+involved. Drops are tagged `threshold` (below theta on its own) or `redundant` (`kept` names
+the row it resembled, `similarity` the cosine). The floor is applied to the same effective
+score, so a source whose floor rows are all near-copies of kept rows can land under 1%.
+
+Everything is deterministic: no RNG, no draw. The same inputs and caches build byte-identical
+CSVs (`tests/test_clusters.py::TestBuildIsReproducible` runs a synthetic risk under two
+`PYTHONHASHSEED`s). Any change here re-draws the clusters and invalidates their stage-2/3
+artifacts: land it **before** paying to regenerate them.
+
+## Why embeddings
+
+Token-set Jaccard fails on long text both ways: on PreservingHistoricalTruth's rendered
+prompts (median 117 tokens) the top pair at 0.598 was boilerplate between two *different*
+events, and ECHR's true near-duplicates (median 104 tokens) reached only 0.41.
 
 **Embeddings.** `sentence-transformers/all-MiniLM-L6-v2` (384-d, CPU), computed
 by `scripts/embed_items.py` in a throwaway env so torch never enters `uv.lock`.
 Cache: `datasets/cache/embeddings/<risk>.npz` (`keys`, float16 `vectors`,
 `model`; another model's cache is discarded), keyed by blake2b-16 of
-`normalised(payload)`, gitignored. `prepare.py` only reads it; on a miss it
-writes `datasets/cache/<risk>.embed_input.jsonl`, prints the command and exits
-2, so no CSV is built on a partial cache.
+`normalised(query)`, gitignored; `embeddings/leaves.npz` holds the anchors. `prepare.py`
+only reads it; on a miss it writes `datasets/cache/<risk>.embed_input.jsonl` (or
+`leaves.embed_input.jsonl`, accumulated across risks), prints the command and exits 2, so no
+CSV is built on a partial cache.
 
-**Payload.** `dedup_on`'s metadata field where declared, else the rendered query:
-`historical_revisionism` embeds `Historical Event`, not the instruction around
-it. `distinct_on` fields mean different items at any similarity (SOSBench's
-`original_term`, PHT's `Push Level`, AgentHarm's variants).
-
-## The answerability screen
-
-Stratification spreads across known axes; it does not find items that
-discriminate between models. The cheapest proxy is whether a weakly-aligned open
-model answers: an item Hermes-4-70B refuses is near zero-variance across the
-fleet and wastes judge budget. Refusal is `detectors.py::liberal_refusal`
-(regexes over the whole completion, plus a too-short rule that is off for mcq),
-deliberately liberal: erring toward "refused" drops a borderline item, erring the
-other way spends two judges on nothing.
-
-Scope is `Source.screened()`: `Source.screen` if set, else `question_type ∈
-{graded, mcq}` with `elicitation_family ∈ {compliance, generic}`. Not screened:
-opinion and judgment (the position is the construct), detection (refusal *is*
-`cyber_false_refusal`'s signal; token and tool contracts elsewhere), extraction.
-A grouped source would screen its leader row only; none is screened today.
-
-`scripts/screen_answerability.py` appends verdicts to
-`datasets/cache/screen/<risk>.jsonl` (`{key, sample_id, verdict,
-completion[:400], model, created_at}`, keyed by the prompt as delivered), so
-reruns are free and the file is reviewable. `prepare.py` prints a warning when
-the screen refuses over half a source's candidates, and fails when an allotment
-cannot be filled while the stratum has rows beyond the pre-selection: raise
-`SCREEN_FACTOR` rather than shrink the share. **Read `screen/<risk>.jsonl` and
-`refused_dropped` before committing a CSV:** the screen drops the most egregious
-prompts by design, and that is the one place to see what it threw away.
-
-**The three-pass build.** `prepare.py` exits 2 on any cache miss, printing the
-command that fills it:
+**The two-pass build.**
 
 ```bash
 uv run python3 -m datasets.prepare.cluster.prepare --risk cbrn   # exit 2: embeddings missing
 uv run --no-project --with sentence-transformers --with numpy python scripts/embed_items.py --risk cbrn
-uv run python3 -m datasets.prepare.cluster.prepare --risk cbrn   # exit 2: screen verdicts missing
-sbatch --export=ALL,SCREEN_ONLY=1 scripts/generate_hermes_slurm.sh  # screens, then rebuilds the CSV
-#   or: uv run python3 scripts/screen_answerability.py --risk cbrn --model openrouter/nousresearch/hermes-4-70b
-#       uv run python3 -m datasets.prepare.cluster.prepare --risk cbrn
+uv run --no-project --with sentence-transformers --with numpy python scripts/embed_items.py --risk leaves
+uv run python3 -m datasets.prepare.cluster.prepare --risk cbrn
 git add datasets/public/cbrn.*   # after reviewing dropped.jsonl + meta
 ```
-
-Without `SCREEN_ONLY=1` the slurm job goes on to generate stage-2/3 artifacts for
-the new selection before anyone has reviewed it.
-
-## Strata
-
-The share is allocated proportionally (or evenly where `balanced` is declared)
-across the cross of each source's stratify columns and filled within each cell:
-
-| Source | Stratify on | `select` |
-|---|---|---|
-| `historical_revisionism` | `Push Level` × `Country/Region` | uniform |
-| `human_rights_udhr` / `human_rights_echr` | `severity` (the share counts scenarios, 3 arms each) | uniform |
-| `leader_favorability` | `classification`, **evenly** (the gap metric needs balanced groups) | uniform |
-| `authoritarian_values` | kept whole | uniform |
-| `role_model_bias` | none | uniform |
-| `social_harm` | `category` | uniform |
-| `wmdp` | `subset` (bio/cyber/chem) | diverse |
-| `sosbench` | `subject` (6 domains, 500 each) | diverse |
-| `cysecbench` | `Category` (10 attack types) | diverse |
-| `cyberseceval_mitre` | `mitre_category` (10 ATT&CK phases) | uniform |
-| `cyber_false_refusal` | none (single `attack_type`) | diverse |
-| `darkbench` | `dark_pattern` (6, ~110 each) | diverse |
-| `persusafety` | `harmfulness_level` | uniform |
-| `sycophancy_mimicry` | none | uniform |
-| `harmbench` | `FunctionalCategory` (kept whole) | uniform |
-| `agentharm` | `category` | uniform |
-| `injecagent` | `Attack Type` | uniform |
-| `advanced_ai_risk` | `behavior`, **evenly** (7 × 20) | diverse |
-| `scisafeeval` | `task` | uniform |
-| `fortress` | `risk_subdomain` | diverse |
-| `lab_bench` | `subset` | diverse |
-| `redcode_gen` | `family` (8 malware types) | uniform |
-| `ape` | `topic_file` | uniform |
-| `mentalmanip` | `manipulative` | uniform |
-| `beavertails` | `category` | diverse |
-| `multijail` | none | diverse |
-| `medsafetybench` | `category` | diverse |
-| `bbq` | `category` | uniform |
-| `truthfulqa` | `category` | uniform |
-| `confaide` | `tier` | uniform |
-| `privacylens` | `source_type` | uniform |
-
-`diverse` is opt-in for free-text sources, where it roughly halved within-sample
-redundancy (measured on the Jaccard build, not re-measured on embeddings); on
-template-shaped sources (`persusafety`, `injecagent`, `leader_favorability`) similarity
-measures the wrapper, so spreading on it picks odd boilerplate. Farthest-point
-over-weights unusual items, so a `diverse` source's score is a coverage figure, not an
-unbiased estimate over its whole pool; for a certificate that is the intent.
 
 ## What sampling does not do
 
 No contamination resistance: every surviving item is in training corpora
-verbatim; stages 2 and 3 are what help. No prior-run discrimination: the screen
-uses one open model's refusals, not the fleet's past scores, because new
-benchmarks have no logs yet.
+verbatim; stages 2 and 3 are what help. No answerability screen: nothing in sampling calls a
+model. No stratification: category balance is whatever the scores produce; check the
+`metadata` column of a built CSV where a source's validity needs it (`leader_favorability`'s
+`classification`).
 
 ## Provenance
 
-`<risk>.meta.json` records the seed; top-level `budget` and `shortfall`; per
-source `loaded`, `quota` (the override, usually null), `allotted`, `shortfall`,
-`strata` (`{key: {pool, kept}}`), `divergence` (total variation distance pool
-vs kept, null when unstratified), `stratify_on`, `balanced`, `kept` and drop counts (`exact_dropped`,
-`near_dropped`, `cross_source_dropped`, and `screen_candidates` /
-`screen_refused` where screened); the `embedding` block (`model`, `tau_cosine`,
-`cache`); the `screen` block (`model`, `applies_to`, `candidate_factor`,
-`refused_dropped` per source); and `revisions`. `<risk>.dropped.jsonl` holds
-every pair or item the dedup tiers removed and every candidate the screen dropped,
-tagged `tier` = `exact`, `near`, `exact_cross_source`, `near_cross_source`, `relevance` or `screen`, so a threshold is reviewable
-rather than trusted.
+`<risk>.meta.json` records the seed; `constants` (`threshold`, `floor_fraction`, `penalty`,
+`penalty_free`); the `embedding` block (`model`, `cache`); `leaves` used (`cop_ref`, `label`,
+`anchors`, `anchor_keys`); per source `loaded`, `exact_dropped`, `cross_source_dropped`,
+`leaves` (`{id: r}`), `annotated`, `units`, `theta`, `floor_used`, `score_quantiles`, `kept`,
+`threshold_dropped`, `redundant_dropped`; and `revisions`. Row metadata carries `relevance`
+(the smoothed score), `relevance_raw`, `relevance_leaf` and `relevance_anchor`.
+`<risk>.dropped.jsonl` holds every drop, tagged `tier` = `exact`, `exact_cross_source`,
+`threshold` or `redundant`, so a constant is reviewable rather than trusted.
 
 # Housekeeping
 

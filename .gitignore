@@ -13,7 +13,7 @@ Live-Human-Rights-Bench/
 .cache/huggingface/
 # local analysis scratch (reports, rater exports)
 analysis/
-# prepare.py caches: embeddings and Hermes screen verdicts (rebuildable)
+# prepare.py cache: embeddings (rebuildable with scripts/embed_items.py)
 datasets/cache/
 
 # certify.py rebuild lock

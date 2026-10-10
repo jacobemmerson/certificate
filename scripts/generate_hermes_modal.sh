@@ -6,8 +6,7 @@
 # Set HERMES_URL and HERMES_APP to reuse an app that is already up (printed by a
 # previous run) instead of launching a new one.
 #
-# MAX_CONNECTIONS (default 128) caps concurrent requests for both the screen
-# and generation. SCREEN_ONLY=1 stops after the screen. FORCE=1 regenerates
+# MAX_CONNECTIONS (default 128) caps concurrent requests. FORCE=1 regenerates
 # every family (--force instead of --missing-only); it is required on the
 # first run after a dataset rebuild, because --missing-only keeps rows for
 # sample ids that no longer exist. The app is stopped on exit unless
@@ -15,11 +14,9 @@
 # `uv run modal app stop -y <HERMES_APP>` or 24 h. The modal log (with HERMES_URL
 # and HERMES_APP) is logs/hermes-modal-<timestamp>.log.
 #
-# Smoke tests, in order, before the full run (a throughput number is the deliverable):
-# 1. `KEEP_WARM=1 SCREEN_ONLY=1` with `MAX_CONNECTIONS=128`: time the cyber screen (940 items) → requests/s. Expect the 4×H100 vLLM to sustain well above 2 req/s; if it is near 20/s-bound by the client, raise `MAX_CONNECTIONS` to 256.
-# 2. `uv run python generate.py --attacker vllm/NousResearch/Hermes-4-70B --model-base-url $URL/v1 --only cyber --limit 5 --force --perturb-k 1 --simulate --sim-k 2 --reasoning --max-connections 128`; then `uv run python scripts/audit_variant_fidelity.py` on the cyber artifacts (existing tool) and eyeball `incomplete_reasons` in each `.meta.json`; zero fallback rows required (the Jul 16 failure mode).
-# 3. Only then: full `FORCE=1 scripts/generate_hermes_modal.sh`.
-# Record the requests/s from test 1. URL is the HERMES_URL line in the log.
+# Smoke test before the full run (Oct 2026: ~5,000 gen tok/s at 128 connections):
+# 1. `uv run python generate.py --attacker vllm/NousResearch/Hermes-4-70B --model-base-url $URL/v1 --only cyber --limit 5 --force --perturb-k 1 --simulate --sim-k 2 --reasoning --max-connections 128`; then `uv run python scripts/audit_variant_fidelity.py` on the cyber artifacts (existing tool) and eyeball `incomplete_reasons` in each `.meta.json`; zero fallback rows required (the Jul 16 failure mode).
+# 2. Only then: full `FORCE=1 scripts/generate_hermes_modal.sh`. URL is the HERMES_URL line in the log.
 #
 # modal is a project dependency (uv run modal); vllm stays out of uv.lock (see the
 # venv-drift note in pyproject.toml). inspect's vllm/ provider sends
@@ -104,31 +101,6 @@ curl -sf -m 60 -H "Authorization: Bearer $VLLM_API_KEY" "$URL/health" > /dev/nul
     || { echo "vLLM never became healthy; see $LOG"; exit 1; }
 
 MAX_CONNECTIONS=${MAX_CONNECTIONS:-128}
-
-# ---- answerability screen ---------------------------------------------------
-# prepare.py leaves datasets/cache/<risk>.screen_input.jsonl when candidates
-# have no screen verdict yet. Screen them, then rebuild that risk's CSV so the
-# artifacts below are generated for the screened selection. Keys already
-# screened are skipped, so rerunning costs nothing.
-for input in datasets/cache/*.screen_input.jsonl; do
-    [ -e "$input" ] || continue
-    risk=$(basename "$input" .screen_input.jsonl)
-    # prepare exits 2 and rewrites the input when the fill tier needs more
-    # candidates than the first pass screened, so screen until it exits 0.
-    for round in $(seq 1 10); do
-        uv run python scripts/screen_answerability.py --risk "$risk" \
-            --model "vllm/$MODEL" \
-            --model-base-url "$URL/v1" \
-            --max-connections "$MAX_CONNECTIONS"
-        uv run python -m datasets.prepare.cluster.prepare --risk "$risk" && break
-        [ -e "$input" ] || { echo "$risk: prepare failed without a new screen input"; exit 1; }
-    done
-done
-# SCREEN_ONLY=1 stops here, so refused_dropped in
-# datasets/public/<risk>.meta.json can be reviewed before any generation.
-if [ "${SCREEN_ONLY:-0}" = 1 ]; then
-    exit 0
-fi
 
 # ---- artifact generation ----------------------------------------------------
 # FORCE=1 regenerates everything (see the header). Otherwise

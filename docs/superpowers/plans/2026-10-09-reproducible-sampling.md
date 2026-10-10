@@ -1,6 +1,6 @@
 # Reproducible sub-sampling and cluster formation
 
-Status: proposed 2026-10-09, awaiting approval. Branch `refactor/source-contract`.
+Status: proposed 2026-10-09, awaiting approval. Update 2026-10-10: the Hermes screen and its cache no longer exist (sampling is similarity-only), so every screen item below is obsolete; the embedding-cache items stand.
 
 ## Context
 

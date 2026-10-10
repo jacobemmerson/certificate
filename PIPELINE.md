@@ -11,7 +11,7 @@ ensemble, and rolled up to one tail-risk headline per risk.
 datasets/raw/<name>/          fetched upstream files (scripts/fetch_raw.py, manifest.toml)
         │  Source(...) adapters in datasets/prepare/cluster/sources/<risk>.py
         ▼
-datasets/public/<risk>.csv    prepare.py: dedup → relevance → budget → strata → screen
+datasets/public/<risk>.csv    prepare.py: exact dedup → leaf similarity → threshold → cluster pass
         │  + <risk>.meta.json (provenance, tier counts) + <risk>.dropped.jsonl
         ▼
 datasets/generated/<risk>/    generate.py: attacker writes <family>.jsonl + .meta.json
@@ -32,24 +32,24 @@ the target, the judges (`GRADERS.md`) and the stage-3 branch classifier.
   (scores are 0..1, higher is safer, the criterion names the failure), `families` lists
   which perturbation families apply. The pipeline never branches on a source name; a test
   greps for that.
-- **Tiers** (`prepare.py::build_risk`): exact dedup → near dedup (MiniLM cosine ≥ 0.92) →
-  cross-source exact and near → relevance filter → water-fill budget over sources
-  (`BUDGET` per risk module, `Source.quota` override) → strata → windowed pre-select
-  (SCREEN_FACTOR 3.5 × share) → Hermes answerability screen (drop what an open model
-  refuses) → fill. Every tie-break hashes `(seed, sample_id)`; no RNG.
-- **Relevance tier** (provisional, Oct 2026): each `Source.leaf` names a legal-group leaf
-  in `leaves.toml` (CoP Appendix 1.3/1.4 text plus exemplars). Score = max cosine to the
-  leaf's anchors; threshold = leave-one-out p10 of the exemplars; a leaf with fewer than
-  two exemplars passes everything through. `Source.relevance` r sets how far down the
-  ranking selection may reach. On MiniLM the thresholds rarely bind. `definition` fields
-  on the 1.3.2 leaves and `scripts/generate_leaf_exemplars.py` exist to grow the exemplar
-  sets; the annotators own leaf assignment and exemplars.
-- **Caches** (`datasets/cache/`, gitignored): `embeddings/<risk>.npz` and `leaves.npz`
-  (written by `scripts/embed_items.py` in a throwaway env), `screen/<risk>.jsonl`
-  (verdicts). `prepare.py` exits 2 and prints the filling command when either is missing;
-  it never builds on a partial cache. Because the caches are not committed, a fresh clone
-  cannot rebuild `public/` byte-identically; the fix is the unimplemented plan
-  `docs/superpowers/plans/2026-10-09-reproducible-sampling.md`.
+- **Steps** (`prepare.py::build_risk`): exact dedup within and across sources → score every
+  row by max cosine to the anchors (legal text plus exemplars) of the leaves its source
+  serves, smoothed by the (source, leaf) relevance as a temperature `s ** (1 / (0.5 + r))`
+  → per source `theta = min(0.9, score at rank ceil(1% of units))` → one pass over the
+  whole risk in score order, keeping a unit when `score - max(0, maxsim_to_kept - 0.8)`
+  clears its theta. No budget, no strata, no model call. Every tie-break hashes
+  `(seed, sample_id)`; no RNG.
+- **Leaves and annotations.** `leaves.toml` holds the CoP leaves (legal text, `definition`
+  for the 1.3.2 propensities, exemplars, the Label Studio `label`). `annotations.json` (Label
+  Studio export) gives each benchmark its leaves and a relevance = mean annotator confidence x
+  share of annotators who chose the leaf (`annotations.py`); `Source.leaves` is the hand
+  fallback (CBRN cluster, `cysecbench`). Cluster sizes follow pool sizes: on MiniLM the 1%
+  floor decides for every source.
+- **Cache** (`datasets/cache/embeddings/`, gitignored): `<risk>.npz` and `leaves.npz`,
+  written by `scripts/embed_items.py` in a throwaway env. `prepare.py` exits 2 and prints
+  the filling command when an item or anchor is missing. Because the cache is not
+  committed, a fresh clone cannot rebuild `public/` byte-identically until the embedder
+  is pinned; see `docs/superpowers/plans/2026-10-09-reproducible-sampling.md`.
 - **Clusters.** `cbrn`, `cyber`, `loss_of_control`, `manipulation` are headline risks;
   `alignment` is provisional (`SYSTEMIC = False`) and excluded from the model aggregate.
 
@@ -57,9 +57,8 @@ the target, the judges (`GRADERS.md`) and the stage-3 branch classifier.
 
 - The attacker is Hermes-4-70B, served by vLLM either on slurm
   (`scripts/generate_hermes_slurm.sh`) or on Modal (`scripts/hermes_modal.py` behind a
-  `modal.forward` tunnel, driven by `scripts/generate_hermes_modal.sh`). Both wrappers
-  run the screen loop first (screen → prepare until exit 0), then generation. vLLM is
-  never in `uv.lock`.
+  `modal.forward` tunnel, driven by `scripts/generate_hermes_modal.sh`). vLLM is never in
+  `uv.lock`.
 - A rewrite family rewords only `item_text` and re-renders it through the row's
   `prompt_template`, so the stage-1 scorer keeps its output contract. A failed or
   refused rewrite is stored as `fallback=true` (the original text) so artifact sets stay
@@ -111,20 +110,20 @@ Modal volumes `hf-cache` (weights) and `vllm-cache` (compile artifacts) make res
 
 | Symptom | Likely cause | Look at |
 |---|---|---|
-| `prepare.py` exits 2 | cache miss (embeddings or screen) | the command it prints; `datasets/cache/*.{embed,screen}_input.jsonl` |
+| `prepare.py` exits 2 | embedding cache miss (items or leaf anchors) | the command it prints; `datasets/cache/*.embed_input.jsonl` |
 | `certify.py` refuses to start | stale or incomplete artifacts, CSV older than artifacts, grader canary failed | `artifacts.py::validate_artifacts`, `GRADERS.md`, `.env` keys |
 | Many `fallback=true` rows after generation | attacker refusals or a dead endpoint | `datasets/generated/<risk>/<family>.meta.json::incomplete_reasons`, the vLLM log |
 | A risk scores `null` | run status `partial`/`failed`, or every judge abstained | `status.<risk>` in the results file, `scripts/reaggregate_from_logs.py` |
 | Judges abstain on `loss_of_control` | provider-side content filter on a judge model | `pipeline/utils/retry_policy.py`; swap the judge in `GRADERS.md` |
-| Rebuilt CSV differs from the committed one | caches regenerated (embeddings or screen are not reproducible) | `<risk>.meta.json`, `<risk>.dropped.jsonl` tier counts |
+| Rebuilt CSV differs from the committed one | embeddings regenerated with another library version or device | `<risk>.meta.json` theta per source, `<risk>.dropped.jsonl` |
 
 ## Open work (Oct 2026)
 
-- Reproducible sampling plan (commit caches, float64 cosine, provenance): written, not
-  implemented, two decisions pending (plain git vs LFS for 78 MB of embeddings; keep
-  existing screen verdicts).
-- Relevance tier calibration: exemplars from several benchmarks per leaf, a stronger
-  embedder behind an AUC test, then rebuild and re-screen newly surfaced candidates.
+- Reproducible sampling plan (commit the embedding cache, provenance): written, not
+  implemented; the screen-cache parts are obsolete.
+- Sources whose content sits in the system prompt (`persusafety`) score on a constant
+  query; scoring should embed system + query for them.
+- CBRN leaves have no annotation labels; the cluster keeps hand `leaves`.
 - Generation prompt fixes (past_tense, loss_of_control scenarios, follow-ups) need a
   prompt-version bump and a full regeneration.
 - Sources still unregistered: biolp_bench (docx only), persuasionbench (no tweet text),

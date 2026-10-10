@@ -27,40 +27,40 @@ uv sync                                     # locked deps; ML libraries are deli
 # raw benchmarks, only needed to rebuild datasets: see datasets/README.md for the fetch_raw.py call
 ```
 
-Judges are listed in [`GRADERS.md`](GRADERS.md). Hermes-4-70B (attacker, answerability
-screen) is served locally by vLLM through `uvx`, never installed into the project env.
+Judges are listed in [`GRADERS.md`](GRADERS.md). Hermes-4-70B (the attacker) is served
+by vLLM through `uvx` or on Modal, never installed into the project env.
 
 ## Three scripts
 
 | Script | Runs | Writes |
 |---|---|---|
-| `datasets/prepare/cluster/prepare.py` | once per dataset change; three passes (below) | `datasets/public/<risk>.csv` + `.meta.json` + `.dropped.jsonl`, committed |
+| `datasets/prepare/cluster/prepare.py` | once per dataset change; two passes (below) | `datasets/public/<risk>.csv` + `.meta.json` + `.dropped.jsonl`, committed |
 | `generate.py` | once per artifact refresh, attacker model on slurm | `datasets/generated/<risk>/<family>.jsonl` + `.meta.json`, committed |
 | `certify.py` | once per target model; target + judges + classifier only | `models/results/<model_id>.json`, `models/models.json` (rebuilt), `logs/<model_id>/<run_id>/` |
 
 ## Recipes
 
-### Build the cluster datasets (three passes)
+### Build the cluster datasets (two passes)
 
-`prepare.py` exits 2 whenever a cache it needs is missing and prints the exact command
-that fills it. A CSV is never built on a partial cache.
+`prepare.py` exits 2 whenever the embedding cache lacks an item or a leaf anchor and prints
+the exact command that fills it. A CSV is never built on a partial cache. No model is called:
+rows are chosen by similarity to the leaf exemplars in `datasets/prepare/cluster/leaves.toml`.
 
 ```bash
 uv run python3 -m datasets.prepare.cluster.prepare --risk cbrn        # exit 2: embeddings missing
 uv run --no-project --with sentence-transformers --with numpy python scripts/embed_items.py --risk cbrn
-uv run python3 -m datasets.prepare.cluster.prepare --risk cbrn        # exit 2: screen verdicts missing
-sbatch --export=ALL,SCREEN_ONLY=1 scripts/generate_hermes_slurm.sh    # screens pending inputs, rebuilds the CSV, stops before generation
-uv run python3 -m datasets.prepare.cluster.prepare --risk cbrn        # clean build if the slurm job did not already
+uv run --no-project --with sentence-transformers --with numpy python scripts/embed_items.py --risk leaves
+uv run python3 -m datasets.prepare.cluster.prepare --risk cbrn
 ```
 
-Review `datasets/public/cbrn.dropped.jsonl` (new `screen` tier) and `refused_dropped` in
-`cbrn.meta.json` before committing: the screen drops what an open model refuses, by design.
-`--dry-run` prints the tier table without writing. Omit `--risk` for all risks. Detail: [`datasets/BENCHMARKS.md § Sampling`](datasets/BENCHMARKS.md#sampling).
+Review `datasets/public/cbrn.dropped.jsonl` (`threshold` and `redundant` tiers) and the
+per-source `theta` / `floor_used` in `cbrn.meta.json` before committing.
+`--dry-run` prints the per-source table without writing. Omit `--risk` for all risks. Detail: [`datasets/BENCHMARKS.md § Sampling`](datasets/BENCHMARKS.md#sampling).
 
 ### Generate the artifacts
 
 ```bash
-sbatch scripts/generate_hermes_slurm.sh      # vLLM Hermes-4-70B: screen → rewrites → scenario trees, all risks
+sbatch scripts/generate_hermes_slurm.sh      # vLLM Hermes-4-70B: rewrites → scenario trees, all risks
 scripts/generate_hermes_modal.sh             # same job, Hermes on Modal via modal run --detach (scripts/hermes_modal.py); FORCE=1 after a rebuild
 uv run python3 generate.py --only cyber --perturb paraphrase multilingual   # API attacker, subset
 uv run python3 generate.py --missing-only    # fill gaps after a preempted job
@@ -325,24 +325,38 @@ usage: prepare.py [-h]
                   [--risk {alignment,cbrn,cyber,loss_of_control,manipulation}]
                   [--seed SEED] [--dry-run]
 
-Build the risk-cluster datasets. uv run python3 -m
-datasets.prepare.cluster.prepare --risk cyber uv run python3 -m
-datasets.prepare.cluster.prepare --dry-run Writes datasets/public/<risk>.csv
-plus a <risk>.meta.json sibling (provenance: seed, quotas, per-tier drop
-counts, embedding model and threshold, screen model and refusals, source
-revisions) and <risk>.dropped.jsonl (every pair tiers 1b and 2 removed and
-every candidate the screen dropped, each tagged with its `tier`, so thresholds
-are reviewable rather than trusted). Reads two gitignored caches under
-datasets/cache/. On a miss it writes what is missing, prints the command that
-fills it and exits 2: embeddings first, then screen verdicts. The sequence is
-in datasets/BENCHMARKS.md § Sampling.
+Build the risk-cluster datasets.
+
+    uv run python3 -m datasets.prepare.cluster.prepare --risk cyber
+    uv run python3 -m datasets.prepare.cluster.prepare --dry-run
+
+Selection, per risk (datasets/BENCHMARKS.md § Sampling):
+
+1. Load every source, drop exact repeats inside a source and across sources.
+2. Score every row against the leaves its source serves (annotations.json, or
+   the Source's hand `leaves`): max cosine to the leaf's anchors (legal text
+   and exemplars), then the leaf's relevance r smooths the score like a
+   temperature, s' = s ** (1 / (0.5 + r)). A row's score is its best leaf.
+3. Per source, theta = min(THRESHOLD, the score at rank ceil(FLOOR_FRACTION x
+   units)), so a source always contributes its top slice.
+4. One pass over the whole risk in score order: a row is kept when its score,
+   less a penalty for resembling a row already kept (from any source), still
+   clears its source's theta.
+
+Writes datasets/public/<risk>.csv plus <risk>.meta.json (seed, constants,
+embedding model, per-source thresholds and counts, source revisions) and
+<risk>.dropped.jsonl (every drop, tagged exact, exact_cross_source,
+threshold or redundant, so the constants are reviewable rather than trusted).
+
+Reads one gitignored cache, datasets/cache/embeddings/. On a miss it writes
+what is missing, prints the command that fills it and exits 2.
 
 options:
   -h, --help            show this help message and exit
   --risk {alignment,cbrn,cyber,loss_of_control,manipulation}
                         build one risk (repeatable); default is all registered
   --seed SEED
-  --dry-run             print the tier table without writing
+  --dry-run             print the per-source table without writing
 ```
 <!-- /prepare-help -->
 

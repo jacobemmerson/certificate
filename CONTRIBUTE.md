@@ -74,8 +74,7 @@ Source(
     criterion=lambda r: CRITERION.format(category=r["category"]),
     rubric=YOUR_RUBRIC,
     categories=YES_NO, scale_map=YES_NO_MAP,
-    metadata=["category"],          # travels with the row, drives stratification
-    stratify=["category"],
+    metadata=["category"],          # travels with the row
 )
 ```
 
@@ -86,11 +85,8 @@ Useful fields when the shape is awkward:
 | `filename_field` / `dirname_field` | "one file per category" — turns the filename into an ordinary column |
 | `transform` | a `DataFrame -> DataFrame` hook, for prompt construction or structural collapse |
 | `system_prompt` | benchmarks that steer the model deliberately (persona arms, assigned roles) |
-| `group_key` | rows only meaningful as a set — the share then counts groups, not rows |
-| `leaf` | slug from `datasets/prepare/cluster/leaves.toml`; required for relevance scoring (no leaf = unscored, passes through) |
-| `relevance` | r in (0, 1], how far down the relevance ranking selection may reach: per stratum the window is n + round(r x (stratum - n)) rows, so 1 = whole stratum and near 0 = top n by score; `None` = no window |
-| `quota` | override the water-filled share from the cluster `BUDGET`; say why in a comment |
-| `balanced` | even allocation per stratum instead of proportional |
+| `group_key` | rows only meaningful as a set — scored and kept by whole groups |
+| `leaves` | leaf ids from `datasets/prepare/cluster/leaves.toml`, only when the benchmark has no task in `annotations.json` (or to override it, as the CBRN cluster does); scored at `DEFAULT_RELEVANCE` |
 | `distinct_on` | fields whose differing values mean "different items, however similar the text" |
 | `judge_style="classifier"` | the original judge emits a bare label, not reasoning |
 | `role="diagnostic"` | the benchmark measures something other than the cluster construct |
@@ -99,9 +95,6 @@ Useful fields when the shape is awkward:
 | `ask=` | the closing instruction, so stage 2 can never reword it away |
 | `must_survive=` | a string a rewrite must keep (an output token, a name) |
 | `families=` | the perturbation families that apply, as a tuple of names; default derived from `question_type` and `elicitation_family` (`detection` rows get only `reconsideration` and `scenario`; `persona` applies only to `graded`/`mcq` rows with no `system_prompt` of their own). See `pipeline/README.md § Families`. |
-| `screen=` | `True`/`False` to force the Hermes answerability screen on or off; default `None` = screened iff `graded`/`mcq` with a `compliance` or `generic` elicitation. Opinion- and judgment-shaped sources are not screened: a refusal there is a position, not a zero-variance item. |
-| `select=` | `"uniform"` (default, hash-stable order) or `"diverse"` (farthest-point on embeddings) when a stratum is larger than its allotment; see `datasets/BENCHMARKS.md § Sampling`. Opt in only with a measured redundancy gain (through `stratified_sample`): templated sources barely move, and `tests/test_clusters.py::TestSelection` pins selection stability. |
-| `tau=` | per-source cosine near-dedup threshold, overriding `COSINE_TAU` |
 
 **`distinct_on` is the one people miss.** Dedup keys on the prompt text, so any
 source whose rows share a user turn — the scenario lives in a system prompt, or
@@ -213,7 +206,7 @@ scored on.
 
 `elicitation_family` (`compliance` "do X", `judgment` "is this acceptable?",
 `opinion` "rate your agreement", `generic`) decides whether `framing` applies
-(`compliance` only) and whether the screen runs. If none fits, use `generic`:
+(`compliance` only). If none fits, use `generic`:
 framing is skipped, the other families still run. To exclude a family
 explicitly, set `families=`; a `detection` source gets only `reconsideration`
 and `scenario` by default because its signal is inside the text. New families
@@ -237,27 +230,20 @@ PYTHONPATH=. uv run inspect eval pipeline/stage1_evaluation/evals/clusters.py@cl
 uv run python3 certify.py -m <target-model> -g <grader-model> --only cyber --limit 2
 ```
 
-Check the build report before anything else: `loaded` / `exact` / `near` /
-`cross` / `screen` / `allot` / `kept` / `short` / `share` per source. A large `exact` drop means missing
-`distinct_on` (step 2). A large `near` drop means your source is templated and
-wants `distinct_on` on the varying term (cosine ≥ `COSINE_TAU` is the trigger;
-the pairs are in `<risk>.dropped.jsonl`). Any `cross` drop means your source
-ships prompts an earlier source in the same cluster already ships — worth
-checking whether it is vendoring another benchmark before you tune anything. A
-`screen` drop above half the candidates means the source's prompts are mostly
-refused by an open model; raise `SCREEN_FACTOR` or reconsider the source rather
-than shrink the share. `allot` and `short` show what the budget gave the source
-and how much it could not fill; a `short` above 0 means the pool or a stratum ran
-dry. A `[WARNING]` on strata divergence means the kept rows are distributed unlike
-the pool, usually because the screen refused one category; it fires when the
-total variation distance exceeds 0.10 and the source is not `balanced`. `<risk>.dropped.jsonl`
-tags every record with its `tier` (`exact`, `near`, `exact_cross_source`,
-`near_cross_source`, `screen`), so the thresholds are reviewable rather than
-trusted.
+Check the build report before anything else: `loaded` / `exact` / `cross` / `leaves` /
+`theta` / `floor` / `kept` / `thr` / `red` per source. A large `exact` drop means missing
+`distinct_on` (step 2). Any `cross` drop means your source ships prompts an earlier
+source in the same cluster already ships — worth checking whether it is vendoring
+another benchmark before you tune anything. `leaves` is how many leaves the annotation
+(or your `leaves=`) assigned; `theta` the score a row had to reach and `floor` whether
+the 1% floor set it; `thr` and `red` the rows dropped below theta and dropped as
+near-copies of rows already kept. A `red` count near `kept` means the source is templated
+and its rows embed alike; that is expected, not a defect. `<risk>.dropped.jsonl` tags every
+record with its `tier` (`exact`, `exact_cross_source`, `threshold`, `redundant`), so the
+constants are reviewable rather than trusted.
 
-`prepare.py` exits 2 when an embedding or screen cache is missing and prints
-the command to run; the full three-pass sequence is in
-`datasets/BENCHMARKS.md § Sampling`.
+`prepare.py` exits 2 when the embedding cache is missing an item or anchor and prints
+the command to run; the sequence is in `datasets/BENCHMARKS.md § Sampling`.
 
 `--only` takes risk names. Your benchmark appears in
 `models/results/<model_id>.json` under `results.<risk>.benchmarks.<your_benchmark>`.
@@ -265,11 +251,10 @@ the command to run; the full three-pass sequence is in
 ## 8. Scoring conventions
 
 - Shares are load-bearing: the headline tail pools every item of a risk's pooled
-  sources, so sample count is weight there. Each source's share is water-filled
-  from the cluster `BUDGET`; override it with `quota` only for a reason.
-  `tests/test_clusters.py` fails any cluster where one source holds over 40% of
-  rows (half, for a two-source cluster; for a one-source
-  cluster, one value of its first `stratify` key). Definitions: `pipeline/README.md § Metrics`.
+  sources, so sample count is weight there. How many rows a source contributes
+  follows from how many of its items resemble its leaves' exemplars, so a large
+  on-topic benchmark contributes more rows than a small one. Definitions:
+  `pipeline/README.md § Metrics`.
 - A source that measures something other than alignment declares
   `role="diagnostic"` on its `Source(...)`, reported per-source but excluded
   from the pooled number. `wmdp` and `lab_bench` (capability absence),
@@ -299,5 +284,5 @@ the command to run; the full three-pass sequence is in
 | `pipeline/stage1_evaluation/scorers/cluster.py` | the dispatching scorer and judge prompts |
 | `pipeline/stage1_evaluation/scorers/detectors.py` | ported deterministic detectors |
 | `pipeline/README.md` | stages, families, scenario tree, metric definitions |
-| `datasets/BENCHMARKS.md § Sampling` | dedup, screen, strata |
+| `datasets/BENCHMARKS.md § Sampling` | dedup, leaves and relevance, the threshold and the redundancy penalty |
 | `GRADERS.md` | the judge ensemble |
