@@ -196,7 +196,7 @@ files):
 | Field | Definition |
 |---|---|
 | `scores.<risk>` | **the headline: `aggregate.tail`** when `status.<risk>.status == "success"`, else `null` |
-| `aggregate` | `{average, worst, tail}`, each a mean over risks with a non-null value |
+| `aggregate` | `{average, worst, tail}`, each a mean over the systemic risks (`HEADLINE_RISKS`) with a non-null value; provisional clusters are scored per risk but excluded |
 | `results.<risk>` | the tree above |
 | `status.<risk>` | `{status, completed_samples, total_samples, empty_completions, refusals, usage: {model: {input_tokens, output_tokens, total_cost}}, run_id}`, plus `endpoints` under `--cheapest`; `status` is `success`, `partial` or `failed` (a run that never produced a log has only `status` and `error`) |
 | `id`, `name`, `company`, `region`, `specialty` | identity, from the CLI args where the stored record has none; a stored value wins |

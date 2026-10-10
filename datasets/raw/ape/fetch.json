@@ -1,0 +1,13 @@
+{
+  "name": "ape",
+  "id": "287222717",
+  "host": "github",
+  "repo": "AlignmentResearch/AttemptPersuadeEval",
+  "revision": "f2ca0a9900d5bcd1b0238a49a335a1988cbc09a9",
+  "requested": "f2ca0a9900d5bcd1b0238a49a335a1988cbc09a9",
+  "files": [
+    "src/topics/*.jsonl",
+    "src/prompts/base_prompts_all.yaml"
+  ],
+  "fetched_at": "2026-10-07T23:10:12+00:00"
+}

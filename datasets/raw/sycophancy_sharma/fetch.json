@@ -1,0 +1,12 @@
+{
+  "name": "sycophancy_sharma",
+  "id": "286653147",
+  "host": "hf",
+  "repo": "meg-tong/sycophancy-eval",
+  "revision": "18f18160e9998e524bbf027c4475bfa7fdeb6949",
+  "requested": "18f18160e9998e524bbf027c4475bfa7fdeb6949",
+  "files": [
+    "mimicry.jsonl"
+  ],
+  "fetched_at": "2026-10-06T23:40:59+00:00"
+}

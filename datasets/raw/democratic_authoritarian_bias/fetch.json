@@ -1,0 +1,14 @@
+{
+  "name": "democratic_authoritarian_bias",
+  "id": "286653139",
+  "host": "github",
+  "repo": "irenestrauss/Democratic-Authoritarian-Bias-LLMs",
+  "revision": "583a1e4a8d440c421ab2ef06a6ac8afd5473c9e0",
+  "requested": "583a1e4a8d440c421ab2ef06a6ac8afd5473c9e0",
+  "files": [
+    "data/phase1_questions.json",
+    "data/leaders.json",
+    "role_model_probe/main.py"
+  ],
+  "fetched_at": "2026-10-06T23:40:56+00:00"
+}

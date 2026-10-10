@@ -1,0 +1,12 @@
+{
+  "name": "cogmanip",
+  "id": "287222718",
+  "host": "github",
+  "repo": "yanchenfei/CogManip",
+  "revision": "d2207932ccaff6d5df1258037d154ac469731aa4",
+  "requested": "d2207932ccaff6d5df1258037d154ac469731aa4",
+  "files": [
+    "data/*.jsonl"
+  ],
+  "fetched_at": "2026-10-07T22:36:26+00:00"
+}

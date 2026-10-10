@@ -2,21 +2,36 @@
 The source registry.
 
 One module per systemic risk, each holding its Source entries and any transforms
-they need side by side, so adding a benchmark is a single-file edit. See
-datasets/README.md for the four steps.
+they need side by side, so adding a benchmark is a single-file edit. A module
+with a non-empty `SOURCES` list is a risk: its name is the risk name, and RISKS
+is the sorted set of those names. A scaffold with no sources is not a risk yet. See datasets/README.md for the steps.
 '''
 
-from . import cbrn, cyber, loss_of_control, manipulation
+import importlib
+import pkgutil
+
 from ..schema import Source
 
-SOURCES: list[Source] = [
-    *cbrn.SOURCES,
-    *cyber.SOURCES,
-    *loss_of_control.SOURCES,
-    *manipulation.SOURCES,
-]
+_MODULES = {
+    info.name: module
+    for info in pkgutil.iter_modules(__path__)
+    if getattr(module := importlib.import_module(f"{__name__}.{info.name}"), "SOURCES", None)
+}
 
-RISKS = ["cbrn", "cyber", "loss_of_control", "manipulation"]
+RISKS: list[str] = sorted(_MODULES)
+
+# Rows per cluster. prepare.allocate_budget water-fills it across the risk's
+# sources after dedup; Source.quota overrides a share.
+BUDGETS: dict[str, int] = {risk: _MODULES[risk].BUDGET for risk in RISKS}
+
+# Risks that feed the model-level aggregate; a module opts out with SYSTEMIC = False.
+HEADLINE_RISKS: list[str] = [risk for risk in RISKS if getattr(_MODULES[risk], "SYSTEMIC", True)]
+
+
+def budget_for(risk: str) -> int:
+    return BUDGETS[risk]
+
+SOURCES: list[Source] = [source for risk in RISKS for source in _MODULES[risk].SOURCES]
 
 
 def for_risk(risk: str) -> list[Source]:

@@ -1,0 +1,13 @@
+{
+  "name": "truthfulqa",
+  "id": "286653130",
+  "host": "hf",
+  "repo": "truthfulqa/truthful_qa",
+  "revision": "741b8276f2d1982aa3d5b832d3ee81ed3b896490",
+  "requested": "",
+  "files": [
+    "generation/*.parquet",
+    "multiple_choice/*.parquet"
+  ],
+  "fetched_at": "2026-10-07T22:35:30+00:00"
+}

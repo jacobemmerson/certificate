@@ -1,0 +1,12 @@
+{
+  "name": "multijail",
+  "id": "286653134",
+  "host": "hf",
+  "repo": "DAMO-NLP-SG/MultiJail",
+  "revision": "93d65c778925d55973b9ff30c7bccc8545494eb6",
+  "requested": "",
+  "files": [
+    "MultiJail.csv"
+  ],
+  "fetched_at": "2026-10-07T22:35:31+00:00"
+}

@@ -358,6 +358,8 @@ class Source:
     # unpaired and make the comparison meaningless.
     group_key: str | None = None
     balanced: bool = False   # even allocation per stratum, not proportional
+    leaf: str | None = None  # id of the leaves.toml leaf this source serves, copied into meta.sources
+    relevance: float | None = None  # how representative of its leaf, in (0, 1]; None = role default
 
     # How a stratum's allotment is filled, once `_allocate` has decided how many
     # rows it gets.
@@ -430,7 +432,11 @@ class Source:
             return None
         if callable(spec):
             return spec(row)
-        return row.get(spec, spec)
+        if spec in row:
+            return row[spec]
+        if isinstance(spec, str) and spec.isidentifier():
+            raise KeyError(f"{self.name}: no column {spec!r}")
+        return spec
 
 
 # ----- text normalisation (tiers 1-2) -----

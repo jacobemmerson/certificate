@@ -1,0 +1,12 @@
+{
+  "name": "historical_misinfo",
+  "id": "286653141",
+  "host": "github",
+  "repo": "francescortu/PreservingHistoricalTruth",
+  "revision": "5d327d24c8e6f0c82b598fecf9ca9f1b46bf3c64",
+  "requested": "5d327d24c8e6f0c82b598fecf9ca9f1b46bf3c64",
+  "files": [
+    "data/*_prompt*.csv"
+  ],
+  "fetched_at": "2026-10-06T23:40:57+00:00"
+}

@@ -1,0 +1,12 @@
+{
+  "name": "bbq",
+  "id": "286653109",
+  "host": "github",
+  "repo": "nyu-mll/BBQ",
+  "revision": "bea11bd97d79217245b5871acd247b9d6eb24598",
+  "requested": "",
+  "files": [
+    "data/*.jsonl"
+  ],
+  "fetched_at": "2026-10-07T22:35:27+00:00"
+}

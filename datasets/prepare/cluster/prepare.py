@@ -5,10 +5,11 @@ Build the risk-cluster datasets.
     uv run python3 -m datasets.prepare.cluster.prepare --dry-run
 
 Writes datasets/public/<risk>.csv plus a <risk>.meta.json sibling (provenance:
-seed, quotas, per-tier drop counts, embedding model and threshold, screen model
-and refusals, source revisions) and <risk>.dropped.jsonl (every pair tiers 1b
-and 2 removed and every candidate the screen dropped, each tagged with its
-`tier`, so thresholds are reviewable rather than trusted).
+seed, budget and shares, per-tier drop counts, embedding model and threshold, screen model
+and refusals, source revisions) and <risk>.dropped.jsonl (every pair tiers exact,
+near, exact_cross_source and near_cross_source removed, every row scored below
+its leaf's relevance threshold and every candidate the screen dropped, each
+tagged with its `tier`, so thresholds are reviewable rather than trusted).
 
 Reads two gitignored caches under datasets/cache/. On a miss it writes what is
 missing, prints the command that fills it and exits 2: embeddings first, then
@@ -22,7 +23,7 @@ import hashlib
 import json
 import math
 import subprocess
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
@@ -31,10 +32,11 @@ import numpy as np
 import pandas as pd
 
 from . import readers
+from .leaves import Leaf, anchor_texts, load_leaves
 from .schema import (
     COLUMNS, ITEM, MCQ, Row, SchemaError, Source, normalised, validate,
 )
-from .sources import RISKS, for_risk
+from .sources import RISKS, budget_for, for_risk
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 OUT_DIR = REPO_ROOT / "datasets" / "public"
@@ -48,7 +50,7 @@ EMBED_COMMAND = (
 )
 # Tier 3b: candidates per allotted row sent to the answerability screen. 3.5
 # fills an allotment while Hermes refuses up to ~70% of its candidates; past
-# that the build stops and names the gap (raise this, never shrink the quota).
+# that the build stops and names the gap (raise this, never shrink the share).
 SCREEN_FACTOR = 3.5
 SCREEN_COMMANDS = (
     "sbatch --export=ALL,SCREEN_ONLY=1 scripts/generate_hermes_slurm.sh",
@@ -71,6 +73,14 @@ class Caches:
     missing: dict[str, dict] = field(default_factory=dict)  # screen inputs still needed
     refused: list[dict] = field(default_factory=list)       # "screen" tier drop records
     candidates: int = 0                                      # rows sent through the screen
+    relevance_window: int = 0                                # candidates left after the relevance window
+    selected: list[np.ndarray] = field(default_factory=list)  # query vectors of rows already kept
+
+    def anchors(self) -> np.ndarray | None:
+        if not self.selected:
+            return None
+        stacked = np.vstack(self.selected)
+        return stacked if len(stacked) else None  # every source so far kept nothing
 
 
 def screen_key(row: Row) -> str:
@@ -172,21 +182,35 @@ def load_embeddings(risk: str) -> dict[str, np.ndarray]:
 
 
 def require_embeddings(
-    risk: str, pools: list[tuple[Source, list[Row]]], embeddings: dict
+    risk: str, pools: list[tuple[Source, list[Row]]], embeddings: dict, leaf_embeddings: dict
 ) -> None:
-    '''Raise CacheMiss, after writing the embed input, if any payload lacks a vector.'''
+    '''Raise CacheMiss, after writing the embed input, if any payload or leaf anchor lacks a vector.'''
     missing = {}
     for source, rows in pools:
         payload = _payload_fn(source.dedup_on)
         for row in rows:
-            key = embed_key(payload(row))
-            if key and key not in embeddings:
-                missing[key] = normalised(payload(row))
+            for text in {payload(row), row.query}:
+                key = embed_key(text)
+                if key and key not in embeddings:
+                    missing[key] = normalised(text)
     if missing:
         raise _cache_miss(
             CACHE_DIR / f"{risk}.embed_input.jsonl",
             [{"key": key, "text": text} for key, text in sorted(missing.items())],
             EMBED_COMMAND.format(risk=risk),
+        )
+    leaves = load_leaves()
+    anchors = {
+        embed_key(text): normalised(text)
+        for leaf in {source.leaf for source, _ in pools if source.leaf}
+        for text in anchor_texts(leaves[leaf])
+    }
+    missing_anchors = {key: text for key, text in anchors.items() if key not in leaf_embeddings}
+    if missing_anchors:
+        raise _cache_miss(
+            CACHE_DIR / "leaves.embed_input.jsonl",
+            [{"key": key, "text": text} for key, text in sorted(missing_anchors.items())],
+            EMBED_COMMAND.format(risk="leaves"),
         )
 
 # Tier 2: cosine similarity of all-MiniLM-L6-v2 embeddings at or above this is a
@@ -303,7 +327,7 @@ def rows_from_frame(source: Source, frame) -> list[Row]:
             judge_style=source.judge_style, role=source.role, pool=source.pool,
             summary=source.summary,
             families=source.families_for(system_prompt),
-            metadata={**{key: _plain(record.get(key)) for key in source.metadata},
+            metadata={**{key: _plain(record[key]) for key in source.metadata},
                       **({"must_survive": list(must_survive)} if must_survive else {})},
         )
         validate(row)
@@ -348,15 +372,22 @@ def _identity(row: Row, distinct_on: Sequence[str]) -> tuple:
 
 def exact_dedup(
     rows: list[Row], distinct_on: Sequence[str] = ()
-) -> tuple[list[Row], int]:
-    kept, seen = [], set()
+) -> tuple[list[Row], list[dict]]:
+    '''Tier 1: drop repeats of the normalised query inside one source.'''
+    kept, seen, dropped = [], {}, []
     for row in rows:
         key = (normalised(row.query), _identity(row, distinct_on))
-        if key in seen:
+        incumbent = seen.get(key)
+        if incumbent is not None:
+            dropped.append({
+                "tier": "exact", "similarity": 1.0,
+                "kept": incumbent.sample_id, "kept_text": incumbent.query[:300],
+                "dropped": row.sample_id, "dropped_text": row.query[:300],
+            })
             continue
-        seen.add(key)
+        seen[key] = row
         kept.append(row)
-    return kept, len(rows) - len(kept)
+    return kept, dropped
 
 
 
@@ -412,8 +443,10 @@ def cross_source_dedup(
 
 # ----- tier 2: cosine near-dedup -----
 
-def _distinguishable(left: Row, right: Row, distinct_on: Sequence[str]) -> bool:
+def _mergeable(left: Row, right: Row, distinct_on: Sequence[str]) -> bool:
     '''
+    True when the pair may merge: same mcq target and equal `distinct_on` fields.
+
     Exact guard against the similarity filter's blind spot: when a benchmark
     varies one term inside a fixed template, the entire distinction is a few
     characters that barely moves a whole-text similarity. Items differing in
@@ -439,6 +472,36 @@ def _vectors(rows: list[Row], payload, embeddings: dict[str, np.ndarray]) -> np.
     return matrix
 
 
+def _near_candidates(rows, vectors, tau, allowed) -> list[tuple[float, int, int]]:
+    '''Pairs at or above tau, in row blocks; `allowed(left, right)` filters by index.'''
+    candidates = []
+    for start in range(0, len(rows), _BLOCK):
+        # Rounded so a BLAS summing in another order cannot flip a pair across
+        # tau or reorder ties between machines.
+        similarity = np.round(vectors[start:start + _BLOCK] @ vectors.T, 6)
+        for offset, right in zip(*np.nonzero(similarity >= tau)):
+            left, right = start + int(offset), int(right)
+            if left < right and allowed(left, right):
+                candidates.append((float(similarity[offset, right]), left, right))
+    return candidates
+
+
+def _greedy_drop(candidates, rows, payload, tier) -> tuple[set[int], list[dict]]:
+    '''Highest similarity first; the later row of each surviving pair is dropped.'''
+    dropped_indices: set[int] = set()
+    records = []
+    for score, left, right in sorted(candidates, reverse=True):
+        if left in dropped_indices or right in dropped_indices:
+            continue
+        dropped_indices.add(right)
+        records.append({
+            "tier": tier, "similarity": round(score, 4),
+            "kept": rows[left].sample_id, "kept_text": payload(rows[left])[:300],
+            "dropped": rows[right].sample_id, "dropped_text": payload(rows[right])[:300],
+        })
+    return dropped_indices, records
+
+
 def near_dedup(
     rows: list[Row],
     embeddings: dict[str, np.ndarray],
@@ -459,45 +522,205 @@ def near_dedup(
     payload = _payload_fn(dedup_on)
     vectors = _vectors(rows, payload, embeddings)
 
-    candidates = []
-    for start in range(0, len(rows), _BLOCK):
-        # Rounded so a BLAS summing in another order cannot flip a pair across
-        # tau or reorder ties between machines.
-        similarity = np.round(vectors[start:start + _BLOCK] @ vectors.T, 6)
-        for offset, right in zip(*np.nonzero(similarity >= tau)):
-            left, right = start + int(offset), int(right)
-            if left < right and _distinguishable(rows[left], rows[right], distinct_on):
-                candidates.append((float(similarity[offset, right]), left, right))
-
-    dropped_indices: set[int] = set()
-    dropped_pairs = []
-    for score, left, right in sorted(candidates, reverse=True):
-        if left in dropped_indices or right in dropped_indices:
-            continue
-        dropped_indices.add(right)
-        dropped_pairs.append({
-            "tier": "near",
-            "similarity": round(score, 4),
-            "kept": rows[left].sample_id, "kept_text": payload(rows[left])[:300],
-            "dropped": rows[right].sample_id, "dropped_text": payload(rows[right])[:300],
-        })
-
+    candidates = _near_candidates(
+        rows, vectors, tau, lambda l, r: _mergeable(rows[l], rows[r], distinct_on))
+    dropped_indices, dropped_pairs = _greedy_drop(candidates, rows, payload, "near")
     survivors = [row for index, row in enumerate(rows) if index not in dropped_indices]
     return survivors, dropped_pairs
+
+
+def cross_source_near_dedup(
+    pools: list[tuple[Source, list[Row]]], embeddings: dict[str, np.ndarray],
+    tau: float = COSINE_TAU,
+) -> tuple[list[tuple[Source, list[Row]]], list[dict]]:
+    '''
+    Tier 2b: a paraphrase of an earlier source's prompt, shipped by a later one.
+
+    Compares the delivered query for every row: `dedup_on` names a metadata
+    field with no counterpart in another source. Pools are walked in registry
+    order, so the later source loses, as in the exact cross-source tier.
+    Sources with `dedup=False` keep their opt-out.
+    '''
+    rows = [row for source, pool in pools if source.dedup for row in pool]
+    payload = _payload_fn(None)
+    vectors = _vectors(rows, payload, embeddings)
+    candidates = _near_candidates(
+        rows, vectors, tau,
+        lambda l, r: rows[l].source != rows[r].source and _mergeable(rows[l], rows[r], ()),
+    )
+    dropped_indices, dropped = _greedy_drop(candidates, rows, payload, "near_cross_source")
+    gone = {rows[i].sample_id for i in dropped_indices}
+    kept_pools = [(source, [row for row in pool if row.sample_id not in gone]) for source, pool in pools]
+    return kept_pools, dropped
+
+
+# ----- tier 2c: relevance to the source's legal-group leaf -----
+
+def leaf_anchors(leaf: Leaf, leaf_embeddings: dict[str, np.ndarray]) -> tuple[list[str], np.ndarray]:
+    '''Anchor names ("legal", then "exemplar:<i>") and their vectors as float64 rows.'''
+    names = ["legal", *(f"exemplar:{i}" for i in range(len(leaf.exemplars)))]
+    keys = [embed_key(text) for text in anchor_texts(leaf)]
+    missing = [name for name, key in zip(names, keys) if key not in leaf_embeddings]
+    if missing:
+        raise CacheMiss(f"leaf {leaf.id!r}: no embedding for anchors {missing}; "
+                        f"run: {EMBED_COMMAND.format(risk='leaves')}")
+    return names, np.array([leaf_embeddings[key] for key in keys], dtype=np.float64)
+
+
+def relevance_scores(
+    rows: list[Row], matrix: np.ndarray, embeddings: dict[str, np.ndarray]
+) -> tuple[np.ndarray, np.ndarray]:
+    '''Each row's max cosine over the anchors, and the index of the anchor that
+    attains it (the first, on a tie; -1 for a row with no words, which scores
+    0.0 against everything and so matched no anchor). Rounded so BLAS
+    summation order cannot reorder rows across machines.'''
+    vectors = _vectors(rows, _payload_fn(None), embeddings).astype(np.float64)
+    similarity = np.round(vectors @ matrix.T, 9)
+    hit = similarity.argmax(axis=1)
+    hit[~vectors.any(axis=1)] = -1
+    return similarity.max(axis=1), hit
+
+
+def leaf_threshold(matrix: np.ndarray, override: float | None) -> float | None:
+    '''
+    The cosine a row must reach to count as on-topic for this leaf: the 10th
+    percentile of each exemplar's leave-one-out max similarity to the other
+    anchors, so the bar is "about as close to the leaf as its exemplars are to
+    each other". `matrix` is leaf_anchors' order: the legal text first, then
+    the exemplars. The legal text is a neighbour but never a left-out point:
+    legal prose sits far from user prompts on MiniLM, so its own score would
+    drag the percentile down to "anything vaguely related".
+    A fixed 0.9 is not the default because on MiniLM that is near-duplicate
+    territory (near-dedup drops at COSINE_TAU = 0.92): a row scoring 0.9
+    against an exemplar is a rewording of it, so 0.9 would keep almost nothing
+    and the floor in relevance_filter would decide every time.
+    Fewer than two exemplars calibrate nothing, so it returns None (the leaf
+    is uncalibrated, Leaf.calibrated) and relevance_filter drops nothing.
+    '''
+    if override is not None:
+        return override
+    if len(matrix) < 3:
+        return None
+    similarity = np.round(matrix @ matrix.T, 9)
+    np.fill_diagonal(similarity, -np.inf)
+    return round(float(np.percentile(similarity[1:].max(axis=1), 10)), 9)
+
+
+def relevance_filter(
+    pools: list[tuple[Source, list[Row]]], leaves: dict[str, Leaf],
+    embeddings: dict[str, np.ndarray], leaf_embeddings: dict[str, np.ndarray], budget: int,
+) -> tuple[list[tuple[Source, list[Row]]], list[dict], dict[str, dict]]:
+    '''
+    Drop rows scoring below their leaf's threshold, but never below a floor of
+    max(2 x SCREEN_FACTOR x provisional share, 1% of the pool) rows, so the
+    screen still has its candidates (with headroom for its refusals) when the
+    threshold bites hard. Kept rows carry their score and best anchor in
+    metadata, rounded to 6 d.p. so the CSV shows no float noise; the threshold
+    compares the 9 d.p. scores. A group_key source is kept or dropped by whole
+    groups, scored by the group's best arm. Sources with no leaf pass through
+    unscored; an uncalibrated leaf (under two exemplars, no override) scores
+    and reports its rows but drops nothing.
+    '''
+    shares = allocate_budget(pools, budget)
+    kept_pools, dropped, report = [], [], {}
+    for source, rows in pools:
+        if not source.leaf or not rows:
+            kept_pools.append((source, rows))
+            report[source.name] = {"leaf": source.leaf,
+                                   "relevance_status": "unscored" if not source.leaf else "empty"}
+            continue
+        leaf = leaves[source.leaf]
+        names, matrix = leaf_anchors(leaf, leaf_embeddings)
+        theta = leaf_threshold(matrix, leaf.threshold)
+        scores, hit = relevance_scores(rows, matrix, embeddings)
+
+        unit_scores = scores
+        strata_before = None
+        if source.stratify:
+            # Counted over the units _row_sample stratifies (a group's leader), so
+            # the counts line up with the post-filter `strata` pools.
+            units = rows
+            if source.group_key:
+                leaders: dict[str, Row] = {}
+                for group, row in zip(_group_ids(source, rows), rows):
+                    leaders.setdefault(group, row)
+                units = list(leaders.values())
+            strata_before = dict(sorted(Counter(
+                "|".join(str(row.metadata.get(column, "")) for column in source.stratify)
+                for row in units).items()))
+        if source.group_key:
+            best: dict[str, float] = {}
+            group_of = _group_ids(source, rows)
+            for group, score in zip(group_of, scores):
+                best[group] = max(best.get(group, -np.inf), float(score))
+            unit_scores = np.array([best[group] for group in group_of])
+
+        if theta is None:
+            threshold_eff = -np.inf
+        else:
+            share_rows = shares[source.name] * _group_size(source, rows)
+            n_floor = max(math.ceil(2 * SCREEN_FACTOR * share_rows), math.ceil(0.01 * len(rows)), 1)
+            ranked = np.sort(unit_scores)[::-1]
+            threshold_eff = min(theta, float(ranked[min(n_floor, len(rows)) - 1]))
+
+        kept, hits = [], defaultdict(int)
+        for row, unit_score, score, anchor in zip(rows, unit_scores, scores, hit):
+            if unit_score >= threshold_eff:
+                name = names[anchor] if anchor >= 0 else None
+                # A fresh dict: readers may share one metadata dict across rows.
+                # For a group, "relevance" is the group's best arm on every arm:
+                # the window ranks a group by its leader (first arm) alone.
+                row.metadata = {**row.metadata, "relevance": round(float(unit_score), 6),
+                                "relevance_anchor": name}
+                if source.group_key:
+                    row.metadata["relevance_own"] = round(float(score), 6)
+                kept.append(row)
+                if name:
+                    hits[name] += 1
+            else:
+                dropped.append({
+                    "tier": "relevance", "dropped": row.sample_id,
+                    "dropped_text": row.query[:300], "score": float(score),
+                    "threshold": threshold_eff, "leaf": source.leaf,
+                })
+        kept_pools.append((source, kept))
+        quantiles = np.percentile(scores, [0, 10, 50, 90, 100])
+        report[source.name] = {
+            "leaf": source.leaf,
+            "leaf_exemplars": len(leaf.exemplars),
+            "relevance_status": "uncalibrated" if theta is None else "scored",
+            **({} if theta is None else {
+                "relevance_threshold": theta,
+                "relevance_threshold_eff": threshold_eff,
+                "relevance_floor_used": threshold_eff < theta and len(kept) < len(rows),
+            }),
+            **({} if strata_before is None else {"relevance_strata_before": strata_before}),
+            "relevance_pool": len(rows),
+            "relevance_kept": len(kept),
+            "score_quantiles": dict(zip(("min", "p10", "p50", "p90", "max"),
+                                        (round(float(q), 9) for q in quantiles))),
+            "anchor_hits": dict(sorted(hits.items())),
+        }
+    return kept_pools, dropped, report
 
 
 # ----- tier 3: stratified quota -----
 
 def stratified_sample(
-    rows: list[Row], source: Source, seed: int, caches: Caches | None = None
+    rows: list[Row], source: Source, seed: int, caches: Caches | None = None,
+    quota: int | None = None,
 ) -> tuple[list[Row], dict]:
+    '''`quota` is the allotment decided by the cluster budget; None reads the source's own.'''
+    if quota is None:
+        quota = source.quota
     if source.group_key:
-        return _grouped_sample(rows, source, seed, caches)
-    return _row_sample(rows, source, seed, caches)
+        return _grouped_sample(rows, source, seed, caches, quota)
+    return _row_sample(rows, source, seed, caches, quota)
 
 
 def _grouped_sample(
-    rows: list[Row], source: Source, seed: int, caches: Caches | None = None
+    rows: list[Row], source: Source, seed: int, caches: Caches | None = None,
+    quota: int | None = None,
 ) -> tuple[list[Row], dict]:
     '''
     Sample whole groups, so rows that are only meaningful together survive
@@ -510,20 +733,19 @@ def _grouped_sample(
     groups, not rows — a quota of 20 over 3-arm groups yields 60 rows.
     '''
     groups: defaultdict[str, list[int]] = defaultdict(list)
-    for index, row in enumerate(rows):
-        groups[str(row.metadata.get(source.group_key, index))].append(index)
+    for index, group in enumerate(_group_ids(source, rows)):
+        groups[group].append(index)
 
     # Select over one representative row per group, so groups are picked by the
     # same stratification the source declares, then expand back to every member.
     leaders = {key: rows[indices[0]] for key, indices in groups.items()}
-    picked, report = _row_sample(list(leaders.values()), source, seed, caches)
+    picked, report = _row_sample(list(leaders.values()), source, seed, caches, quota)
 
     by_id = {id(row): key for key, row in leaders.items()}
     wanted = {by_id[id(row)] for row in picked}
     chosen = [i for key, indices in groups.items() if key in wanted for i in indices]
 
     report["groups"] = len(groups)
-    report["allocated"] = len(chosen)
     return [rows[i] for i in sorted(chosen)], report
 
 
@@ -554,7 +776,7 @@ def _stable_order(rows: list[Row], indices: list[int], seed: int) -> list[int]:
 
 def _diverse_order(
     rows: list[Row], indices: list[int], take: int, source: Source, seed: int,
-    embeddings: dict[str, np.ndarray],
+    embeddings: dict[str, np.ndarray], anchors: np.ndarray | None = None,
 ) -> list[int]:
     '''
     Greedy farthest-point on embedding cosine: repeatedly take the item least
@@ -568,19 +790,33 @@ def _diverse_order(
     query otherwise). The first pick comes from `_stable_order` and ties break
     on `key_bytes`, so the walk is deterministic without being tied to input
     order.
+
+    With `anchors` (rows the cluster has already kept), the walk starts from
+    the candidate farthest from any anchor instead of the stable-order head, so
+    two sources cannot fill the same region.
     '''
     vectors = _vectors([rows[i] for i in indices], _payload_fn(source.dedup_on), embeddings)
     ties = [key_bytes(rows[i], seed) for i in indices]
-    first = indices.index(_stable_order(rows, indices, seed)[0])
-    picked = [first]
-    # Each item's similarity to the closest pick so far, taken items pinned at
-    # +inf; the next pick minimises it.
-    nearest = np.round(vectors @ vectors[first], 6)
-    nearest[first] = np.inf
+    # Each item's similarity to the closest pick so far; picked items are
+    # pinned at +inf. Empty payloads have zero vectors and would otherwise read
+    # as "far from everything": 2.0 is above any cosine, so they go last.
+    empty = ~vectors.any(axis=1)
+    if anchors is None:
+        order = _stable_order(rows, indices, seed)
+        first = next((indices.index(i) for i in order if not empty[indices.index(i)]),
+                     indices.index(order[0]))
+        picked = [first]
+        nearest = np.round(vectors @ vectors[first], 6)
+        nearest[first] = np.inf
+    else:
+        picked = []
+        nearest = np.round(vectors @ anchors.T, 6).max(axis=1)
+    nearest[empty & np.isfinite(nearest)] = 2.0
     while len(picked) < take:
         candidate = min(range(len(indices)), key=lambda p: (nearest[p], ties[p]))
         picked.append(candidate)
-        nearest = np.maximum(nearest, np.round(vectors @ vectors[candidate], 6))
+        if not empty[candidate]:
+            nearest = np.maximum(nearest, np.round(vectors @ vectors[candidate], 6))
         nearest[candidate] = np.inf
     return [indices[p] for p in picked]
 
@@ -599,26 +835,64 @@ def _payload_fn(dedup_on: str | None):
     return lambda row: row.query
 
 
+def relevance_for(source: Source) -> float | None:
+    r = source.relevance
+    if r is None:
+        return None
+    if not 0 < r <= 1:
+        raise ValueError(f"{source.name}: relevance must be in (0, 1], got {r}")
+    return r
+
+
+def _window(
+    rows: list[Row], indices: list[int], n_needed: int, source: Source, seed: int,
+    caches: Caches | None,
+) -> list[int]:
+    '''
+    The n_needed + round(r x (stratum - n_needed)) most relevant candidates, in
+    their input order: r = 1 is the whole stratum (no change), r -> 0 the top
+    n_needed by score. Untouched when the source sets no relevance, has no
+    leaf, any row lacks a score, or its leaf is uncalibrated (nothing to rank
+    by). Grouped sources window over their leaders, which carry the group's
+    best score.
+    '''
+    r = relevance_for(source)
+    if (r is None or source.leaf is None or not indices
+            or any("relevance" not in rows[i].metadata for i in indices)
+            or not load_leaves()[source.leaf].calibrated):
+        return indices
+    n_cand = min(max(n_needed + round(r * (len(indices) - n_needed)), n_needed), len(indices))
+    ranked = sorted(indices, key=lambda i: (-rows[i].metadata["relevance"], key_bytes(rows[i], seed)))
+    chosen = set(ranked[:n_cand])
+    window = [i for i in indices if i in chosen]
+    if caches is not None:
+        caches.relevance_window += len(window)
+    return window
+
+
 def _take(
     rows: list[Row], indices: list[int], take: int, source: Source, seed: int,
     caches: Caches | None = None,
 ) -> list[int]:
     '''
-    Fill one stratum's allotment. With the screen on: pre-select SCREEN_FACTOR x
-    the allotment by the source's own selection, drop what Hermes refused, and
+    Fill one stratum's allotment from its relevance window (_window). With the
+    screen on: pre-select SCREEN_FACTOR x the allotment by the source's own selection, drop what Hermes refused, and
     fill the allotment from the survivors by the same selection. A shortfall is
     an error while a wider pre-selection could still fill it, and accepted once
     the pre-selection already covers the whole stratum.
     '''
     if caches is None or caches.verdicts is None or not source.screened():
-        return _select(rows, indices, take, source, seed, caches)
-    pool = _select(rows, indices, math.ceil(SCREEN_FACTOR * take), source, seed, caches)
+        return _select(rows, _window(rows, indices, take, source, seed, caches), take, source, seed, caches)
+    n_screen = math.ceil(SCREEN_FACTOR * take)
+    stratum_size = len(indices)
+    window = _window(rows, indices, n_screen, source, seed, caches)
+    pool = _select(rows, window, n_screen, source, seed, caches)
     kept = _screen(rows, pool, caches)
-    if len(kept) < take and len(pool) < len(indices):
+    if len(kept) < take and len(pool) < stratum_size:
         raise ValueError(
             f"{source.name}: the screen kept {len(kept)} of {len(pool)} candidates for an "
             f"allotment of {take}; short by {take - len(kept)}. Raise SCREEN_FACTOR "
-            f"({SCREEN_FACTOR}) rather than shrink the quota."
+            f"({SCREEN_FACTOR}) rather than shrink the share."
         )
     return _select(rows, kept, take, source, seed, caches)
 
@@ -635,23 +909,24 @@ def _select(
     if source.select == DIVERSE:
         if caches is None:
             raise ValueError(f"{source.name}: diverse selection needs the embedding cache")
-        return _diverse_order(rows, indices, take, source, seed, caches.embeddings)
+        anchors = caches.anchors() if source.dedup_on is None else None
+        return _diverse_order(rows, indices, take, source, seed, caches.embeddings, anchors=anchors)
     raise ValueError(f"{source.name}: unknown select mode {source.select!r}")
 
 
 def _row_sample(
-    rows: list[Row], source: Source, seed: int, caches: Caches | None = None
+    rows: list[Row], source: Source, seed: int, caches: Caches | None = None,
+    quota: int | None = None,
 ) -> tuple[list[Row], dict]:
-    quota = source.quota
     if quota is None or quota >= len(rows):
         if source.select not in (UNIFORM, DIVERSE):
             raise ValueError(f"{source.name}: unknown select mode {source.select!r}")
         chosen = _take(rows, list(range(len(rows))), len(rows), source, seed, caches)
-        return [rows[i] for i in sorted(chosen)], {"strata": 0, "allocated": len(chosen)}
+        return [rows[i] for i in sorted(chosen)], _sample_report({}, chosen, len(rows))
 
     if not source.stratify:
         chosen = _take(rows, list(range(len(rows))), quota, source, seed, caches)
-        return [rows[i] for i in sorted(chosen)], {"strata": 1, "allocated": len(chosen)}
+        return [rows[i] for i in sorted(chosen)], _sample_report({}, chosen, quota)
 
     keys = [
         tuple(str(row.metadata.get(column, "")) for column in source.stratify)
@@ -667,10 +942,26 @@ def _row_sample(
     for key, take in allocation.items():
         chosen.extend(_take(rows, buckets[key], take, source, seed, caches))
 
-    return (
-        [rows[i] for i in sorted(chosen)],
-        {"strata": len(buckets), "allocated": len(chosen)},
-    )
+    return [rows[i] for i in sorted(chosen)], _sample_report(buckets, chosen, quota)
+
+
+def _sample_report(buckets: dict, chosen: list[int], allotted: int) -> dict:
+    taken = set(chosen)
+    strata = {
+        "|".join(key): {"pool": len(indices), "kept": sum(i in taken for i in indices)}
+        for key, indices in buckets.items()
+    }
+    return {"allotted": allotted, "selected": len(chosen),
+            "strata": strata, "divergence": _divergence(strata)}
+
+
+def _divergence(strata: dict) -> float | None:
+    '''Total variation distance between the pool's and the kept set's stratum shares.'''
+    pool = sum(s["pool"] for s in strata.values())
+    kept = sum(s["kept"] for s in strata.values())
+    if not pool or not kept:
+        return None
+    return round(0.5 * sum(abs(s["pool"] / pool - s["kept"] / kept) for s in strata.values()), 3)
 
 
 def _allocate(buckets: dict, quota: int, *, balanced: bool) -> dict:
@@ -722,6 +1013,60 @@ def _allocate(buckets: dict, quota: int, *, balanced: bool) -> dict:
 
 # ----- driver -----
 
+def _group_ids(source: Source, rows: list[Row]) -> list[str]:
+    '''Each row's group; a row without the group_key field is its own group.'''
+    return [str(row.metadata.get(source.group_key, i)) for i, row in enumerate(rows)]
+
+
+def _group_count(source: Source, rows: list[Row]) -> int:
+    if not source.group_key:
+        return len(rows)
+    return len(set(_group_ids(source, rows)))
+
+
+def _group_size(source: Source, rows: list[Row]) -> int:
+    '''Rows per selection unit: 1, or the mean group size for a group_key source.'''
+    if not source.group_key or not rows:
+        return 1
+    return max(1, round(len(rows) / _group_count(source, rows)))
+
+
+def allocate_budget(pools: list[tuple[Source, list[Row]]], budget: int) -> dict[str, int]:
+    '''
+    Water-fill `budget` rows across sources. Sources with `quota` take it off
+    the top; the rest are visited smallest pool first, each taking
+    min(pool, remaining / sources left), so a small source keeps everything and
+    its unused share flows on. Returned values are in each source's unit: rows,
+    or groups for a group_key source (a share rounds down to whole groups).
+    '''
+    takes: dict[str, int] = {}
+    remaining = budget
+    free: list[tuple[int, str, Source, int]] = []
+    for source, rows in pools:
+        size = _group_size(source, rows)
+        units = _group_count(source, rows)
+        if source.quota is not None:
+            takes[source.name] = min(source.quota, units)
+            remaining -= takes[source.name] * size
+        else:
+            free.append((len(rows), source.name, source, size))
+    free.sort(key=lambda item: item[:2])
+    for position, (pool_rows, name, _, size) in enumerate(free):
+        share = max(remaining, 0) // (len(free) - position)
+        takes[name] = min(pool_rows, share) // size
+        remaining -= takes[name] * size
+    # Integer remainder: one more unit to the largest pools with room, largest first.
+    moved = True
+    while remaining > 0 and moved:
+        moved = False
+        for pool_rows, name, _, size in reversed(free):
+            if remaining >= size and (takes[name] + 1) * size <= pool_rows:
+                takes[name] += 1
+                remaining -= size
+                moved = True
+    return takes
+
+
 def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
     sources = for_risk(risk)
     if not sources:
@@ -738,21 +1083,24 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
         rows = load_source(source)
         loaded = len(rows)
         rows, exact_dropped = exact_dedup(rows, source.distinct_on)
+        all_dropped.extend(exact_dropped)
         report[source.name] = {
             "loaded": loaded,
-            "exact_dropped": exact_dropped,
+            "exact_dropped": len(exact_dropped),
             "near_dropped": 0,
             "cross_source_dropped": 0,
             "quota": source.quota,
             "stratify_on": list(source.stratify),
             "balanced": source.balanced,
+            "leaf": source.leaf,
             "question_type": source.question_type,
             "path": source.path,
         }
         pools.append((source, rows))
 
     embeddings = load_embeddings(risk)
-    require_embeddings(risk, pools, embeddings)
+    leaf_embeddings = load_embeddings("leaves")
+    require_embeddings(risk, pools, embeddings, leaf_embeddings)
 
     # Tier 2 is per-source, because tau, dedup_on and distinct_on are per-source
     # declarations. Tier 1b then runs over the assembled pools — before tier 3,
@@ -775,17 +1123,39 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
     sizes = {source.name: len(rows) for source, rows in pools}
     pools, cross_dropped = cross_source_dedup(pools)
     all_dropped.extend(cross_dropped)
-    caches = Caches(embeddings, verdicts=load_screen(risk))
+    pools, cross_near_dropped = cross_source_near_dedup(pools, embeddings)
+    all_dropped.extend(cross_near_dropped)
     for source, rows in pools:
         report[source.name]["cross_source_dropped"] = sizes[source.name] - len(rows)
+
+    pools, relevance_dropped, relevance_report = relevance_filter(
+        pools, load_leaves(), embeddings, leaf_embeddings, budget_for(risk))
+    all_dropped.extend(relevance_dropped)
+    for name, stats in relevance_report.items():
+        report[name].update(stats)
+
+    caches = Caches(embeddings, verdicts=load_screen(risk))
+    allocation = allocate_budget(pools, budget_for(risk))
+    for source, rows in pools:
         refused, candidates = len(caches.refused), caches.candidates
-        rows, allocation = stratified_sample(rows, source, seed, caches)
-        report[source.name]["kept"] = len(rows)
-        report[source.name]["strata"] = allocation["strata"]
+        window = caches.relevance_window
+        rows, sample = stratified_sample(rows, source, seed, caches, quota=allocation[source.name])
+        report[source.name].update({
+            "kept": len(rows),
+            "allotted": sample["allotted"],
+            "shortfall": sample["allotted"] - sample["selected"],
+            "strata": sample["strata"],
+            "divergence": sample["divergence"],
+        })
+        if relevance_for(source) is not None:
+            report[source.name]["relevance"] = source.relevance
+        if caches.relevance_window > window:
+            report[source.name]["relevance_window"] = caches.relevance_window - window
         if source.screened():
             report[source.name]["screen_candidates"] = caches.candidates - candidates
             report[source.name]["screen_refused"] = len(caches.refused) - refused
         all_rows.extend(rows)
+        caches.selected.append(_vectors(rows, _payload_fn(None), embeddings))
 
     require_screen(risk, caches)
     all_dropped.extend(caches.refused)
@@ -793,7 +1163,7 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
 
 
 def source_revisions() -> dict:
-    '''Pin what produced this build: submodule SHAs plus the repo HEAD.'''
+    '''Pin what produced this build: the repo HEAD and the resolved revision of every datasets/raw/<name>/fetch.json (scripts/fetch_raw.py).'''
     def git(*args: str) -> str:
         try:
             return subprocess.run(
@@ -804,18 +1174,11 @@ def source_revisions() -> dict:
 
     revisions = {"repo": git("rev-parse", "HEAD")}
 
-    # Read gitlinks (mode 160000) straight from the index rather than using
-    # `git submodule status`, which aborts entirely if any path is missing from
-    # .gitmodules — one stale entry would otherwise leave the provenance blank
-    # without failing the build.
-    for line in git("ls-files", "--stage").splitlines():
-        fields = line.split(maxsplit=3)
-        if len(fields) == 4 and fields[0] == "160000":
-            revisions[fields[3].strip()] = fields[1]
+    for record in sorted((REPO_ROOT / "datasets" / "raw").glob("*/fetch.json")):
+        revisions[f"datasets/raw/{record.parent.name}"] = json.loads(record.read_text())["revision"]
 
-    vendored = [key for key in revisions if key != "repo"]
-    if not vendored:
-        revisions["_warning"] = "no submodule revisions recorded"
+    if set(revisions) == {"repo"}:
+        revisions["_warning"] = "no source revisions recorded"
     return revisions
 
 
@@ -827,9 +1190,14 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
     frame.to_csv(csv_path, index=False)
 
     screened = [source.name for source in for_risk(risk) if source.screened()]
+    leaves = load_leaves()
+    used_leaves = {stats["leaf"]: stats for stats in report.values()
+                   if stats.get("relevance_status") in ("scored", "uncalibrated")}
     meta = {
         "risk": risk,
         "rows": len(rows),
+        "budget": budget_for(risk),
+        "shortfall": budget_for(risk) - len(rows),
         "seed": seed,
         "embedding": {
             "model": EMBEDDING_MODEL,
@@ -841,6 +1209,15 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
             "applies_to": screened,
             "candidate_factor": SCREEN_FACTOR,
             "refused_dropped": {name: report[name]["screen_refused"] for name in screened},
+        },
+        "leaves": {
+            leaf_id: {
+                "cop_ref": leaves[leaf_id].cop_ref,
+                "threshold": stats.get("relevance_threshold"),
+                "anchors": len(anchor_texts(leaves[leaf_id])),
+                "anchor_keys": sorted(embed_key(text) for text in anchor_texts(leaves[leaf_id])),
+                "exemplars": stats["leaf_exemplars"],
+            } for leaf_id, stats in sorted(used_leaves.items())
         },
         "sources": report,
         "revisions": source_revisions(),
@@ -857,22 +1234,55 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
 def print_report(risk: str, report: dict, rows: list[Row]):
     print(f"\n=== {risk} ===")
     header = (f"  {'source':22s} {'loaded':>7s} {'exact':>6s} {'near':>6s} "
-              f"{'cross':>6s} {'screen':>6s} {'kept':>6s} {'share':>6s}")
+              f"{'cross':>6s} {'relev':>10s} {'theta':>6s} {'screen':>6s} {'allot':>6s} {'kept':>6s} {'short':>6s} {'share':>6s}")
     print(header)
     print("  " + "-" * (len(header) - 2))
     total = len(rows) or 1
+    warned_leaves = set()
     for name, stats in report.items():
         refused = stats.get("screen_refused", 0)
+        status = stats.get("relevance_status")
+        scored = status == "scored"
+        relevant = (f"{stats['relevance_kept']}/{stats['relevance_pool']}"
+                    if status in ("scored", "uncalibrated") else "-")
+        theta = f"{stats['relevance_threshold_eff']:.3f}" if scored else "-"
         print(
             f"  {name:22s} {stats['loaded']:7d} {stats['exact_dropped']:6d} "
             f"{stats['near_dropped']:6d} {stats['cross_source_dropped']:6d} "
-            f"{refused:6d} {stats['kept']:6d} {100 * stats['kept'] / total:5.1f}%"
+            f"{relevant:>10s} {theta:>6s} {refused:6d} {stats.get('allotted', 0):6d} {stats['kept']:6d} "
+            f"{stats.get('shortfall', 0):6d} {100 * stats['kept'] / total:5.1f}%"
         )
+        if scored and stats["relevance_floor_used"]:
+            print(f"  [WARNING] {name}: relevance floor used "
+                  f"(theta {stats['relevance_threshold']:.3f} did not bind)")
+        if status == "uncalibrated" and stats["leaf"] not in warned_leaves:
+            warned_leaves.add(stats["leaf"])
+            print(f"  [WARNING] {stats['leaf']}: uncalibrated: fewer than 2 exemplars; no filtering")
+        if status in ("scored", "uncalibrated"):
+            hits = stats["anchor_hits"]
+            # One anchor always takes every hit, so a lone legal text cannot warn.
+            if hits and stats["leaf_exemplars"] > 0:
+                anchor, count = max(hits.items(), key=lambda item: item[1])
+                if count > 0.8 * stats["relevance_kept"]:
+                    print(f"  [WARNING] {name}: {100 * count / stats['relevance_kept']:.0f}% "
+                          f"of kept rows match one anchor ({anchor})")
+        if stats.get("shortfall", 0) > 0:
+            print(f"  [WARNING] {name}: short {stats['shortfall']} of {stats['allotted']}; "
+                  f"its pool or a stratum ran dry")
+        divergence = stats.get("divergence")
+        if divergence is not None and divergence > 0.10 and not stats.get("balanced"):
+            print(f"  [WARNING] {name}: kept strata diverge from the pool (TVD {divergence:.2f})")
         candidates = stats.get("screen_candidates", 0)
         if candidates and 2 * refused > candidates:
             print(f"  [WARNING] {name}: the screen refused {refused} of {candidates} "
-                  f"candidates; raise SCREEN_FACTOR rather than shrink the quota")
-    print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {'':6s} {'':6s} {total:6d}")
+                  f"candidates; raise SCREEN_FACTOR rather than shrink the share")
+    print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {'':6s} {'':10s} {'':6s} {'':6s} {'':6s} {total:6d}")
+    budget = budget_for(risk)
+    if len(rows) < budget:
+        print(f"  [WARNING] {risk}: {len(rows)} rows against a budget of {budget}; "
+              f"see per-source short")
+    elif len(rows) > budget:
+        print(f"  [WARNING] {risk}: {len(rows)} rows exceed the budget of {budget}")
 
 
 def main():

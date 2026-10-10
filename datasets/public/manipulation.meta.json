@@ -1,170 +1,814 @@
 {
   "risk": "manipulation",
-  "rows": 562,
+  "rows": 1124,
+  "budget": 1124,
+  "shortfall": 0,
   "seed": 0,
-  "jaccard_tau_default": 0.9,
-  "token_gate": 25,
+  "embedding": {
+    "model": "sentence-transformers/all-MiniLM-L6-v2",
+    "tau_cosine": 0.92,
+    "cache": "datasets/cache/embeddings/manipulation.npz"
+  },
+  "screen": {
+    "model": [
+      "vllm/NousResearch/Hermes-4-70B"
+    ],
+    "applies_to": [
+      "social_harm",
+      "historical_revisionism",
+      "darkbench",
+      "ape",
+      "mentalmanip"
+    ],
+    "candidate_factor": 3.5,
+    "refused_dropped": {
+      "social_harm": 71,
+      "historical_revisionism": 0,
+      "darkbench": 16,
+      "ape": 88,
+      "mentalmanip": 0
+    }
+  },
   "sources": {
     "social_harm": {
       "loaded": 419,
       "exact_dropped": 1,
       "near_dropped": 0,
       "cross_source_dropped": 0,
-      "quota": 60,
+      "quota": null,
       "stratify_on": [
         "category"
       ],
       "balanced": false,
+      "leaf": null,
       "question_type": "graded",
-      "path": "raw/manipulation/SocialHarmBench/socialharmbench.csv",
-      "kept": 60,
-      "strata": 5
+      "path": "raw/socialharmbench/socialharmbench.csv",
+      "kept": 100,
+      "allotted": 100,
+      "shortfall": 0,
+      "strata": {
+        "Propaganda Generation": {
+          "pool": 74,
+          "kept": 18
+        },
+        "Surveillance": {
+          "pool": 98,
+          "kept": 23
+        },
+        "Political manipulation": {
+          "pool": 80,
+          "kept": 19
+        },
+        "War crimes": {
+          "pool": 79,
+          "kept": 19
+        },
+        "Censorship": {
+          "pool": 87,
+          "kept": 21
+        }
+      },
+      "divergence": 0.006,
+      "screen_candidates": 352,
+      "screen_refused": 71
     },
     "historical_revisionism": {
       "loaded": 998,
       "exact_dropped": 1,
-      "near_dropped": 22,
+      "near_dropped": 31,
       "cross_source_dropped": 0,
-      "quota": 60,
+      "quota": null,
       "stratify_on": [
         "Push Level",
         "Country/Region"
       ],
       "balanced": false,
+      "leaf": null,
       "question_type": "graded",
-      "path": "raw/manipulation/PreservingHistoricalTruth/data/*_prompt*.csv",
-      "kept": 60,
-      "strata": 98
+      "path": "raw/historical_misinfo/data/*_prompt*.csv",
+      "kept": 101,
+      "allotted": 101,
+      "shortfall": 0,
+      "strata": {
+        "explicit_push|China": {
+          "pool": 89,
+          "kept": 2
+        },
+        "no_push|China": {
+          "pool": 90,
+          "kept": 3
+        },
+        "explicit_push|Soviet Union": {
+          "pool": 50,
+          "kept": 1
+        },
+        "no_push|Soviet Union": {
+          "pool": 50,
+          "kept": 1
+        },
+        "explicit_push|Russia": {
+          "pool": 23,
+          "kept": 1
+        },
+        "no_push|Russia": {
+          "pool": 23,
+          "kept": 1
+        },
+        "explicit_push|Soviet Union / Russia": {
+          "pool": 1,
+          "kept": 1
+        },
+        "no_push|Soviet Union / Russia": {
+          "pool": 1,
+          "kept": 1
+        },
+        "explicit_push|Germany": {
+          "pool": 68,
+          "kept": 1
+        },
+        "no_push|Germany": {
+          "pool": 67,
+          "kept": 1
+        },
+        "explicit_push|Japan": {
+          "pool": 50,
+          "kept": 1
+        },
+        "no_push|Japan": {
+          "pool": 50,
+          "kept": 1
+        },
+        "explicit_push|Guinea": {
+          "pool": 50,
+          "kept": 1
+        },
+        "no_push|Guinea": {
+          "pool": 50,
+          "kept": 1
+        },
+        "explicit_push|North Korea": {
+          "pool": 40,
+          "kept": 1
+        },
+        "no_push|North Korea": {
+          "pool": 40,
+          "kept": 1
+        },
+        "explicit_push|Philippines": {
+          "pool": 30,
+          "kept": 1
+        },
+        "no_push|Philippines": {
+          "pool": 30,
+          "kept": 1
+        },
+        "explicit_push|Ireland": {
+          "pool": 3,
+          "kept": 1
+        },
+        "no_push|Ireland": {
+          "pool": 3,
+          "kept": 1
+        },
+        "explicit_push|Poland": {
+          "pool": 3,
+          "kept": 1
+        },
+        "explicit_push|Croatia": {
+          "pool": 2,
+          "kept": 1
+        },
+        "explicit_push|Cambodia": {
+          "pool": 2,
+          "kept": 1
+        },
+        "no_push|Poland": {
+          "pool": 3,
+          "kept": 1
+        },
+        "explicit_push|Rwanda": {
+          "pool": 1,
+          "kept": 1
+        },
+        "no_push|Croatia": {
+          "pool": 2,
+          "kept": 1
+        },
+        "explicit_push|United Kingdom": {
+          "pool": 2,
+          "kept": 1
+        },
+        "no_push|Cambodia": {
+          "pool": 2,
+          "kept": 1
+        },
+        "no_push|Rwanda": {
+          "pool": 1,
+          "kept": 1
+        },
+        "explicit_push|Czechoslovakia": {
+          "pool": 3,
+          "kept": 1
+        },
+        "no_push|United Kingdom": {
+          "pool": 2,
+          "kept": 1
+        },
+        "no_push|Czechoslovakia": {
+          "pool": 3,
+          "kept": 1
+        },
+        "explicit_push|Hungary": {
+          "pool": 5,
+          "kept": 1
+        },
+        "no_push|Hungary": {
+          "pool": 5,
+          "kept": 1
+        },
+        "explicit_push|Ukraine": {
+          "pool": 3,
+          "kept": 1
+        },
+        "no_push|Ukraine": {
+          "pool": 3,
+          "kept": 1
+        },
+        "explicit_push|Estonia": {
+          "pool": 3,
+          "kept": 1
+        },
+        "no_push|Estonia": {
+          "pool": 3,
+          "kept": 1
+        },
+        "explicit_push|Vietnam": {
+          "pool": 3,
+          "kept": 1
+        },
+        "explicit_push|South Korea": {
+          "pool": 3,
+          "kept": 1
+        },
+        "explicit_push|India": {
+          "pool": 3,
+          "kept": 1
+        },
+        "no_push|Vietnam": {
+          "pool": 3,
+          "kept": 1
+        },
+        "explicit_push|Bangladesh": {
+          "pool": 1,
+          "kept": 1
+        },
+        "no_push|South Korea": {
+          "pool": 3,
+          "kept": 1
+        },
+        "explicit_push|Myanmar": {
+          "pool": 3,
+          "kept": 1
+        },
+        "no_push|India": {
+          "pool": 3,
+          "kept": 1
+        },
+        "explicit_push|East Timor": {
+          "pool": 2,
+          "kept": 1
+        },
+        "no_push|Bangladesh": {
+          "pool": 1,
+          "kept": 1
+        },
+        "explicit_push|Sri Lanka": {
+          "pool": 2,
+          "kept": 1
+        },
+        "no_push|Myanmar": {
+          "pool": 3,
+          "kept": 1
+        },
+        "explicit_push|Argentina": {
+          "pool": 4,
+          "kept": 1
+        },
+        "no_push|East Timor": {
+          "pool": 2,
+          "kept": 1
+        },
+        "explicit_push|Chile": {
+          "pool": 1,
+          "kept": 1
+        },
+        "no_push|Sri Lanka": {
+          "pool": 2,
+          "kept": 1
+        },
+        "explicit_push|Peru": {
+          "pool": 3,
+          "kept": 1
+        },
+        "no_push|Argentina": {
+          "pool": 4,
+          "kept": 1
+        },
+        "explicit_push|El Salvador": {
+          "pool": 3,
+          "kept": 1
+        },
+        "no_push|Chile": {
+          "pool": 1,
+          "kept": 1
+        },
+        "explicit_push|Mexico": {
+          "pool": 3,
+          "kept": 1
+        },
+        "no_push|Peru": {
+          "pool": 3,
+          "kept": 1
+        },
+        "explicit_push|Colombia": {
+          "pool": 2,
+          "kept": 1
+        },
+        "no_push|El Salvador": {
+          "pool": 3,
+          "kept": 1
+        },
+        "explicit_push|Laos": {
+          "pool": 1,
+          "kept": 1
+        },
+        "no_push|Mexico": {
+          "pool": 3,
+          "kept": 1
+        },
+        "no_push|Colombia": {
+          "pool": 2,
+          "kept": 1
+        },
+        "no_push|Laos": {
+          "pool": 1,
+          "kept": 1
+        },
+        "explicit_push|Iraq": {
+          "pool": 2,
+          "kept": 1
+        },
+        "explicit_push|Iran": {
+          "pool": 1,
+          "kept": 1
+        },
+        "explicit_push|Syria": {
+          "pool": 2,
+          "kept": 1
+        },
+        "no_push|Iraq": {
+          "pool": 2,
+          "kept": 1
+        },
+        "explicit_push|Guatemala": {
+          "pool": 2,
+          "kept": 1
+        },
+        "no_push|Iran": {
+          "pool": 1,
+          "kept": 1
+        },
+        "no_push|Syria": {
+          "pool": 2,
+          "kept": 1
+        },
+        "explicit_push|Taiwan ": {
+          "pool": 1,
+          "kept": 1
+        },
+        "no_push|Guatemala": {
+          "pool": 2,
+          "kept": 1
+        },
+        "explicit_push|South America": {
+          "pool": 1,
+          "kept": 1
+        },
+        "no_push|Taiwan ": {
+          "pool": 1,
+          "kept": 1
+        },
+        "explicit_push|Brazil": {
+          "pool": 1,
+          "kept": 1
+        },
+        "no_push|South America": {
+          "pool": 1,
+          "kept": 1
+        },
+        "no_push|Brazil": {
+          "pool": 1,
+          "kept": 1
+        },
+        "explicit_push|Singapore": {
+          "pool": 1,
+          "kept": 1
+        },
+        "explicit_push|Indonesia": {
+          "pool": 1,
+          "kept": 1
+        },
+        "no_push|Singapore": {
+          "pool": 1,
+          "kept": 1
+        },
+        "no_push|Indonesia": {
+          "pool": 1,
+          "kept": 1
+        },
+        "explicit_push|United States": {
+          "pool": 2,
+          "kept": 1
+        },
+        "no_push|United States": {
+          "pool": 2,
+          "kept": 1
+        },
+        "explicit_push|Malaysia": {
+          "pool": 1,
+          "kept": 1
+        },
+        "no_push|Malaysia": {
+          "pool": 1,
+          "kept": 1
+        },
+        "explicit_push|Romania": {
+          "pool": 1,
+          "kept": 1
+        },
+        "explicit_push|Albania": {
+          "pool": 1,
+          "kept": 1
+        },
+        "no_push|Romania": {
+          "pool": 1,
+          "kept": 1
+        },
+        "no_push|Albania": {
+          "pool": 1,
+          "kept": 1
+        },
+        "explicit_push|Venezuela": {
+          "pool": 1,
+          "kept": 1
+        },
+        "no_push|Venezuela": {
+          "pool": 1,
+          "kept": 1
+        },
+        "explicit_push|China (HK)": {
+          "pool": 2,
+          "kept": 1
+        },
+        "no_push|China (HK)": {
+          "pool": 2,
+          "kept": 1
+        },
+        "explicit_push|China (Tibet)": {
+          "pool": 1,
+          "kept": 1
+        },
+        "no_push|China (Tibet)": {
+          "pool": 1,
+          "kept": 1
+        }
+      },
+      "divergence": 0.64,
+      "screen_candidates": 238,
+      "screen_refused": 0
     },
     "human_rights_udhr": {
       "loaded": 432,
       "exact_dropped": 0,
       "near_dropped": 0,
       "cross_source_dropped": 0,
-      "quota": 20,
+      "quota": null,
       "stratify_on": [
         "severity"
       ],
       "balanced": false,
+      "leaf": null,
       "question_type": "graded",
-      "path": "raw/manipulation/llm-human-rights/data/experiments/synthetic/udhr/scenarios/en.csv",
-      "kept": 60,
-      "strata": 2
+      "path": "raw/udhr_rights_limitations/data/experiments/synthetic/udhr/scenarios/en.csv",
+      "kept": 99,
+      "allotted": 33,
+      "shortfall": 0,
+      "strata": {
+        "1": {
+          "pool": 72,
+          "kept": 17
+        },
+        "3": {
+          "pool": 72,
+          "kept": 16
+        }
+      },
+      "divergence": 0.015
     },
     "human_rights_echr": {
       "loaded": 306,
       "exact_dropped": 0,
       "near_dropped": 0,
-      "cross_source_dropped": 0,
-      "quota": 20,
+      "cross_source_dropped": 15,
+      "quota": null,
       "stratify_on": [
         "severity"
       ],
       "balanced": false,
+      "leaf": null,
       "question_type": "graded",
-      "path": "raw/manipulation/llm-human-rights/data/experiments/synthetic/echr/scenarios/en.csv",
-      "kept": 60,
-      "strata": 2
+      "path": "raw/udhr_rights_limitations/data/experiments/synthetic/echr/scenarios/en.csv",
+      "kept": 99,
+      "allotted": 33,
+      "shortfall": 0,
+      "strata": {
+        "1": {
+          "pool": 48,
+          "kept": 16
+        },
+        "3": {
+          "pool": 49,
+          "kept": 17
+        }
+      },
+      "divergence": 0.01
     },
     "authoritarian_values": {
       "loaded": 30,
       "exact_dropped": 0,
-      "near_dropped": 0,
+      "near_dropped": 4,
       "cross_source_dropped": 0,
-      "quota": 30,
+      "quota": null,
       "stratify_on": [],
       "balanced": false,
+      "leaf": null,
       "question_type": "likert",
-      "path": "raw/manipulation/Democratic-Authoritarian-Bias-LLMs/data/phase1_questions.json",
-      "kept": 30,
-      "strata": 0
+      "path": "raw/democratic_authoritarian_bias/data/phase1_questions.json",
+      "kept": 26,
+      "allotted": 26,
+      "shortfall": 0,
+      "strata": {},
+      "divergence": null
     },
     "leader_favorability": {
       "loaded": 6786,
       "exact_dropped": 0,
-      "near_dropped": 0,
+      "near_dropped": 6140,
       "cross_source_dropped": 0,
-      "quota": 60,
+      "quota": null,
       "stratify_on": [
         "classification"
       ],
       "balanced": true,
+      "leaf": null,
       "question_type": "likert",
-      "path": "raw/manipulation/Democratic-Authoritarian-Bias-LLMs/data/leaders.json",
-      "kept": 60,
-      "strata": 4
+      "path": "raw/democratic_authoritarian_bias/data/leaders.json",
+      "kept": 100,
+      "allotted": 100,
+      "shortfall": 0,
+      "strata": {
+        "Closed Autocracy": {
+          "pool": 96,
+          "kept": 25
+        },
+        "Electoral Democracy": {
+          "pool": 242,
+          "kept": 25
+        },
+        "Electoral Autocracy": {
+          "pool": 197,
+          "kept": 25
+        },
+        "Liberal Democracy": {
+          "pool": 111,
+          "kept": 25
+        }
+      },
+      "divergence": 0.18
     },
     "role_model_bias": {
       "loaded": 222,
       "exact_dropped": 0,
-      "near_dropped": 0,
+      "near_dropped": 70,
       "cross_source_dropped": 0,
-      "quota": 40,
+      "quota": null,
       "stratify_on": [],
       "balanced": false,
+      "leaf": null,
       "question_type": "extraction",
-      "path": "raw/manipulation/Democratic-Authoritarian-Bias-LLMs/role_model_probe/main.py",
-      "kept": 40,
-      "strata": 1
+      "path": "raw/democratic_authoritarian_bias/role_model_probe/main.py",
+      "kept": 100,
+      "allotted": 100,
+      "shortfall": 0,
+      "strata": {},
+      "divergence": null
     },
     "darkbench": {
       "loaded": 660,
       "exact_dropped": 1,
-      "near_dropped": 0,
+      "near_dropped": 8,
       "cross_source_dropped": 0,
-      "quota": 72,
+      "quota": null,
       "stratify_on": [
         "dark_pattern"
       ],
       "balanced": false,
+      "leaf": null,
       "question_type": "graded",
-      "path": "raw/manipulation/darkbench/darkbench.jsonl",
-      "kept": 72,
-      "strata": 6
+      "path": "raw/darkbench/darkbench.jsonl",
+      "kept": 100,
+      "allotted": 100,
+      "shortfall": 0,
+      "strata": {
+        "brand-bias": {
+          "pool": 101,
+          "kept": 15
+        },
+        "user-retention": {
+          "pool": 110,
+          "kept": 17
+        },
+        "sycophancy": {
+          "pool": 110,
+          "kept": 17
+        },
+        "anthropomorphization": {
+          "pool": 110,
+          "kept": 17
+        },
+        "harmful-generation": {
+          "pool": 110,
+          "kept": 17
+        },
+        "sneaking": {
+          "pool": 110,
+          "kept": 17
+        }
+      },
+      "divergence": 0.005,
+      "screen_candidates": 353,
+      "screen_refused": 16
     },
     "persusafety": {
       "loaded": 101,
       "exact_dropped": 1,
       "near_dropped": 0,
       "cross_source_dropped": 0,
-      "quota": 60,
+      "quota": null,
       "stratify_on": [
         "harmfulness_level"
       ],
       "balanced": false,
+      "leaf": null,
       "question_type": "detection",
-      "path": "raw/manipulation/PersuSafety/dataset/harmful_scenarios_full.json",
-      "kept": 60,
-      "strata": 3
+      "path": "raw/persusafety/dataset/harmful_scenarios_full.json",
+      "kept": 99,
+      "allotted": 99,
+      "shortfall": 0,
+      "strata": {
+        "Medium": {
+          "pool": 37,
+          "kept": 37
+        },
+        "High": {
+          "pool": 35,
+          "kept": 35
+        },
+        "Low": {
+          "pool": 28,
+          "kept": 27
+        }
+      },
+      "divergence": 0.007
     },
     "sycophancy_mimicry": {
       "loaded": 300,
       "exact_dropped": 0,
-      "near_dropped": 0,
+      "near_dropped": 149,
       "cross_source_dropped": 0,
-      "quota": 60,
+      "quota": null,
       "stratify_on": [],
       "balanced": false,
+      "leaf": null,
       "question_type": "detection",
-      "path": "raw/manipulation/sycophancy-eval/datasets/mimicry.jsonl",
-      "kept": 60,
-      "strata": 1
+      "path": "raw/sycophancy_sharma/mimicry.jsonl",
+      "kept": 99,
+      "allotted": 99,
+      "shortfall": 0,
+      "strata": {},
+      "divergence": null
+    },
+    "ape": {
+      "loaded": 218,
+      "exact_dropped": 0,
+      "near_dropped": 0,
+      "cross_source_dropped": 0,
+      "quota": null,
+      "stratify_on": [
+        "topic_file"
+      ],
+      "balanced": false,
+      "leaf": "harmful manipulation: propensity",
+      "question_type": "graded",
+      "path": "raw/ape/src/topics/*.jsonl",
+      "kept": 100,
+      "allotted": 100,
+      "shortfall": 0,
+      "strata": {
+        "conspiracies": {
+          "pool": 18,
+          "kept": 8
+        },
+        "harmful_texts": {
+          "pool": 100,
+          "kept": 46
+        },
+        "terrorism": {
+          "pool": 100,
+          "kept": 46
+        }
+      },
+      "divergence": 0.003,
+      "screen_candidates": 218,
+      "screen_refused": 88
+    },
+    "mentalmanip": {
+      "loaded": 2915,
+      "exact_dropped": 1,
+      "near_dropped": 3,
+      "cross_source_dropped": 0,
+      "quota": null,
+      "stratify_on": [
+        "manipulative"
+      ],
+      "balanced": false,
+      "leaf": null,
+      "question_type": "mcq",
+      "path": "raw/mentalmanip/mentalmanip_con.csv",
+      "kept": 101,
+      "allotted": 101,
+      "shortfall": 0,
+      "strata": {
+        "1": {
+          "pool": 2015,
+          "kept": 70
+        },
+        "0": {
+          "pool": 896,
+          "kept": 31
+        }
+      },
+      "divergence": 0.001,
+      "screen_candidates": 354,
+      "screen_refused": 0
     }
   },
   "revisions": {
-    "repo": "684193e9503572bafba99d7432bdda7f8a83d095",
-    "datasets/raw/cbrn/HarmBench": "8e1604d1171fe8a48d8febecd22f600e462bdcdd",
-    "datasets/raw/cyber/AgentHarm": "e23b3fe60a0da9037314b88e5ee3a0c054970dad",
-    "datasets/raw/cyber/CySecBench": "ea3868f63961833e33d3e81933dd1024505dabe0",
-    "datasets/raw/cyber/InjecAgent": "f19c9f2c79a41046eb13c03c51a24c567a8ffa07",
-    "datasets/raw/cyber/PurpleLlama": "acfdd58f7c605eec53af4eed3f7ecf302267f0f8",
-    "datasets/raw/loss_of_control/evals": "84fcc677e52e1902d696c32cd1a6b663e70d3993",
-    "datasets/raw/loss_of_control/sad": "dfc5c9831a9bcc5c9a9dbdcaa2955aae983cd1d3",
-    "datasets/raw/manipulation/Democratic-Authoritarian-Bias-LLMs": "583a1e4a8d440c421ab2ef06a6ac8afd5473c9e0",
-    "datasets/raw/manipulation/PersuSafety": "892bf057f2974c1d1624f37d1110dcb4924e4fd6",
-    "datasets/raw/manipulation/PreservingHistoricalTruth": "5d327d24c8e6f0c82b598fecf9ca9f1b46bf3c64",
-    "datasets/raw/manipulation/llm-human-rights": "65171d7c5ec20255256e5d0500dc118c8f7904ef",
-    "datasets/raw/manipulation/persuasion": "b520c793895e7bea0090816551e9f395f9256082",
-    "datasets/raw/manipulation/sycophancy-eval": "9a1694221e3639887138f61deae344335eca6752"
+    "repo": "302aa44eca5d452b619f616ad70d993bde8b966b",
+    "datasets/raw/agentharm": "e23b3fe60a0da9037314b88e5ee3a0c054970dad",
+    "datasets/raw/anthropic_persuasion": "b520c793895e7bea0090816551e9f395f9256082",
+    "datasets/raw/ape": "f2ca0a9900d5bcd1b0238a49a335a1988cbc09a9",
+    "datasets/raw/bbq": "bea11bd97d79217245b5871acd247b9d6eb24598",
+    "datasets/raw/beavertails": "a93205d9ba6cc9dc398a34466da3602abddd2d40",
+    "datasets/raw/biolp_bench": "148d5a2dd90c185ce2859c77c368b79c2173d907",
+    "datasets/raw/cogmanip": "d2207932ccaff6d5df1258037d154ac469731aa4",
+    "datasets/raw/confaide": "3174c63e689226189675a740b7bf9053f10bae50",
+    "datasets/raw/ctrl_alt_deceit": "60c1dff47a4615aedaceb2a14d4f1daa3afad990",
+    "datasets/raw/cyberseceval_3": "acfdd58f7c605eec53af4eed3f7ecf302267f0f8",
+    "datasets/raw/cysecbench": "ea3868f63961833e33d3e81933dd1024505dabe0",
+    "datasets/raw/deception_bench": "9c6c67b3d2a2d9c226ea0dd2120f1bb0899d779d",
+    "datasets/raw/democratic_authoritarian_bias": "583a1e4a8d440c421ab2ef06a6ac8afd5473c9e0",
+    "datasets/raw/elephant": "61f7044fc0e11defc971dfaa9bc84d7340fa88eb",
+    "datasets/raw/fortress": "0c096becbc75bb12065c8059a53960c7f0d4d35c",
+    "datasets/raw/harmbench": "8e1604d1171fe8a48d8febecd22f600e462bdcdd",
+    "datasets/raw/historical_misinfo": "5d327d24c8e6f0c82b598fecf9ca9f1b46bf3c64",
+    "datasets/raw/injecagent": "f19c9f2c79a41046eb13c03c51a24c567a8ffa07",
+    "datasets/raw/instrumentaleval": "269678168cf0388bf5dd7d10dfaed4af07905c49",
+    "datasets/raw/lab_bench": "5c77cec648430f30611808808861eb86f81d5eaa",
+    "datasets/raw/medsafetybench": "dc5d88e4c0100deada5a96f065a302959e6523a7",
+    "datasets/raw/mentalmanip": "86e800cebf9ee2baa8f5999845027cc3f50e8fd5",
+    "datasets/raw/mlgym": "9d40c1b5035202018cd7091fb4e83a9c68b377c0",
+    "datasets/raw/model_written_evaluations": "84fcc677e52e1902d696c32cd1a6b663e70d3993",
+    "datasets/raw/multijail": "93d65c778925d55973b9ff30c7bccc8545494eb6",
+    "datasets/raw/paper_bench": "51052cede8cc608f95bb00346635e03759013e5a",
+    "datasets/raw/persuasionbench": "a8fa77f0c57435aa0db66b26c2ecf5a485eb20ad",
+    "datasets/raw/persusafety": "892bf057f2974c1d1624f37d1110dcb4924e4fd6",
+    "datasets/raw/privacylens": "7dc406e8d1e882e5b0c6ea4be697b2b7a5dee805",
+    "datasets/raw/redcode": "c84b6db88fd8bd258e29f12e692ccfd4287a454d",
+    "datasets/raw/sad": "dfc5c9831a9bcc5c9a9dbdcaa2955aae983cd1d3",
+    "datasets/raw/scisafeeval": "2c2296660a9c340593b049fdf0aa7900ae53f0eb",
+    "datasets/raw/sycophancy_sharma": "18f18160e9998e524bbf027c4475bfa7fdeb6949",
+    "datasets/raw/truthfulqa": "741b8276f2d1982aa3d5b832d3ee81ed3b896490",
+    "datasets/raw/udhr_rights_limitations": "65171d7c5ec20255256e5d0500dc118c8f7904ef"
   }
 }

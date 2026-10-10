@@ -1,0 +1,12 @@
+{
+  "name": "persuasionbench",
+  "id": "286653145",
+  "host": "hf",
+  "repo": "behavior-in-the-wild/PersuasionArena",
+  "revision": "a8fa77f0c57435aa0db66b26c2ecf5a485eb20ad",
+  "requested": "",
+  "files": [
+    "data/test-*.parquet"
+  ],
+  "fetched_at": "2026-10-07T22:35:32+00:00"
+}

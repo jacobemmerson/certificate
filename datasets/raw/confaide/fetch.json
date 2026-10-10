@@ -1,0 +1,12 @@
+{
+  "name": "confaide",
+  "id": "286653165",
+  "host": "github",
+  "repo": "skywalker023/confAIde",
+  "revision": "3174c63e689226189675a740b7bf9053f10bae50",
+  "requested": "",
+  "files": [
+    "benchmark/tier_*.txt"
+  ],
+  "fetched_at": "2026-10-07T22:35:34+00:00"
+}

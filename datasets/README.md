@@ -2,14 +2,23 @@
 
 | Directory | Contents |
 |---|---|
-| `raw/` | Raw source benchmarks as delivered, grouped by systemic risk (`raw/<risk>/<benchmark>/`): nested repos, dumps, original CSVs. Never loaded by the pipeline directly. Almost all are git submodules — `git submodule update --init` is the whole bootstrap. |
+| `raw/` | Raw source benchmarks as delivered, one directory per `manifest.toml` name (`raw/<name>/`). Never loaded by the pipeline directly. Most are sparse, pinned fetches by `scripts/fetch_raw.py` (each holds a `fetch.json`); `wmdp`, `sosbench`, `darkbench` and `socialharmbench` are committed. |
 | `prepare/` | `prepare/cluster/` — builds the per-risk cluster datasets from `raw/` into `public/`. Run once before evaluating. |
-| `public/` | The processed CSVs the stage-1 evals actually load (via `pipeline/stage1_evaluation/evals/common.py::csv_samples`). One row per item. Holds the four cluster datasets (`cbrn.csv`, `cyber.csv`, `loss_of_control.csv`, `manipulation.csv`) with their `.meta.json` provenance siblings. Use a `private/` sibling for non-redistributable data. |
+| `public/` | The processed CSVs the stage-1 evals actually load (via `pipeline/stage1_evaluation/evals/common.py::csv_samples`). One row per item. Holds one dataset per risk cluster (`cbrn.csv`, `cyber.csv`, `loss_of_control.csv`, `manipulation.csv`; `alignment` is a provisional fifth cluster, built once its sources are prepared, for benchmarks whose taxonomy leaves fit none of the four risks) with their `.meta.json` provenance siblings. Use a `private/` sibling for non-redistributable data. |
 | `generated/` | The frozen stage-2/3 artifacts (perturbed variants + scenario reframings) that `certify.py` replays against every model, produced once by `generate.py`. Committed like `public/`. See [`generated/README.md`](generated/README.md). |
 
-`datasets/raw/manipulation/sycophancy-eval/datasets/mimicry.jsonl` is the one exception to the
-submodule bootstrap: the GitHub submodule pin lacks it, so it is fetched separately from the
-HuggingFace dataset `meg-tong/sycophancy-eval`.
+`datasets/raw/sycophancy_sharma/mimicry.jsonl` comes from the HuggingFace dataset
+`meg-tong/sycophancy-eval`, not the GitHub repo of the same name, which lacks it.
+
+Bootstrap the fetched sources on a fresh clone with (committed directories are skipped):
+
+```bash
+uv run python3 scripts/fetch_raw.py --status registered vendored
+```
+
+A gated HuggingFace dataset needs its terms accepted on the Hub and `HF_TOKEN`
+exported first. A failed fetch is reported and the rest continue; the script
+exits non-zero listing the failures.
 
 ## Risk clusters
 
@@ -28,16 +37,17 @@ uv run python3 -m datasets.prepare.cluster.prepare --risk cyber
 Every source is read from `raw/` directly — there is no intermediate flattening
 step, and no source-specific loader between the pipeline and its data.
 
-Each build writes `public/<risk>.csv`, a `<risk>.meta.json` (seed, quotas,
-per-tier drop counts, source revisions) and `<risk>.dropped.jsonl` (every pair or item
-dropped by cross-source dedup, cosine dedup or the screen, each tagged `near`,
-`exact_cross_source` or `screen`, so thresholds stay reviewable).
+Each build writes `public/<risk>.csv`, a `<risk>.meta.json` (seed, budget and shortfall,
+per-source allotments, per-tier drop counts, strata skew, per-leaf relevance thresholds and per-source relevance stats, source revisions) and `<risk>.dropped.jsonl` (every pair or item
+dropped by cross-source dedup, cosine dedup, the relevance filter or the screen, each tagged
+`exact`, `near`, `exact_cross_source`, `near_cross_source`, `relevance` or `screen`, so
+thresholds stay reviewable).
 
 ### Adding a benchmark to a cluster
 
 Full guide: **[CONTRIBUTE.md](../CONTRIBUTE.md)**. In short:
 
-1. **Add the data** under `datasets/raw/<risk>/<benchmark>/`.
+1. **Add the data**: add or update the `[[benchmark]]` row in `datasets/raw/manifest.toml` (status `prompt`/`partial`, `files` = exactly what the adapter reads), run `uv run python3 scripts/fetch_raw.py --only <name>`, and point `Source.path` at `raw/<name>/...`. Once the `Source` reads it, set `status = "registered"` and add `path = "raw/<name>"` so the fresh-clone bootstrap fetches it (see `CONTRIBUTE.md`).
 2. **Add one `Source(...)`** to `datasets/prepare/cluster/sources/<risk>.py`. Beyond
    the column mapping, declare what the pipeline cannot infer:
    - `judge_style="classifier"` only if the original judge emits a bare label.

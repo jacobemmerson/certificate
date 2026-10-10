@@ -1,13 +1,9 @@
 '''
 author: @tae
 
-Risk-cluster tasks — one @task per EU AI Act systemic risk, each evaluating a
-filtered union of several benchmarks.
-
-  cbrn              chemical, biological, radiological and nuclear misuse
-  cyber             offensive cyber capability
-  loss_of_control   scheming and oversight subversion
-  manipulation      dark patterns, unethical influence, political manipulation
+Risk-cluster task — one parameterised @task over the EU AI Act systemic risks,
+each evaluating a filtered union of several benchmarks. There is one risk per
+`datasets/prepare/cluster/sources/<risk>.py`; see RISKS.
 
 The datasets are built by `datasets/prepare/cluster/` into
 `datasets/public/<risk>.csv`, one canonical schema across every source. This
@@ -20,7 +16,7 @@ Data preparation (run once before evaluating):
   uv run python3 -m datasets.prepare.cluster.prepare
 
 Run one cluster:
-  inspect eval pipeline/stage1_evaluation/evals/clusters.py@cyber --model openai/gpt-4o
+  inspect eval pipeline/stage1_evaluation/evals/clusters.py@cluster -T risk=cyber --model openai/gpt-4o
 '''
 
 import json
@@ -35,7 +31,7 @@ from pipeline.stage1_evaluation.screen import attribution_screen
 from pipeline.stage1_evaluation.scorers.cluster import cluster_scorer
 from inspect_ai.solver import chain, generate
 
-RISKS = ["cbrn", "cyber", "loss_of_control", "manipulation"]
+from datasets.prepare.cluster.sources import RISKS
 
 # Columns the prepare step JSON-encodes on the way out.
 _JSON_COLUMNS = (
@@ -122,32 +118,8 @@ def _cluster_task(risk: str, grader: str | list[str]) -> Task:
 
 
 @task
-def cbrn(grader: str | list[str] = "openai/gpt-4o"):
-    '''Chemical, biological, radiological and nuclear misuse.'''
-    return _cluster_task("cbrn", grader)
-
-
-@task
-def cyber(grader: str | list[str] = "openai/gpt-4o"):
-    '''Offensive cyber capability, and refusal of benign security work.'''
-    return _cluster_task("cyber", grader)
-
-
-@task
-def loss_of_control(grader: str | list[str] = "openai/gpt-4o"):
-    '''Scheming, instrumental convergence, oversight subversion.'''
-    return _cluster_task("loss_of_control", grader)
-
-
-@task
-def manipulation(grader: str | list[str] = "openai/gpt-4o"):
-    '''Dark patterns, unethical influence, and political manipulation.'''
-    return _cluster_task("manipulation", grader)
-
-
-CLUSTER_TASKS = {
-    "cbrn": cbrn,
-    "cyber": cyber,
-    "loss_of_control": loss_of_control,
-    "manipulation": manipulation,
-}
+def cluster(risk: str, grader: str | list[str] = "openai/gpt-4o") -> Task:
+    '''One systemic-risk cluster; `risk` is any entry of RISKS.'''
+    if risk not in RISKS:
+        raise ValueError(f"unknown risk {risk!r}; expected one of {RISKS}")
+    return _cluster_task(risk, grader)

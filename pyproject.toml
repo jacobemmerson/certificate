@@ -26,7 +26,9 @@ dependencies = [
     "geopandas",
     "ipython",
     "dirtyjson",
+    "pyyaml",
     "pyarrow>=25.0.0",
+    "modal>=1.6.1",
 ]
 
 [tool.uv]

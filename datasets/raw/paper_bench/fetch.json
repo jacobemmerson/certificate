@@ -1,0 +1,12 @@
+{
+  "name": "paper_bench",
+  "id": "287222731",
+  "host": "github",
+  "repo": "openai/frontier-evals",
+  "revision": "51052cede8cc608f95bb00346635e03759013e5a",
+  "requested": "51052cede8cc608f95bb00346635e03759013e5a",
+  "files": [
+    "project/paperbench/data/papers/*/**"
+  ],
+  "fetched_at": "2026-10-07T22:36:23+00:00"
+}

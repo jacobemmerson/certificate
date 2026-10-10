@@ -4,6 +4,9 @@ Benchmarks are evaluated in **risk clusters**, not one task per benchmark. Each
 EU AI Act systemic risk — `cbrn`, `cyber`, `loss_of_control`,
 `manipulation` — is one Inspect `@task` whose dataset is a filtered union of
 several benchmarks under one schema.
+`alignment` is a provisional fifth cluster for benchmarks whose taxonomy leaves
+(values, bias, misinformation, privacy/lawfulness) fit none of the four systemic
+risks; it is scored beside them until the leaf mapping lands.
 
 **So adding a benchmark changes nothing in `pipeline/`.** It is one `Source(...)`
 entry in `datasets/prepare/cluster/sources/<risk>.py`, plus data under
@@ -20,24 +23,38 @@ entry in `datasets/prepare/cluster/sources/<risk>.py`, plus data under
 judge prompt takes about twenty minutes. One whose evaluation you have to infer
 takes a day — most of it spent on step 5, which is the step that matters.
 
+**The per-source edits** are exactly five: the `Source(...)`, the manifest row
+flipped to `registered`, one row in its cluster's table in `datasets/BENCHMARKS.md`,
+one row in that file's Sources of truth table, and a test of any `transform`. Sample counts are never written by hand; they come from the build
+(`datasets/public/<risk>.meta.json`).
+
 ---
 
-## 1. Put the data under `datasets/raw/<risk>/`
+## 1. Put the data under `datasets/raw/<name>/`
 
-Prefer a **submodule**, so the checkout pins itself:
+Add or update the `[[benchmark]]` row in `datasets/raw/manifest.toml`: status
+`prompt` or `partial`, the `host`, `repo` and a pinned `revision`, and `files` =
+exactly what the adapter reads. Then fetch it, and point `Source.path` at
+`raw/<name>/...`:
 
 ```bash
-git submodule add git@github.com:owner/repo.git datasets/raw/<risk>/<Repo-Name>
+uv run python3 scripts/fetch_raw.py --only <name>
 ```
 
-Keep the upstream directory name — provenance stays traceable, and the build
-records each submodule's SHA in `datasets/public/<risk>.meta.json`.
+The fetch is sparse and writes `datasets/raw/<name>/fetch.json`; the build
+records its revision in `datasets/public/<risk>.meta.json`. Only `fetch.json`
+and `.gitignore` are committed.
 
-Copy files in instead only when a submodule is disproportionate (a 100 MB repo
-for 3 MB of data). If you copy, say so in the source module's docstring with the
-repo, commit, and licence: a copied directory pins nothing on its own.
+Once your `Source` reads the data, set the row to `status = "registered"` and
+add `path = "raw/<name>"`. The fresh-clone bootstrap fetches only registered
+and vendored rows, and `tests/test_manifest.py` fails if a `Source.path` has no
+such row.
 
-Never commit data whose licence forbids redistribution. Check before you fetch.
+Commit files directly instead only when the data is on neither GitHub nor
+HuggingFace. If you do, say so in the source module's docstring with the origin,
+version, and licence: a committed directory pins nothing on its own.
+
+Record the licence in the manifest note. The public CSVs are not redistributed, so an absent or non-commercial licence does not block registration.
 
 ## 2. Write the `Source(...)`
 
@@ -51,14 +68,14 @@ Source(
     risk="cyber",
     question_type=GRADED,
     elicitation_family=COMPLIANCE,
-    path="raw/cyber/YourRepo/data/*.parquet",
+    path="raw/your_benchmark/data/*.parquet",
     reader="parquet",
     query="prompt",                 # column holding the prompt
     criterion=lambda r: CRITERION.format(category=r["category"]),
     rubric=YOUR_RUBRIC,
     categories=YES_NO, scale_map=YES_NO_MAP,
     metadata=["category"],          # travels with the row, drives stratification
-    stratify=["category"], quota=90,
+    stratify=["category"],
 )
 ```
 
@@ -69,7 +86,10 @@ Useful fields when the shape is awkward:
 | `filename_field` / `dirname_field` | "one file per category" — turns the filename into an ordinary column |
 | `transform` | a `DataFrame -> DataFrame` hook, for prompt construction or structural collapse |
 | `system_prompt` | benchmarks that steer the model deliberately (persona arms, assigned roles) |
-| `group_key` | rows only meaningful as a set — the quota then counts groups, not rows |
+| `group_key` | rows only meaningful as a set — the share then counts groups, not rows |
+| `leaf` | slug from `datasets/prepare/cluster/leaves.toml`; required for relevance scoring (no leaf = unscored, passes through) |
+| `relevance` | r in (0, 1], how far down the relevance ranking selection may reach: per stratum the window is n + round(r x (stratum - n)) rows, so 1 = whole stratum and near 0 = top n by score; `None` = no window |
+| `quota` | override the water-filled share from the cluster `BUDGET`; say why in a comment |
 | `balanced` | even allocation per stratum instead of proportional |
 | `distinct_on` | fields whose differing values mean "different items, however similar the text" |
 | `judge_style="classifier"` | the original judge emits a bare label, not reasoning |
@@ -132,8 +152,9 @@ lives in the data, never in a flag:
   callable — see `favorability_scale_map`, where approving of an autocrat and
   approving of a democrat score oppositely with no scorer branch.
 
-**Add a polarity exemplar** to `POLARITY_EXEMPLARS` in `tests/test_clusters.py`:
-a known-safe and a known-unsafe answer in your benchmark's own vocabulary. The
+**Add a polarity exemplar** to `POLARITY_EXEMPLARS` in `tests/test_clusters.py`
+unless the source uses `YES_NO_MAP`, whose polarity follows from the criterion
+naming the failure and is pinned once: a known-safe and a known-unsafe answer in your benchmark's own vocabulary. The
 suite refuses to let a graded or likert source register without one, because an
 inverted map is invisible to code review — the file parses, the build succeeds,
 and the only symptom is a benchmark quietly contributing backwards to a
@@ -143,13 +164,13 @@ certification number. Deterministic sources are asserted in
 ## 5. Verify against the original — the step that matters
 
 Read the benchmark's **own** evaluation code or paper appendix, not a summary,
-and reproduce it. Recent audits of this repo found five of fifteen sources
-scoring differently from their originals, three of which were being judged by an
+and reproduce it. Recent audits of this repo found a third of the sources
+scoring differently from their originals, some of which were being judged by an
 LLM when the benchmark uses no judge at all.
 
 Specifically, find out:
 
-- **Does it use a judge?** Three sources here do not. Check the repo before
+- **Does it use a judge?** Some sources here do not. Check the repo before
   assuming.
 - **What is the actual scale?** CySecBench rates 1–5, not pass/fail; collapsing
   it lost the distinction the rating exists to make.
@@ -159,12 +180,12 @@ Specifically, find out:
 - **Is there a system prompt, or a pre-screen?** PersuSafety's pressure framing
   is the treatment, not decoration; dropping it measured something easier.
 
-Then **document it** in [datasets/BENCHMARKS.md](datasets/BENCHMARKS.md): counts,
-question type, the original's evaluation, ours, and a Divergence column that is
+Then **document it** in [datasets/BENCHMARKS.md](datasets/BENCHMARKS.md): question
+type, the original's evaluation, ours, and a Divergence column that is
 empty only if you verified it is. Add the primary source to the "Sources of
 truth" table so the next person re-checks in one step.
 `tests/test_benchmarks_doc.py` fails if a registered source is undocumented or
-if a count drifts.
+documented under the wrong question type.
 
 Divergence is allowed — some are unavoidable (logprobs unavailable through a
 router) and some are deliberate (we average judges rather than majority-voting).
@@ -202,14 +223,14 @@ ship.
 ## 7. Build, test, run
 
 ```bash
-# build your cluster (all four if you omit --risk)
+# build your cluster (all risks if you omit --risk)
 uv run python3 -m datasets.prepare.cluster.prepare --risk cyber
 
 # the suite: polarity, template invariants, dedup, doc consistency
 uv run python3 -m unittest discover tests
 
 # cheap smoke run — no model calls at all
-PYTHONPATH=. uv run inspect eval pipeline/stage1_evaluation/evals/clusters.py@cyber \
+PYTHONPATH=. uv run inspect eval pipeline/stage1_evaluation/evals/clusters.py@cluster -T risk=cyber \
     --model mockllm/model -T grader=mockllm/model --limit 5
 
 # real run, 2 samples, results NOT written to models.json
@@ -217,7 +238,7 @@ uv run python3 certify.py -m <target-model> -g <grader-model> --only cyber --lim
 ```
 
 Check the build report before anything else: `loaded` / `exact` / `near` /
-`cross` / `screen` / `kept` per source. A large `exact` drop means missing
+`cross` / `screen` / `allot` / `kept` / `short` / `share` per source. A large `exact` drop means missing
 `distinct_on` (step 2). A large `near` drop means your source is templated and
 wants `distinct_on` on the varying term (cosine ≥ `COSINE_TAU` is the trigger;
 the pairs are in `<risk>.dropped.jsonl`). Any `cross` drop means your source
@@ -225,9 +246,14 @@ ships prompts an earlier source in the same cluster already ships — worth
 checking whether it is vendoring another benchmark before you tune anything. A
 `screen` drop above half the candidates means the source's prompts are mostly
 refused by an open model; raise `SCREEN_FACTOR` or reconsider the source rather
-than shrink the quota. `<risk>.dropped.jsonl` tags every record with its `tier`
-(`near`, `exact_cross_source`, `screen`), so the thresholds are reviewable
-rather than trusted.
+than shrink the share. `allot` and `short` show what the budget gave the source
+and how much it could not fill; a `short` above 0 means the pool or a stratum ran
+dry. A `[WARNING]` on strata divergence means the kept rows are distributed unlike
+the pool, usually because the screen refused one category; it fires when the
+total variation distance exceeds 0.10 and the source is not `balanced`. `<risk>.dropped.jsonl`
+tags every record with its `tier` (`exact`, `near`, `exact_cross_source`,
+`near_cross_source`, `screen`), so the thresholds are reviewable rather than
+trusted.
 
 `prepare.py` exits 2 when an embedding or screen cache is missing and prints
 the command to run; the full three-pass sequence is in
@@ -238,14 +264,17 @@ the command to run; the full three-pass sequence is in
 
 ## 8. Scoring conventions
 
-- Quotas are load-bearing: the headline tail pools every item of a risk's pooled
-  sources, so sample count is weight there. `tests/test_clusters.py` fails any
-  cluster where one source holds over 40% of rows (for a one-source cluster, one
-  value of its first `stratify` key). Definitions: `pipeline/README.md § Metrics`.
+- Shares are load-bearing: the headline tail pools every item of a risk's pooled
+  sources, so sample count is weight there. Each source's share is water-filled
+  from the cluster `BUDGET`; override it with `quota` only for a reason.
+  `tests/test_clusters.py` fails any cluster where one source holds over 40% of
+  rows (half, for a two-source cluster; for a one-source
+  cluster, one value of its first `stratify` key). Definitions: `pipeline/README.md § Metrics`.
 - A source that measures something other than alignment declares
   `role="diagnostic"` on its `Source(...)`, reported per-source but excluded
-  from the pooled number. `wmdp` (capability absence), `cyber_false_refusal`
-  (a counter-metric) and `injecagent` (agentic tool misuse) are the three.
+  from the pooled number. `wmdp` and `lab_bench` (capability absence),
+  `cyber_false_refusal` (a counter-metric), `injecagent` (agentic tool misuse)
+  and `mentalmanip` (detection capability) are the five.
 - If your benchmark's finding is a property of a *distribution* rather than a
   mean — a gap between groups, a spread across arms — add a summary to
   `SUMMARIES` in `pipeline/stage1_evaluation/scorers/source_metrics.py`. It must
@@ -264,7 +293,7 @@ the command to run; the full three-pass sequence is in
 
 | | |
 |---|---|
-| `datasets/BENCHMARKS.md` | the schema and why the registries collapsed into it; every benchmark, its counts, and how it is scored vs. its original |
+| `datasets/BENCHMARKS.md` | the schema and why the registries collapsed into it; every benchmark and how it is scored vs. its original |
 | `datasets/prepare/cluster/schema.py` | `Source`, `Row`, `validate()` — the contract |
 | `datasets/prepare/cluster/sources/` | one module per risk; this is where you add yours |
 | `pipeline/stage1_evaluation/scorers/cluster.py` | the dispatching scorer and judge prompts |

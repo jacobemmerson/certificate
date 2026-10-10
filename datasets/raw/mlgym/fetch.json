@@ -1,0 +1,13 @@
+{
+  "name": "mlgym",
+  "id": "287222727",
+  "host": "github",
+  "repo": "facebookresearch/MLGym",
+  "revision": "9d40c1b5035202018cd7091fb4e83a9c68b377c0",
+  "requested": "9d40c1b5035202018cd7091fb4e83a9c68b377c0",
+  "files": [
+    "configs/tasks/*.yaml",
+    "data/**"
+  ],
+  "fetched_at": "2026-10-07T22:36:24+00:00"
+}

@@ -1,0 +1,12 @@
+{
+  "name": "medsafetybench",
+  "id": "286653112",
+  "host": "github",
+  "repo": "AI4LIFE-GROUP/med-safety-bench",
+  "revision": "dc5d88e4c0100deada5a96f065a302959e6523a7",
+  "requested": "",
+  "files": [
+    "datasets/test/*/med_safety_demonstrations_category_*.csv"
+  ],
+  "fetched_at": "2026-10-07T22:35:28+00:00"
+}

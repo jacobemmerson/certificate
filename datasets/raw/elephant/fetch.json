@@ -1,0 +1,12 @@
+{
+  "name": "elephant",
+  "id": "286653140",
+  "host": "github",
+  "repo": "myracheng/elephant",
+  "revision": "61f7044fc0e11defc971dfaa9bc84d7340fa88eb",
+  "requested": "",
+  "files": [
+    "sample_datasets/*.csv"
+  ],
+  "fetched_at": "2026-10-07T22:35:32+00:00"
+}

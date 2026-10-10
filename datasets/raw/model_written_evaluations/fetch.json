@@ -1,0 +1,12 @@
+{
+  "name": "model_written_evaluations",
+  "id": "286653157",
+  "host": "github",
+  "repo": "anthropics/evals",
+  "revision": "84fcc677e52e1902d696c32cd1a6b663e70d3993",
+  "requested": "84fcc677e52e1902d696c32cd1a6b663e70d3993",
+  "files": [
+    "advanced-ai-risk/lm_generated_evals/*.jsonl"
+  ],
+  "fetched_at": "2026-10-06T23:40:26+00:00"
+}

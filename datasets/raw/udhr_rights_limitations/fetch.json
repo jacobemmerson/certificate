@@ -1,0 +1,13 @@
+{
+  "name": "udhr_rights_limitations",
+  "id": "286653148",
+  "host": "github",
+  "repo": "keenansamway/llm-human-rights",
+  "revision": "65171d7c5ec20255256e5d0500dc118c8f7904ef",
+  "requested": "65171d7c5ec20255256e5d0500dc118c8f7904ef",
+  "files": [
+    "data/experiments/synthetic/udhr/scenarios/en.csv",
+    "data/experiments/synthetic/echr/scenarios/en.csv"
+  ],
+  "fetched_at": "2026-10-06T23:40:58+00:00"
+}

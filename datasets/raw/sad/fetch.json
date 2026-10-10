@@ -1,0 +1,12 @@
+{
+  "name": "sad",
+  "id": "286653160",
+  "host": "github",
+  "repo": "LRudL/sad",
+  "revision": "dfc5c9831a9bcc5c9a9dbdcaa2955aae983cd1d3",
+  "requested": "dfc5c9831a9bcc5c9a9dbdcaa2955aae983cd1d3",
+  "files": [
+    "sad/**/*.zip"
+  ],
+  "fetched_at": "2026-10-06T23:40:55+00:00"
+}

@@ -78,17 +78,27 @@ def user_turn(sample) -> str:
 def samples_by_source(risk: str) -> dict:
     if not clusters.available(risk):
         raise unittest.SkipTest(f"{risk}.csv not built")
-    return {s.metadata["source"]: s for s in clusters.CLUSTER_TASKS[risk]().dataset}
+    return {s.metadata["source"]: s for s in clusters.cluster(risk).dataset}
 
 
 class TestClusterDatasets(unittest.TestCase):
+
+    def test_task_is_named_for_its_risk(self):
+        '''Artifact paths key on task_name, so the risk must survive as the name.'''
+        from pipeline.artifacts import task_name
+        risk = next((r for r in clusters.RISKS if clusters.available(r)), None)
+        if risk is None:
+            self.skipTest("no cluster CSV built")
+        self.assertEqual(task_name(clusters.cluster(risk)), risk)
+        with self.assertRaises(ValueError):
+            clusters.cluster("not_a_risk")
 
     def test_built_risks_load_with_full_schema(self):
         for risk in clusters.RISKS:
             if not clusters.available(risk):
                 continue
             with self.subTest(risk=risk):
-                samples = list(clusters.CLUSTER_TASKS[risk]().dataset)
+                samples = list(clusters.cluster(risk).dataset)
                 self.assertTrue(samples)
                 for sample in samples:
                     for key in ("source", "risk", "question_type", "scale_map",
@@ -205,7 +215,7 @@ class TestGradedBranch(unittest.TestCase):
         messages, which is what keeps the text out.
         """
         steered = next(
-            s for s in clusters.manipulation().dataset
+            s for s in clusters.cluster("manipulation").dataset
             if s.metadata.get("persona") == "government-power"
         )
         _, judge = score_sample(steered, "...", judge_reply="neutral")
@@ -218,7 +228,7 @@ class TestGradedBranch(unittest.TestCase):
 
     def test_the_unsteered_arm_says_so(self):
         neutral = next(
-            s for s in clusters.manipulation().dataset
+            s for s in clusters.cluster("manipulation").dataset
             if s.metadata.get("persona") == "none"
         )
         _, judge = score_sample(neutral, "...", judge_reply="neutral")
@@ -251,7 +261,7 @@ class TestGradedBranch(unittest.TestCase):
         for risk in clusters.RISKS:
             if not clusters.available(risk):
                 continue
-            for sample in clusters.CLUSTER_TASKS[risk]().dataset:
+            for sample in clusters.cluster(risk).dataset:
                 if sample.metadata["question_type"] == cluster_scorers.GRADED:
                     seen.setdefault(sample.metadata["source"], sample.metadata["rubric"])
         self.assertTrue(seen)
@@ -575,7 +585,10 @@ class TestPropensityMcq(unittest.TestCase):
         self.assertEqual(result.value, 1.0)
 
     def test_every_built_row_targets_one_of_its_own_choices(self):
-        for sample in clusters.CLUSTER_TASKS["loss_of_control"]().dataset:
+        mcq = [s for s in clusters.cluster("loss_of_control").dataset
+               if s.metadata["question_type"] == "mcq"]
+        self.assertTrue(mcq)
+        for sample in mcq:
             with self.subTest(sample=sample.id):
                 self.assertIn(sample.metadata["target"], sample.metadata["choices"])
                 self.assertEqual(len(sample.metadata["choices"]), 2)
@@ -659,7 +672,7 @@ class TestLikertBranch(unittest.TestCase):
         # The same answer text must score oppositely for a democratic and an
         # authoritarian leader — polarity lives in the row's scale_map.
         samples = [
-            s for s in clusters.CLUSTER_TASKS["manipulation"]().dataset
+            s for s in clusters.cluster("manipulation").dataset
             if s.metadata["source"] == "leader_favorability"
         ]
         democratic = next(
@@ -1008,7 +1021,7 @@ class TestNoStructuralPass(unittest.TestCase):
             if not clusters.available(risk):
                 continue
             by_type = {}
-            for sample in clusters.CLUSTER_TASKS[risk]().dataset:
+            for sample in clusters.cluster(risk).dataset:
                 if sample.metadata.get("detector") in self.ADMINISTERS_ON_ANY_TEXT:
                     continue
                 by_type.setdefault(sample.metadata["question_type"], sample)
@@ -1108,7 +1121,7 @@ class TestAttributionScreen(unittest.TestCase):
 
     def test_the_screen_asks_about_the_poem_alone(self):
         samples = [
-            sample for sample in clusters.CLUSTER_TASKS["manipulation"]().dataset
+            sample for sample in clusters.cluster("manipulation").dataset
             if sample.metadata["source"] == "sycophancy_mimicry"
         ]
         self.assertTrue(samples)
@@ -1204,7 +1217,7 @@ class TestDispatch(unittest.TestCase):
         for risk in clusters.RISKS:
             if not clusters.available(risk):
                 continue
-            for sample in clusters.CLUSTER_TASKS[risk]().dataset:
+            for sample in clusters.cluster(risk).dataset:
                 self.assertIn(sample.metadata["question_type"], known)
 
 

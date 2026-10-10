@@ -20,7 +20,6 @@ import json
 from pathlib import Path
 
 from inspect_ai import Task
-from inspect_ai._util.registry import registry_info
 
 from pipeline.stage2_perturbation.framing import FRAMING_VERSION, PERSONA_VERSION
 from pipeline.stage2_perturbation.rewrite import REPEAT_FAMILIES, REWRITE_FAMILIES, REWRITE_PROMPT_VERSION
@@ -46,9 +45,9 @@ DETERMINISTIC_FAMILIES = ("framing", "persona")
 
 
 def task_name(base_task: Task) -> str:
-    """Recover the original @task function's registry name — under the cluster
-    scheme one per systemic risk, e.g. "cyber"."""
-    return registry_info(base_task).name
+    """The task's own name — under the cluster scheme the systemic risk, e.g.
+    "cyber"."""
+    return base_task.name
 
 
 def artifact_path(task: str, family: str) -> Path:

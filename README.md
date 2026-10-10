@@ -6,8 +6,9 @@
 
 # AI Safety Benchmarks & Certification
 
-The pipeline and datasets for certifying frontier models against the four EU AI Act
-systemic-risk clusters (`cbrn`, `cyber`, `loss_of_control`, `manipulation`): each cluster is
+The pipeline and datasets for certifying frontier models against the EU AI Act
+systemic-risk clusters (`cbrn`, `cyber`, `loss_of_control`, `manipulation`, plus a provisional
+`alignment` cluster for leaves that fit none of the four): each cluster is
 a subset of several benchmarks, hardened by frozen surface perturbations (stage 2) and a
 multi-turn deployment scenario (stage 3), judged by a two-model ensemble, and rolled up to
 one headline per risk. How it is built and what the numbers mean:
@@ -23,7 +24,7 @@ a [supported provider](https://inspect.aisi.org.uk/providers.html) in the enviro
 
 ```bash
 uv sync                                     # locked deps; ML libraries are deliberately not in here
-git submodule update --init --recursive     # raw benchmarks, only needed to rebuild datasets
+# raw benchmarks, only needed to rebuild datasets: see datasets/README.md for the fetch_raw.py call
 ```
 
 Judges are listed in [`GRADERS.md`](GRADERS.md). Hermes-4-70B (attacker, answerability
@@ -54,12 +55,13 @@ uv run python3 -m datasets.prepare.cluster.prepare --risk cbrn        # clean bu
 
 Review `datasets/public/cbrn.dropped.jsonl` (new `screen` tier) and `refused_dropped` in
 `cbrn.meta.json` before committing: the screen drops what an open model refuses, by design.
-`--dry-run` prints the tier table without writing. Omit `--risk` for all four. Detail: [`datasets/BENCHMARKS.md § Sampling`](datasets/BENCHMARKS.md#sampling).
+`--dry-run` prints the tier table without writing. Omit `--risk` for all risks. Detail: [`datasets/BENCHMARKS.md § Sampling`](datasets/BENCHMARKS.md#sampling).
 
 ### Generate the artifacts
 
 ```bash
 sbatch scripts/generate_hermes_slurm.sh      # vLLM Hermes-4-70B: screen → rewrites → scenario trees, all risks
+scripts/generate_hermes_modal.sh             # same job, Hermes on Modal via modal run --detach (scripts/hermes_modal.py); FORCE=1 after a rebuild
 uv run python3 generate.py --only cyber --perturb paraphrase multilingual   # API attacker, subset
 uv run python3 generate.py --missing-only    # fill gaps after a preempted job
 ```
@@ -319,7 +321,8 @@ options:
 
 <!-- prepare-help -->
 ```
-usage: prepare.py [-h] [--risk {cbrn,cyber,loss_of_control,manipulation}]
+usage: prepare.py [-h]
+                  [--risk {alignment,cbrn,cyber,loss_of_control,manipulation}]
                   [--seed SEED] [--dry-run]
 
 Build the risk-cluster datasets. uv run python3 -m
@@ -336,7 +339,7 @@ in datasets/BENCHMARKS.md § Sampling.
 
 options:
   -h, --help            show this help message and exit
-  --risk {cbrn,cyber,loss_of_control,manipulation}
+  --risk {alignment,cbrn,cyber,loss_of_control,manipulation}
                         build one risk (repeatable); default is all registered
   --seed SEED
   --dry-run             print the tier table without writing
@@ -347,7 +350,7 @@ options:
 
 `pipeline/` ([README](pipeline/README.md)): `stage1_evaluation/`, `stage2_perturbation/`,
 `stage3_simulation/`, shared `utils/`. `datasets/` ([README](datasets/README.md)): `raw/`
-submodules → `prepare/` → `public/` CSVs → `generated/` artifacts
+fetches → `prepare/` → `public/` CSVs → `generated/` artifacts
 ([schemas](datasets/generated/README.md)). `scripts/`: slurm jobs, audits, one-off
 migrations. `tests/`: `uv run python3 -m unittest discover tests`. The adversarial attack
 suite lives on the `adversarial-attacks` branch.
