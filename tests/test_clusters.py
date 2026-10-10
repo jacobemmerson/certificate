@@ -46,7 +46,7 @@ from datasets.prepare.cluster.schema import (
     validate,
 )
 from datasets.prepare.cluster.schema import Source
-from datasets.prepare.cluster.sources import RISKS, SOURCES, budget_for, for_risk
+from datasets.prepare.cluster.sources import RISKS, SOURCES, for_risk
 from datasets.prepare.cluster.sources import loss_of_control
 from datasets.prepare.cluster.sources.manipulation import (
     ape_rows, darkbench_rows, favorability_scale_map, mentalmanip_rows,
@@ -351,11 +351,10 @@ class TestGroupedSelection(unittest.TestCase):
     a partial group is not a smaller sample — it is an incomparable one.
     '''
 
-    def grouped_source(self, quota: int) -> Source:
+    def grouped_source(self) -> Source:
         return Source(
             name="paired", risk="manipulation", question_type=GRADED,
-            path="unused", metadata=["scenario_id", "arm"],
-            quota=quota, group_key="scenario_id",
+            path="unused", metadata=["scenario_id", "arm"], group_key="scenario_id",
         )
 
     def rows_in_groups(self, groups: int, arms: int) -> list[Row]:
@@ -367,27 +366,30 @@ class TestGroupedSelection(unittest.TestCase):
             for g in range(groups) for a in range(arms)
         ]
 
-    def test_selection_takes_whole_groups(self):
-        rows = self.rows_in_groups(groups=10, arms=3)
-        kept, report = prepare.stratified_sample(rows, self.grouped_source(4), seed=0)
+    def test_selection_keeps_or_drops_whole_groups(self):
+        rows = self.rows_in_groups(groups=4, arms=3)
+        # Group 0's best arm clears theta; group 1's best does not.
+        scores = np.array([0.95, 0.1, 0.1, 0.5, 0.6, 0.55, 0.91, 0.2, 0.2, 0.3, 0.3, 0.3])
+        units = prepare.units_for(self.grouped_source(), rows, scores, seed=0)
+        self.assertEqual(sorted(unit.score for unit in units), [0.3, 0.6, 0.91, 0.95])
+        embeddings = embedded(rows, [(1, 0, 0)] * 3 + [(0, 1, 0)] * 3 + [(0, 0, 1)] * 3 + [(1, 1, 1)] * 3)
+        kept, dropped = prepare.cluster_select(units, {"paired": 0.9}, embeddings)
         by_group = {}
         for row in kept:
             by_group.setdefault(row.metadata["scenario_id"], set()).add(row.metadata["arm"])
-        self.assertEqual(len(by_group), 4, "quota counts groups, not rows")
-        self.assertEqual(len(kept), 12, "4 groups x 3 arms")
-        for group, arms in by_group.items():
-            self.assertEqual(arms, {"0", "1", "2"}, f"group {group} came back partial")
+        self.assertEqual(by_group, {"0": {"0", "1", "2"}, "2": {"0", "1", "2"}})
+        self.assertEqual({d["dropped"] for d in dropped},
+                         {f"paired:{g}_{a}" for g in (1, 3) for a in range(3)})
 
-    def test_quota_beyond_the_group_count_keeps_everything(self):
-        rows = self.rows_in_groups(groups=3, arms=3)
-        kept, _ = prepare.stratified_sample(rows, self.grouped_source(99), seed=0)
-        self.assertEqual(len(kept), 9)
-
-    def test_grouping_is_deterministic(self):
-        rows = self.rows_in_groups(groups=10, arms=3)
-        first, _ = prepare.stratified_sample(rows, self.grouped_source(4), seed=0)
-        second, _ = prepare.stratified_sample(rows, self.grouped_source(4), seed=0)
-        self.assertEqual([r.sample_id for r in first], [r.sample_id for r in second])
+    def test_group_score_is_the_best_arm_on_every_arm(self):
+        rows = self.rows_in_groups(groups=2, arms=2)
+        leaf = Leaf(id="lf", title="L", cop_ref="x", legal_text="law", exemplars=("ex",))
+        embeddings = embedded(rows, [(1, 0), (0, 1), (0, 1), (0.6, 0.8)])
+        anchors = {prepare.embed_key("law"): unit(1, 0), prepare.embed_key("ex"): unit(0, 1)}
+        scores = prepare.score_rows(self.grouped_source(), rows, {"lf": 0.5}, {"lf": leaf},
+                                    embeddings, anchors)
+        self.assertEqual(scores.tolist(), [1.0, 1.0, 1.0, 1.0])
+        self.assertEqual([row.metadata["relevance_own"] for row in rows], [1.0, 1.0, 1.0, 0.8])
 
     def test_built_persona_arms_are_never_partial(self):
         '''The same invariant, against the real built data.'''
@@ -424,8 +426,7 @@ class TestGroupedSelection(unittest.TestCase):
 
     def test_distinct_on_protects_arms_from_exact_dedup(self):
         # The arms share a user message and differ only in the system prompt,
-        # so dedup keyed on text alone collapses three into one. `distinct_on`
-        # is the same declaration near_dedup already consults.
+        # so dedup keyed on text alone collapses three into one.
         shared = "the same scenario text"
         rows = [
             make_row(
@@ -751,7 +752,8 @@ class TestEmbeddingCache(unittest.TestCase):
     def test_nothing_missing_writes_nothing(self):
         rows = [make_row(query="gamma")]
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
-            prepare.require_embeddings("cbrn", [(self.source(), rows)], embedded(rows, [(1, 0)]), {})
+            prepare.require_embeddings("cbrn", [(self.source(), rows)], embedded(rows, [(1, 0)]), {},
+                                       leaves_used={"src": {}})
             self.assertEqual(list(Path(tmp).iterdir()), [])
 
     def test_missing_leaf_anchors_are_collected_separately(self):
@@ -760,7 +762,7 @@ class TestEmbeddingCache(unittest.TestCase):
         leaf_id = next(iter(leaves))
         rows = [make_row(query="gamma")]
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
-            pools = [(self.source(leaf=leaf_id), rows)]
+            pools = [(self.source(leaves=(leaf_id,)), rows)]
             with self.assertRaises(prepare.CacheMiss) as raised:
                 prepare.require_embeddings("cbrn", pools, embedded(rows, [(1, 0)]), {})
             written = [json.loads(line)["text"] for line in
@@ -770,13 +772,14 @@ class TestEmbeddingCache(unittest.TestCase):
             present = {prepare.embed_key(t): unit(1, 0) for t in anchor_texts(leaves[leaf_id])}
             prepare.require_embeddings("cbrn", pools, embedded(rows, [(1, 0)]), present)
 
-    def test_a_leafless_source_needs_no_anchors(self):
+    def test_a_source_scored_against_no_leaf_needs_no_anchors(self):
         rows = [make_row(query="gamma")]
-        prepare.require_embeddings("cbrn", [(self.source(), rows)], embedded(rows, [(1, 0)]), {})
+        prepare.require_embeddings("cbrn", [(self.source(), rows)], embedded(rows, [(1, 0)]), {},
+                                   leaves_used={"src": {}})
 
-    def test_an_empty_payload_needs_no_embedding(self):
-        rows = [make_row(query="", metadata={"event": ""})]
-        prepare.require_embeddings("cbrn", [(self.source(dedup_on="event"), rows)], {}, {})
+    def test_an_empty_query_needs_no_embedding(self):
+        rows = [make_row(query="")]
+        prepare.require_embeddings("cbrn", [(self.source(), rows)], {}, {}, leaves_used={"src": {}})
 
     def test_load_embeddings_renormalises_and_tolerates_absence(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
@@ -841,73 +844,6 @@ class TestTiers(unittest.TestCase):
             "kept": rows[0].sample_id, "kept_text": rows[0].query,
             "dropped": rows[1].sample_id, "dropped_text": rows[1].query,
         }])
-
-    def test_near_dedup_drops_above_tau_and_keeps_below(self):
-        rows = self.rows("first", "second", "third")
-        embeddings = embedded(rows, [(1, 0, 0), (0.95, 0.31, 0), (0, 1, 0)])
-        kept, pairs = prepare.near_dedup(rows, embeddings, tau=0.92)
-        self.assertEqual([row.sample_id for row in kept], ["src:0", "src:2"])
-        self.assertEqual((pairs[0]["kept"], pairs[0]["dropped"]), ("src:0", "src:1"))
-        self.assertGreaterEqual(pairs[0]["similarity"], 0.92)
-        self.assertEqual(len(pairs), 1)
-
-    def test_pairs_across_a_block_boundary_are_found(self):
-        rows = self.rows("a", "b", "c", "d", "e")
-        embeddings = embedded(rows, [(1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0),
-                                     (0, 0, 0, 1), (1, 0, 0, 0.01)])
-        with mock.patch.object(prepare, "_BLOCK", 2):
-            _, pairs = prepare.near_dedup(rows, embeddings)
-        self.assertEqual([pair["dropped"] for pair in pairs], ["src:4"])
-
-    def test_distinct_on_blocks_merging_different_items(self):
-        '''Templated benchmarks vary one term; embeddings barely see it either.'''
-        rows = [
-            make_row(sample_id="src:1", query="Write a pitch for developing X in a community",
-                     metadata={"term": "Dichloroethylene"}),
-            make_row(sample_id="src:2", query="Write a pitch for developing Y in a community",
-                     metadata={"term": "Tetrachloroethane"}),
-        ]
-        embeddings = embedded(rows, [(1, 0), (0.99, 0.14)])
-        kept, _ = prepare.near_dedup(rows, embeddings)
-        self.assertEqual(len(kept), 1, "near-identical vectors, so merged")
-        kept, _ = prepare.near_dedup(rows, embeddings, distinct_on=["term"])
-        self.assertEqual(len(kept), 2, "different hazards are different items")
-
-    def test_mcq_rows_with_different_targets_never_merge(self):
-        rows = [
-            make_row(sample_id="src:1", question_type=MCQ, categories=[], scale_map={},
-                     query="What is the value of the field alpha of the packet",
-                     choices=["one", "two"], target="one"),
-            make_row(sample_id="src:2", question_type=MCQ, categories=[], scale_map={},
-                     query="What is the value of the field beta of the packet",
-                     choices=["one", "two"], target="two"),
-        ]
-        kept, _ = prepare.near_dedup(rows, embedded(rows, [(1, 0), (1, 0)]))
-        self.assertEqual(len(kept), 2)
-
-    def test_dedup_on_compares_the_payload_not_the_wrapper(self):
-        '''PHT's rule: filter the case pool, never the rendered prompt.'''
-        rows = [
-            make_row(sample_id="src:1", query="Write a chapter on the first event",
-                     metadata={"event": "Sino-Vietnamese War (1979)"}),
-            make_row(sample_id="src:2", query="Write a chapter on the second event",
-                     metadata={"event": "1979 Sino-Vietnamese War"}),
-        ]
-        embeddings = {
-            **embedded(rows, [(1, 0, 0), (0, 1, 0)]),
-            **embedded(rows, [(0, 0, 1), (0.05, 0, 1)], payload=lambda row: row.metadata["event"]),
-        }
-        kept, _ = prepare.near_dedup(rows, embeddings)
-        self.assertEqual(len(kept), 2, "the rendered prompts are far apart")
-        kept, pairs = prepare.near_dedup(rows, embeddings, dedup_on="event")
-        self.assertEqual(len(kept), 1)
-        self.assertEqual(pairs[0]["kept_text"], "Sino-Vietnamese War (1979)")
-
-    def test_rows_with_an_empty_payload_are_never_duplicates(self):
-        rows = [make_row(sample_id=f"src:{i}", query=f"q{i}", metadata={"event": ""})
-                for i in range(3)]
-        kept, pairs = prepare.near_dedup(rows, {}, dedup_on="event")
-        self.assertEqual((len(kept), pairs), (3, []))
 
 
 class TestCrossSourceDedup(unittest.TestCase):
@@ -989,81 +925,6 @@ class TestCrossSourceDedup(unittest.TestCase):
         ])
         self.assertEqual(dropped, [])
 
-    def test_it_runs_before_the_quota_so_a_copy_does_not_spend_budget(self):
-        # A duplicate removed after sampling would leave the cluster short of
-        # its quota; removed before, the source backfills from its own pool.
-        source = Source(name="beta", risk="cbrn", question_type=GRADED,
-                        path="unused", quota=2)
-        rows = [
-            make_row(sample_id=f"beta:{i}", source="beta", query=query)
-            for i, query in enumerate(["shared text", "second", "third"])
-        ]
-        pools, _ = prepare.cross_source_dedup([
-            self.pool("alpha", "shared text"), (source, rows),
-        ])
-        selected, _ = prepare.stratified_sample(pools[1][1], source, seed=0)
-        self.assertEqual(len(selected), 2)
-        self.assertNotIn("beta:0", [row.sample_id for row in selected])
-
-
-class TestCrossSourceNearDedup(unittest.TestCase):
-    '''Tier 2b: a paraphrase shipped by two sources survives once, in the earlier source.'''
-
-    def pools(self):
-        a = [make_row(sample_id="a:1", source="a", query="how to make a bomb"),
-             make_row(sample_id="a:2", source="a", query="unrelated gardening question")]
-        b = [make_row(sample_id="b:1", source="b", query="how do I make a bomb"),
-             make_row(sample_id="b:2", source="b", query="recipe for bread")]
-        src = lambda name, **kw: Source(name=name, risk="cbrn", question_type=GRADED, path="unused", **kw)
-        vectors = {
-            "a:1": (1, 0, 0), "a:2": (0, 1, 0), "b:1": (0.99, 0.1, 0), "b:2": (0, 0, 1),
-        }
-        rows = a + b
-        embeddings = embedded(rows, [vectors[r.sample_id] for r in rows])
-        return [(src("a"), a), (src("b"), b)], embeddings, src
-
-    def test_a_paraphrase_in_a_later_source_is_dropped(self):
-        pools, embeddings, _ = self.pools()
-        kept, dropped = prepare.cross_source_near_dedup(pools, embeddings)
-        self.assertEqual([r.sample_id for _, rows in kept for r in rows], ["a:1", "a:2", "b:2"])
-        self.assertEqual(dropped[0]["tier"], "near_cross_source")
-        self.assertEqual((dropped[0]["kept"], dropped[0]["dropped"]), ("a:1", "b:1"))
-
-    def test_same_source_pairs_are_left_to_tier_2(self):
-        pools, embeddings, src = self.pools()
-        twin = make_row(sample_id="a:3", source="a", query="how to make a bomb!")
-        pools[0][1].append(twin)
-        embeddings.update(embedded([twin], [(1, 0, 0)]))
-        kept, _ = prepare.cross_source_near_dedup(pools, embeddings)
-        self.assertIn("a:3", [r.sample_id for _, rows in kept for r in rows])
-
-    def test_differing_mcq_targets_never_merge(self):
-        pools, embeddings, _ = self.pools()
-        for _, rows in pools:
-            for row in rows:
-                row.question_type = MCQ
-        pools[0][1][0].target = "A"
-        pools[1][1][0].target = "B"
-        kept, dropped = prepare.cross_source_near_dedup(pools, embeddings)
-        self.assertEqual(dropped, [])
-
-    def test_a_source_that_opted_out_of_dedup_is_untouched(self):
-        pools, embeddings, src = self.pools()
-        pools[1] = (src("b", dedup=False), pools[1][1])
-        kept, dropped = prepare.cross_source_near_dedup(pools, embeddings)
-        self.assertEqual(dropped, [])
-        self.assertEqual(len(kept[1][1]), 2)
-
-    def test_queries_of_payload_sources_need_embeddings_too(self):
-        row = make_row(sample_id="a:1", query="the wrapper", metadata={"event": "the event"})
-        source = Source(name="a", risk="cbrn", question_type=GRADED, path="unused", dedup_on="event")
-        embeddings = embedded([row], [(1, 0)], payload=lambda r: r.metadata["event"])
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
-            with self.assertRaises(prepare.CacheMiss):
-                prepare.require_embeddings("cbrn", [(source, [row])], embeddings, {})
-            written = [json.loads(line) for line in (Path(tmp) / "cbrn.embed_input.jsonl").read_text().splitlines()]
-        self.assertEqual([w["text"] for w in written], ["the wrapper"])
-
 
 class TestClusterUniqueness(unittest.TestCase):
     '''The property tier 1b exists to hold, asserted on the emitted CSVs.'''
@@ -1087,465 +948,39 @@ class TestClusterUniqueness(unittest.TestCase):
                     seen.setdefault(key, (record["source"], record["sample_id"]))
 
 
-class TestAllocation(unittest.TestCase):
-
-    def test_proportional_allocation_respects_quota(self):
-        buckets = {("a",): list(range(100)), ("b",): list(range(20))}
-        allocation = prepare._allocate(buckets, quota=30, balanced=False)
-        self.assertEqual(sum(allocation.values()), 30)
-        self.assertGreater(allocation[("a",)], allocation[("b",)])
-
-    def test_balanced_allocation_ignores_stratum_size(self):
-        '''DAB favourability needs even groups or its metric stops meaning anything.'''
-        buckets = {("democracy",): list(range(100)), ("autocracy",): list(range(20))}
-        allocation = prepare._allocate(buckets, quota=20, balanced=True)
-        self.assertEqual(allocation[("democracy",)], allocation[("autocracy",)])
-
-    def test_more_strata_than_quota_covers_a_subset(self):
-        buckets = {(f"s{i}",): [i] for i in range(50)}
-        allocation = prepare._allocate(buckets, quota=10, balanced=False)
-        self.assertEqual(sum(allocation.values()), 10)
-        self.assertTrue(all(count == 1 for count in allocation.values()))
-
-
-class TestSampleReport(unittest.TestCase):
-    '''What the build says about each source, so a short or skewed source is seen.'''
-
-    def pool(self, n, categories):
-        return [
-            make_row(sample_id=f"src:{i}", query=f"item {i}",
-                     metadata={"category": categories[i % len(categories)]})
-            for i in range(n)
-        ]
-
-    def source(self, **overrides):
-        return Source(name="src", risk="cbrn", question_type=GRADED, path="unused",
-                      **{"stratify": ["category"], **overrides})
-
-    def test_quota_parameter_overrides_the_source(self):
-        rows = self.pool(40, ["a", "b"])
-        kept, report = prepare.stratified_sample(rows, self.source(quota=4), seed=0, quota=10)
-        self.assertEqual((len(kept), report["allotted"], report["selected"]), (10, 10, 10))
-
-    def test_quota_none_falls_back_to_the_source(self):
-        rows = self.pool(40, ["a", "b"])
-        kept, _ = prepare.stratified_sample(rows, self.source(quota=4), seed=0)
-        self.assertEqual(len(kept), 4)
-
-    def test_strata_report_pool_and_kept_per_key(self):
-        rows = self.pool(30, ["a", "a", "b"])  # 20 a, 10 b
-        _, report = prepare.stratified_sample(rows, self.source(), seed=0, quota=9)
-        self.assertEqual(report["strata"], {"a": {"pool": 20, "kept": 6}, "b": {"pool": 10, "kept": 3}})
-        self.assertEqual(report["divergence"], 0.0)
-
-    def test_divergence_measures_skew(self):
-        strata = {"a": {"pool": 50, "kept": 10}, "b": {"pool": 50, "kept": 0}}
-        self.assertEqual(prepare._divergence(strata), 0.5)
-
-    def test_divergence_is_none_when_nothing_is_kept(self):
-        self.assertIsNone(prepare._divergence({"a": {"pool": 5, "kept": 0}}))
-        self.assertIsNone(prepare._divergence({}))
-
-    def test_unstratified_source_reports_no_strata(self):
-        rows = self.pool(10, ["a"])
-        _, report = prepare.stratified_sample(rows, self.source(stratify=()), seed=0, quota=3)
-        self.assertEqual((report["strata"], report["divergence"]), ({}, None))
-
-    def test_a_quota_above_the_pool_allots_the_pool(self):
-        rows = self.pool(3, ["a", "b", "c"])
-        _, report = prepare.stratified_sample(rows, self.source(), seed=0, quota=10)
-        self.assertEqual((report["allotted"], report["selected"]), (3, 3))
-
-    def test_grouped_report_counts_groups(self):
-        rows = [
-            make_row(sample_id=f"src:{g}:{arm}", query=f"scenario {g} arm {arm}",
-                     metadata={"scenario": str(g), "arm": arm, "category": "x"})
-            for g in range(6) for arm in ("p", "q", "r")
-        ]
-        source = self.source(group_key="scenario", distinct_on=["arm"])
-        kept, report = prepare.stratified_sample(rows, source, seed=0, quota=4)
-        self.assertEqual((len(kept), report["groups"], report["allotted"], report["selected"]),
-                         (12, 6, 4, 4))
-
-
-class TestBudget(unittest.TestCase):
-    '''One number per cluster, water-filled: small sources keep everything,
-    the unused share flows to the larger ones, `quota` is an override.'''
-
-    def src(self, name, **kw):
-        return Source(name=name, risk="cbrn", question_type=GRADED, path="unused", **kw)
-
-    def pool(self, name, n, **meta):
-        return [make_row(sample_id=f"{name}:{i}", source=name, query=f"{name} {i}",
-                         metadata=meta) for i in range(n)]
-
-    def test_equal_shares_when_every_pool_is_large(self):
-        pools = [(self.src("a"), self.pool("a", 100)), (self.src("b"), self.pool("b", 100))]
-        self.assertEqual(prepare.allocate_budget(pools, 60), {"a": 30, "b": 30})
-
-    def test_small_pools_keep_everything_and_pass_on_their_share(self):
-        pools = [(self.src("a"), self.pool("a", 5)), (self.src("b"), self.pool("b", 100)),
-                 (self.src("c"), self.pool("c", 100))]
-        self.assertEqual(prepare.allocate_budget(pools, 65), {"a": 5, "b": 30, "c": 30})
-
-    def test_remainder_goes_to_the_largest_pools(self):
-        pools = [(self.src("a"), self.pool("a", 100)), (self.src("b"), self.pool("b", 100)),
-                 (self.src("c"), self.pool("c", 100))]
-        allocation = prepare.allocate_budget(pools, 64)
-        self.assertEqual(sum(allocation.values()), 64)
-        self.assertEqual(sorted(allocation.values()), [21, 21, 22])
-
-    def test_quota_is_an_override_taken_off_the_top(self):
-        pools = [(self.src("a", quota=10), self.pool("a", 100)), (self.src("b"), self.pool("b", 100))]
-        self.assertEqual(prepare.allocate_budget(pools, 60), {"a": 10, "b": 50})
-
-    def test_all_fixed_quotas_leave_no_free_sources(self):
-        pools = [(self.src("a", quota=10), self.pool("a", 100)), (self.src("b", quota=5), self.pool("b", 3))]
-        self.assertEqual(prepare.allocate_budget(pools, 60), {"a": 10, "b": 3})
-
-    def test_grouped_sources_take_whole_groups(self):
-        rows = [make_row(sample_id=f"g:{g}:{arm}", source="g", query=f"s {g} {arm}",
-                         metadata={"scenario": str(g), "arm": arm})
-                for g in range(20) for arm in ("p", "q", "r")]
-        pools = [(self.src("g", group_key="scenario", distinct_on=["arm"]), rows),
-                 (self.src("b"), self.pool("b", 100))]
-        allocation = prepare.allocate_budget(pools, 100)
-        # g's share is 50 rows -> 16 groups (48 rows); the 2 leftover rows flow to b.
-        self.assertEqual(allocation, {"g": 16, "b": 52})
-
-    def test_allocation_is_independent_of_registry_order(self):
-        a, b = (self.src("a"), self.pool("a", 5)), (self.src("b"), self.pool("b", 100))
-        self.assertEqual(prepare.allocate_budget([a, b], 50), prepare.allocate_budget([b, a], 50))
-
-    def test_budget_below_fixed_quotas_gives_free_sources_nothing(self):
-        pools = [(self.src("a", quota=80), self.pool("a", 100)), (self.src("b"), self.pool("b", 100))]
-        self.assertEqual(prepare.allocate_budget(pools, 60), {"a": 80, "b": 0})
-
-
-class TestSelection(unittest.TestCase):
-    '''
-    Which items fill a quota, as distinct from how many.
-
-    Both properties here were absent from the old `frame.sample` draw, and both
-    are load-bearing: an unstable selection makes scores incomparable across
-    dataset versions and re-invalidates every stage-2/3 artifact, and an
-    undiversified one spends a small quota on near-duplicates.
-    '''
-
-    def pool(self, n: int, prefix: str = "item") -> list[Row]:
-        return [
-            make_row(sample_id=f"src:{i}", query=f"{prefix} number {i} about topic {i % 7}")
-            for i in range(n)
-        ]
-
-    def source(self, quota: int, **overrides) -> Source:
-        return Source(
-            name="src", risk="cbrn", question_type=GRADED, path="unused",
-            quota=quota, **overrides,
-        )
-
-    def test_anchors_push_the_walk_away_from_what_the_cluster_already_holds(self):
-        rows = self.pool(3)
-        embeddings = embedded(rows, [(1, 0, 0), (0, 1, 0), (0, 0, 1)])
-        anchors = np.array([unit(1, 0, 0)])
-        order = prepare._diverse_order(rows, [0, 1, 2], 1, self.source(1, select="diverse"),
-                                       0, embeddings, anchors=anchors)
-        self.assertNotEqual(order, [0], "the anchored region is picked last")
-
-    def test_empty_payloads_are_picked_last(self):
-        rows = self.pool(3)
-        rows[1].query = ""
-        embeddings = embedded([rows[0], rows[2]], [(1, 0), (0, 1)])
-        order = prepare._diverse_order(rows, [0, 1, 2], 3, self.source(3, select="diverse"), 0, embeddings)
-        self.assertEqual(order[-1], 1)
-
-    def test_anchors_are_skipped_for_payload_sources(self):
-        rows = [make_row(sample_id=f"src:{i}", query=f"wrapper {i}", metadata={"event": f"event {i}"})
-                for i in range(3)]
-        source = self.source(1, select="diverse", dedup_on="event")
-        embeddings = embedded(rows, [(1, 0, 0), (0, 1, 0), (0, 0, 1)],
-                              payload=lambda r: r.metadata["event"])
-        caches = prepare.Caches(embeddings, selected=[np.array([unit(1, 0, 0)])])
-        with mock.patch.object(prepare, "_diverse_order", wraps=prepare._diverse_order) as spy:
-            prepare._select(rows, [0, 1, 2], 1, source, 0, caches)
-        self.assertIsNone(spy.call_args.kwargs.get("anchors"))
-
-    def test_selected_vectors_become_anchors(self):
-        caches = prepare.Caches({}, selected=[np.array([unit(1, 0)]), np.array([unit(0, 1)])])
-        self.assertEqual(caches.anchors().shape, (2, 2))
-        self.assertIsNone(prepare.Caches({}).anchors())
-
-    def test_selection_survives_an_unrelated_row_entering_the_pool(self):
-        '''
-        The property the seeded shuffle failed. `random_state` pins a shuffle of
-        positions, so one extra upstream row re-drew a large share of the
-        sample — measured at 90% on cyber_false_refusal.
-        '''
-        source = self.source(quota=20)
-        before, _ = prepare.stratified_sample(self.pool(200), source, seed=0)
-        after, _ = prepare.stratified_sample(self.pool(201), source, seed=0)
-
-        kept = {row.sample_id for row in before} & {row.sample_id for row in after}
-        self.assertGreaterEqual(
-            len(kept), 19, "an unrelated row must not reroll the selection"
-        )
-
-    def test_selection_is_deterministic(self):
-        source = self.source(quota=20)
-        first, _ = prepare.stratified_sample(self.pool(200), source, seed=0)
-        second, _ = prepare.stratified_sample(self.pool(200), source, seed=0)
-        self.assertEqual(
-            [r.sample_id for r in first], [r.sample_id for r in second]
-        )
-
-    def test_the_seed_still_changes_the_draw(self):
-        source = self.source(quota=20)
-        first, _ = prepare.stratified_sample(self.pool(200), source, seed=0)
-        second, _ = prepare.stratified_sample(self.pool(200), source, seed=1)
-        self.assertNotEqual(
-            [r.sample_id for r in first], [r.sample_id for r in second]
-        )
-
-    def test_diverse_selection_covers_every_topic(self):
-        '''Twelve topics, ten near-identical restatements each: a spread of twelve
-        takes one per topic, where a uniform draw of twelve repeats some.'''
-        rows = [make_row(sample_id=f"src:{topic}-{copy}", query=f"topic {topic} restatement {copy}")
-                for topic in range(12) for copy in range(10)]
-
-        def vector(topic, copy):
-            values = [0.0] * 22
-            values[topic], values[12 + copy] = 1.0, 0.05
-            return values
-
-        caches = prepare.Caches(embedded(rows, [vector(t, c) for t in range(12) for c in range(10)]))
-        diverse, _ = prepare.stratified_sample(
-            rows, self.source(quota=12, select="diverse"), seed=0, caches=caches)
-        uniform, _ = prepare.stratified_sample(rows, self.source(quota=12), seed=0)
-        topics = lambda picked: {row.sample_id.split(":")[1].split("-")[0] for row in picked}
-        self.assertEqual(len(topics(diverse)), 12)
-        self.assertLess(len(topics(uniform)), 12)
-
-    def test_diverse_selection_is_deterministic(self):
-        rows = self.pool(120)
-        caches = prepare.Caches(embedded(rows, np.random.default_rng(0).normal(size=(120, 8))))
-        source = self.source(quota=15, select="diverse")
-        first, _ = prepare.stratified_sample(rows, source, seed=0, caches=caches)
-        second, _ = prepare.stratified_sample(rows, source, seed=0, caches=caches)
-        self.assertEqual([r.sample_id for r in first], [r.sample_id for r in second])
-
-    def test_diverse_selection_compares_the_payload_not_the_wrapper(self):
-        '''Same rule near_dedup follows: PHT's items differ by event, not wrapper.'''
-        rows = [
-            make_row(sample_id=f"src:{i}", query=f"shared wrapper concerning {event} {i}",
-                     metadata={"event": event})
-            for i, event in enumerate(["holodomor", "holodomor", "holodomor", "nanjing", "katyn"])
-        ]
-        caches = prepare.Caches({prepare.embed_key("holodomor"): unit(1, 0, 0),
-                                 prepare.embed_key("nanjing"): unit(0, 1, 0),
-                                 prepare.embed_key("katyn"): unit(0, 0, 1)})
-        source = self.source(quota=3, select="diverse", dedup_on="event", metadata=["event"])
-        picked, _ = prepare.stratified_sample(rows, source, seed=0, caches=caches)
-        self.assertEqual(len({row.metadata["event"] for row in picked}), 3,
-                         "one per distinct event, not three renderings of one")
-
-    def test_diverse_selection_without_embeddings_is_refused(self):
-        with self.assertRaises(ValueError):
-            prepare.stratified_sample(self.pool(50), self.source(quota=5, select="diverse"), seed=0)
-
-    def test_an_unknown_selection_mode_is_refused(self):
-        with self.assertRaises(ValueError):
-            prepare.stratified_sample(
-                self.pool(50), self.source(quota=5, select="nonsense"), seed=0
-            )
-
-
-class TestScreen(unittest.TestCase):
-    '''Tier 3b: candidates Hermes refuses are dropped and the allotment refilled.'''
-
-    def source(self, quota, **overrides) -> Source:
-        return Source(**{"name": "src", "risk": "cbrn", "question_type": GRADED,
-                         "elicitation_family": COMPLIANCE, "path": "unused",
-                         "quota": quota, **overrides})
-
-    def pool(self, n: int) -> list[Row]:
-        return [make_row(sample_id=f"src:{i}", query=f"request number {i}") for i in range(n)]
-
-    def caches(self, rows, refused=()) -> "prepare.Caches":
-        return prepare.Caches(embeddings={}, verdicts={
-            prepare.screen_key(row): {
-                "verdict": "refused" if row.sample_id in refused else "answered",
-                "model": "test/hermes",
-            }
-            for row in rows
-        })
-
-    def order(self, rows) -> list[str]:
-        return [rows[i].sample_id for i in prepare._stable_order(rows, list(range(len(rows))), 0)]
-
-    def test_default_scope_follows_the_rule(self):
-        for question_type, family, expected in [
-            (GRADED, COMPLIANCE, True), (GRADED, GENERIC, True),
-            (MCQ, COMPLIANCE, True), (MCQ, GENERIC, True),
-            (GRADED, OPINION, False), (LIKERT, COMPLIANCE, False),
-            (DETECTION, COMPLIANCE, False), (EXTRACTION, GENERIC, False),
-        ]:
-            with self.subTest(question_type=question_type, family=family):
-                self.assertEqual(
-                    self.source(5, question_type=question_type,
-                                elicitation_family=family).screened(),
-                    expected)
-
-    def test_the_flag_overrides_the_default(self):
-        self.assertTrue(self.source(5, question_type=LIKERT, elicitation_family=OPINION,
-                                    screen=True).screened())
-        self.assertFalse(self.source(5, screen=False).screened())
-
-    def test_refused_candidates_are_replaced_from_the_preselection(self):
-        rows = self.pool(20)
-        order = self.order(rows)
-        caches = self.caches(rows, refused=order[:2])
-        kept, _ = prepare.stratified_sample(rows, self.source(4), seed=0, caches=caches)
-        self.assertEqual({row.sample_id for row in kept}, set(order[2:6]))
-        self.assertEqual([record["dropped"] for record in caches.refused], order[:2])
-        self.assertEqual({record["tier"] for record in caches.refused}, {"screen"})
-        self.assertEqual(caches.candidates, 14, "ceil(3.5 x 4)")
-
-    def test_only_preselected_candidates_need_a_verdict(self):
-        rows = self.pool(20)
-        caches = prepare.Caches(embeddings={}, verdicts={})
-        prepare.stratified_sample(rows, self.source(4), seed=0, caches=caches)
-        by_id = {row.sample_id: row for row in rows}
-        self.assertEqual(set(caches.missing),
-                         {prepare.screen_key(by_id[i]) for i in self.order(rows)[:14]})
-
-    def test_a_missing_verdict_writes_the_screen_input(self):
-        rows = self.pool(3)
-        caches = prepare.Caches(embeddings={}, verdicts={})
-        prepare.stratified_sample(rows, self.source(2), seed=0, caches=caches)
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
-            with self.assertRaises(prepare.CacheMiss) as raised:
-                prepare.require_screen("cbrn", caches)
-            lines = (Path(tmp) / "cbrn.screen_input.jsonl").read_text().splitlines()
-        records = [json.loads(line) for line in lines]
-        self.assertEqual(len(records), 3)
-        self.assertEqual(set(records[0]), {"key", "sample_id", "question_type", "system_prompt", "query"})
-        self.assertIn("SCREEN_ONLY=1", str(raised.exception))
-        self.assertIn("screen_answerability.py --risk cbrn", str(raised.exception))
-
-    def test_an_unrecognised_verdict_counts_as_missing(self):
-        rows = self.pool(1)
-        caches = self.caches(rows)
-        key = prepare.screen_key(rows[0])
-        caches.verdicts[key]["verdict"] = "error"
-        self.assertEqual(prepare._screen(rows, [0], caches), [0])
-        self.assertEqual(set(caches.missing), {key})
-
-    def test_a_complete_screen_removes_a_stale_input_file(self):
-        stale_caches = self.caches(self.pool(2))
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
-            stale = Path(tmp) / "cbrn.screen_input.jsonl"
-            stale.write_text("{}\n")
-            prepare.require_screen("cbrn", stale_caches)
-            self.assertFalse(stale.exists())
-
-    def test_load_screen_skips_a_truncated_last_line(self):
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
-            (Path(tmp) / "screen").mkdir()
-            (Path(tmp) / "screen" / "cbrn.jsonl").write_text(
-                json.dumps({"key": "a", "verdict": "refused"}) + '\n{"key": "b", "ver')
-            self.assertEqual(set(prepare.load_screen("cbrn")), {"a"})
-
-    def test_a_short_stratum_names_the_source_and_the_gap(self):
-        rows = self.pool(20)
-        caches = self.caches(rows, refused=self.order(rows)[:11])
-        with self.assertRaisesRegex(ValueError, r"src: .*short by 1"):
-            prepare.stratified_sample(rows, self.source(4), seed=0, caches=caches)
-
-    def test_an_exhausted_stratum_keeps_its_survivors(self):
-        rows = (
-            [make_row(sample_id=f"src:a{i}", query=f"small stratum {i}", metadata={"s": "a"})
-             for i in range(2)]
-            + [make_row(sample_id=f"src:b{i}", query=f"large stratum {i}", metadata={"s": "b"})
-               for i in range(20)]
-        )
-        caches = self.caches(rows, refused={"src:a0", "src:a1"})
-        kept, _ = prepare.stratified_sample(rows, self.source(6, stratify=["s"]), seed=0, caches=caches)
-        self.assertEqual({row.metadata["s"] for row in kept}, {"b"})
-        self.assertEqual(len(kept), 5, "stratum a's allotment of 1 is not moved elsewhere")
-
-        unquoted = self.pool(3)
-        kept, _ = prepare.stratified_sample(
-            unquoted, self.source(None), seed=0, caches=self.caches(unquoted, refused={"src:1"}))
-        self.assertEqual([row.sample_id for row in kept], ["src:0", "src:2"])
-
-    def test_grouped_sources_screen_the_leader_only(self):
-        source = self.source(2, name="paired", risk="manipulation", elicitation_family=JUDGMENT,
-                             group_key="scenario_id", screen=True)
-        rows = [make_row(sample_id=f"paired:{g}_{a}", query=f"scenario {g} arm {a}",
-                         metadata={"scenario_id": str(g), "arm": str(a)})
-                for g in range(6) for a in range(3)]
-        leaders = [row for row in rows if row.metadata["arm"] == "0"]
-
-        pending = prepare.Caches(embeddings={}, verdicts={})
-        prepare.stratified_sample(rows, source, seed=0, caches=pending)
-        self.assertEqual(set(pending.missing), {prepare.screen_key(row) for row in leaders})
-
-        kept, _ = prepare.stratified_sample(
-            rows, source, seed=0, caches=self.caches(leaders, refused={"paired:0_0"}))
-        groups = {}
-        for row in kept:
-            groups.setdefault(row.metadata["scenario_id"], set()).add(row.metadata["arm"])
-        self.assertEqual(len(groups), 2)
-        self.assertNotIn("0", groups)
-        self.assertTrue(all(arms == {"0", "1", "2"} for arms in groups.values()))
-
-    def test_an_unscreened_source_ignores_verdicts(self):
-        rows = self.pool(20)
-        source = self.source(4, question_type=LIKERT, elicitation_family=OPINION)
-        plain, _ = prepare.stratified_sample(rows, source, seed=0)
-        everything_refused = self.caches(rows, refused={row.sample_id for row in rows})
-        screened, _ = prepare.stratified_sample(rows, source, seed=0, caches=everything_refused)
-        self.assertEqual(plain, screened)
-
-
 class TestMeta(unittest.TestCase):
 
-    def test_meta_records_embedding_and_screen(self):
+    def test_meta_records_constants_leaves_and_sources(self):
         report = {"advanced_ai_risk": {
-            "loaded": 10, "exact_dropped": 0, "near_dropped": 0, "cross_source_dropped": 0,
-            "kept": 1, "strata": 1, "screen_candidates": 4, "screen_refused": 3,
+            "loaded": 10, "exact_dropped": 0, "cross_source_dropped": 0,
+            "leaves": {"x": 0.8}, "annotated": True, "theta": 0.9, "floor_used": False,
+            "units": 10, "kept": 1, "threshold_dropped": 9, "redundant_dropped": 0,
         }}
-        report["instrumentaleval"] = dict(report["advanced_ai_risk"])
-        report["advanced_ai_risk"].update(
-            leaf="x", leaf_exemplars=3, relevance_status="scored", relevance_threshold=0.5)
-        report["instrumentaleval"]["relevance_status"] = "unscored"
-        leaf = Leaf(id="x", title="X", cop_ref="App 1.3(1)", legal_text="law", exemplars=("a", "b", "c"))
+        leaf = Leaf(id="x", title="X", cop_ref="App 1.3(1)", legal_text="law",
+                    exemplars=("a", "b", "c"), label="x label")
         with tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.object(prepare, "OUT_DIR", Path(tmp)), \
-                mock.patch.object(prepare, "CACHE_DIR", Path(tmp)), \
                 mock.patch.object(prepare, "load_leaves", return_value={"x": leaf}):
-            (Path(tmp) / "screen").mkdir()
-            (Path(tmp) / "screen" / "loss_of_control.jsonl").write_text(json.dumps(
-                {"key": "k", "verdict": "refused", "model": "vllm/NousResearch/Hermes-4-70B"}
-            ) + "\n")
             prepare.write_outputs("loss_of_control", [make_row(risk="loss_of_control")],
-                                  report, [], seed=0)
+                                  report, [{"tier": "threshold", "dropped": "a:1"}], seed=0)
             meta = json.loads((Path(tmp) / "loss_of_control.meta.json").read_text())
+            dropped = (Path(tmp) / "loss_of_control.dropped.jsonl").read_text().splitlines()
         self.assertEqual(meta["embedding"], {
-            "model": prepare.EMBEDDING_MODEL, "tau_cosine": 0.92,
+            "model": prepare.EMBEDDING_MODEL,
             "cache": "datasets/cache/embeddings/loss_of_control.npz",
         })
-        self.assertEqual(meta["screen"], {
-            "model": ["vllm/NousResearch/Hermes-4-70B"], "applies_to": ["advanced_ai_risk", "instrumentaleval"],
-            "candidate_factor": 3.5,
-            "refused_dropped": {"advanced_ai_risk": 3, "instrumentaleval": 3},
+        self.assertEqual(meta["constants"], {
+            "threshold": prepare.THRESHOLD, "floor_fraction": prepare.FLOOR_FRACTION,
+            "penalty": prepare.PENALTY, "penalty_free": prepare.PENALTY_FREE,
         })
-        self.assertEqual((meta["budget"], meta["shortfall"]), (budget_for("loss_of_control"), budget_for("loss_of_control") - 1))
         self.assertEqual(meta["leaves"], {"x": {
-            "cop_ref": "App 1.3(1)", "threshold": 0.5, "anchors": 4,
+            "cop_ref": "App 1.3(1)", "label": "x label", "anchors": 4,
             "anchor_keys": sorted(prepare.embed_key(t) for t in ("law", "a", "b", "c")),
-            "exemplars": 3}})
-        self.assertFalse({"jaccard_tau_default", "cosine_tau_default", "token_gate"} & set(meta))
+        }})
+        self.assertEqual(meta["sources"], report)
+        self.assertEqual((meta["rows"], meta["seed"]), (1, 0))
+        self.assertFalse({"budget", "shortfall", "screen"} & set(meta))
+        self.assertEqual(json.loads(dropped[0])["tier"], "threshold")
 
 
 class TestPremiseDependentCriteria(unittest.TestCase):
@@ -1637,7 +1072,6 @@ class TestOrdinalFallbacks(unittest.TestCase):
         self.assertTrue(rows)
         return rows
 
-QUOTA_OVERRIDES: dict[str, str] = {}
 """A `quota` is an override of the water-filled share; declare it here with its reason."""
 
 
@@ -1664,92 +1098,59 @@ class TestRegistry(unittest.TestCase):
                     self.assertEqual(source.risk, info.name)
         self.assertEqual(RISKS, sorted({source.risk for source in SOURCES}))
 
-    def test_stratify_fields_are_captured_in_metadata(self):
-        '''Stratification silently degrades to one bucket if the field is absent.'''
+    def test_distinct_and_group_fields_are_captured_in_metadata(self):
         for source in SOURCES:
-            for field in source.stratify:
+            for field in [*source.distinct_on, *([source.group_key] if source.group_key else [])]:
                 with self.subTest(source=source.name, field=field):
                     self.assertIn(field, source.metadata)
-
-    def test_dedup_and_distinct_fields_are_captured_in_metadata(self):
-        for source in SOURCES:
-            for field in [*source.distinct_on, *( [source.dedup_on] if source.dedup_on else [] )]:
-                with self.subTest(source=source.name, field=field):
-                    self.assertIn(field, source.metadata)
-
-
-    def test_every_risk_declares_a_budget(self):
-        from datasets.prepare.cluster.sources import BUDGETS
-        for risk in RISKS:
-            with self.subTest(risk=risk):
-                self.assertIsInstance(budget_for(risk), int)
-                self.assertGreater(budget_for(risk), 0)
-        self.assertEqual(set(BUDGETS), set(RISKS))
-
-    def test_no_source_hard_codes_an_undeclared_quota(self):
-        self.assertEqual({s.name for s in SOURCES if s.quota is not None}, set(QUOTA_OVERRIDES))
 
 
 class TestPrintReport(unittest.TestCase):
-    def test_total_prints_under_the_kept_column(self):
+    def render(self, report: dict, rows: int = 7) -> list[str]:
         import contextlib
         import io
-        stats = {"loaded": 9, "exact_dropped": 1, "near_dropped": 0,
-                 "cross_source_dropped": 0, "kept": 7}
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            prepare.print_report(RISKS[0], {"src": stats}, [mock.Mock()] * 7)
-        lines = out.getvalue().splitlines()
+            prepare.print_report(RISKS[0], report, [mock.Mock()] * rows)
+        return out.getvalue().splitlines()
+
+    def stats(self, **overrides) -> dict:
+        return {"loaded": 9, "exact_dropped": 1, "cross_source_dropped": 0,
+                "leaves": {"lf": 0.9}, "annotated": True, "theta": 0.9, "floor_used": False,
+                "units": 8, "kept": 7, "threshold_dropped": 1, "redundant_dropped": 0, **overrides}
+
+    def test_total_prints_under_the_kept_column(self):
+        lines = self.render({"src": self.stats()})
         header = next(l for l in lines if "kept" in l and "source" in l)
         total = next(l for l in lines if "TOTAL" in l)
         self.assertEqual(total.split()[1], "7")
         self.assertEqual(total.index("7") + 1, header.index("kept") + len("kept"))
 
-
-    def render(self, report: dict) -> list[str]:
-        import contextlib
-        import io
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            prepare.print_report(RISKS[0], report, [mock.Mock()] * 7)
-        return out.getvalue().splitlines()
-
-    def test_relevance_columns_and_warnings(self):
-        base = {"loaded": 9, "exact_dropped": 0, "near_dropped": 0, "cross_source_dropped": 0,
-                "kept": 7, "relevance_status": "scored", "leaf": "lf", "leaf_exemplars": 1,
-                "relevance_threshold": 0.7, "relevance_threshold_eff": 0.6234,
-                "relevance_floor_used": True, "relevance_pool": 6036, "relevance_kept": 714,
-                "anchor_hits": {"legal": 20, "exemplar:0": 694}}
-        uncalibrated = {key: value for key, value in base.items() if not key.startswith("relevance_")}
-        uncalibrated.update(relevance_status="uncalibrated", relevance_pool=10, relevance_kept=10,
-                            anchor_hits={"legal": 10})
-        lines = self.render({"a": base, "b": uncalibrated, "d": dict(uncalibrated),
-                             "c": {**base, "relevance_status": "unscored"}})
+    def test_columns_and_warnings(self):
+        lines = self.render({
+            "a": self.stats(theta=0.6234, floor_used=True),
+            "b": self.stats(kept=2, redundant_dropped=1),
+            "c": self.stats(leaves={"nolf": 0.5}),
+        })
         text = "\n".join(lines)
         row = next(l for l in lines if l.strip().startswith("a "))
-        self.assertIn("714/6036", row)
-        self.assertIn("0.623", row)
-        self.assertIn("[WARNING] a: relevance floor used (theta 0.700 did not bind)", text)
-        self.assertEqual(text.count("[WARNING] lf: uncalibrated: fewer than 2 exemplars; no filtering"), 1)
-        self.assertNotIn("[WARNING] b: relevance floor", text)
-        row_b = next(l for l in lines if l.strip().startswith("b "))
-        self.assertEqual(row_b.split()[5:7], ["10/10", "-"])
-        self.assertIn("[WARNING] a: 97% of kept rows match one anchor (exemplar:0)", text)
-        unscored = next(l for l in lines if l.strip().startswith("c "))
-        self.assertEqual(unscored.split()[5:7], ["-", "-"])
+        self.assertEqual(row.split()[1:], ["9", "1", "0", "1", "0.623", "yes", "7", "1", "0"])
+        self.assertIn("[WARNING] a: floor used", text)
+        self.assertIn("[WARNING] b: only 2 rows kept", text)
+        self.assertIn("[WARNING] b: 1 rows dropped as redundant against 2 kept", text)
+        self.assertNotIn("[WARNING] c", text)
 
-    def test_report_without_relevance_keys_renders(self):
-        lines = self.render({"old": {"loaded": 9, "exact_dropped": 0, "near_dropped": 0,
-                                     "cross_source_dropped": 0, "kept": 7}})
-        self.assertTrue(any(line.strip().startswith("old ") for line in lines))
-        self.assertFalse(any("relevance" in line or "exemplars" in line for line in lines))
+    def test_leaf_without_exemplars_warns_once(self):
+        leaf = Leaf(id="bare", title="B", cop_ref="x", legal_text="law")
+        with mock.patch.object(prepare, "load_leaves", return_value={"bare": leaf}):
+            text = "\n".join(self.render({"a": self.stats(leaves={"bare": 0.5}),
+                                          "b": self.stats(leaves={"bare": 0.5})}))
+        self.assertEqual(text.count("[WARNING] bare: no exemplars"), 1)
 
-    def test_zero_exemplar_leaf_skips_anchor_concentration_warning(self):
-        stats = {"loaded": 9, "exact_dropped": 0, "near_dropped": 0, "cross_source_dropped": 0,
-                 "kept": 7, "relevance_status": "uncalibrated", "leaf": "lf", "leaf_exemplars": 0,
-                 "relevance_pool": 10, "relevance_kept": 10,
-                 "anchor_hits": {"legal": 10}}
-        self.assertNotIn("match one anchor", "\n".join(self.render({"a": stats})))
+    def test_report_before_scoring_renders(self):
+        lines = self.render({"src": {"loaded": 9, "exact_dropped": 0, "cross_source_dropped": 0,
+                                     "leaves": {}, "kept": 0}})
+        self.assertTrue(any(line.strip().startswith("src ") for line in lines))
 
 
 class TestBuiltClusters(unittest.TestCase):
@@ -1800,46 +1201,6 @@ class TestBuiltClusters(unittest.TestCase):
                     validate(row)
                     self.assertNotIn(row.sample_id, seen)
                     seen.add(row.sample_id)
-
-    def test_no_single_slice_dominates_its_cluster(self):
-        '''
-        Sample count is weight once benchmarks share a task.
-
-        A one-source cluster has no source-level weighting to check, so the
-        invariant moves to the axis that does vary there — the source's own
-        stratification — rather than being skipped. loss_of_control is that
-        case: one benchmark, seven behaviours.
-
-        With several sources the cap is the larger of 40%, an equal share,
-        and the source's own allotment from the budget (meta.json), so a
-        small source's pool can force a big one past the equal share but
-        nothing may exceed what the budget gave it. `allotted` counts rows,
-        except for group_key sources where it counts groups, so those keep
-        the plain cap.
-        '''
-        for risk in RISKS:
-            if not (PUBLIC_DIR / f"{risk}.csv").exists():
-                continue
-            sources = for_risk(risk)
-            slice_of = lambda row: row["source"]
-            if len(sources) == 1:
-                axis = sources[0].stratify[0]
-                slice_of = lambda row: json.loads(row["metadata"]).get(axis)
-
-            with self.subTest(risk=risk), open(self.cluster_path(risk), newline="") as f:
-                rows = list(csv.DictReader(f))
-                counts = {}
-                for row in rows:
-                    key = slice_of(row)
-                    counts[key] = counts.get(key, 0) + 1
-                allotted = {}
-                if len(sources) > 1:
-                    meta = json.loads((PUBLIC_DIR / f"{risk}.meta.json").read_text())["sources"]
-                    allotted = {s.name: meta[s.name]["allotted"] / len(rows)
-                                for s in sources if not s.group_key}
-                for key, count in counts.items():
-                    cap = max(0.40, 1 / len(sources), allotted.get(key, 0))
-                    self.assertLessEqual(count / len(rows), cap, f"{counts} in {risk}")
 
 
 class TestDeterminism(unittest.TestCase):
@@ -2146,321 +1507,201 @@ class TestLeaves(unittest.TestCase):
                 self.assertTrue(leaf.legal_text.strip())
                 self.assertTrue(leaf.cop_ref.startswith("Appendix 1."))
 
-    def test_every_source_leaf_resolves_and_relevance_in_range(self):
+    def test_every_source_resolves_its_leaves(self):
+        from datasets.prepare.cluster.annotations import load_annotations
         from datasets.prepare.cluster.leaves import load_leaves
         leaves = load_leaves()
-        # persusafety's content is in its system prompt, which scoring does not read yet.
-        self.assertEqual({source.name for source in SOURCES if source.leaf is None}, {"persusafety"})
+        annotations = load_annotations()
         for source in SOURCES:
             with self.subTest(source=source.name):
-                if source.leaf is not None:
-                    self.assertIn(source.leaf, leaves)
-                if source.relevance is not None:
-                    self.assertGreater(source.relevance, 0)
-                    self.assertLessEqual(source.relevance, 1)
+                for leaf_id, r in prepare.source_leaves(source, annotations).items():
+                    self.assertIn(leaf_id, leaves)
+                    self.assertTrue(0 < r <= 1)
+                for leaf_id in source.leaves:
+                    self.assertIn(leaf_id, leaves)
+
+    def test_hand_leaves_override_the_annotation(self):
+        source = Source(name="s", risk="cbrn", question_type=GRADED, path="raw/bbq/x",
+                        leaves=("cbrn",))
+        self.assertEqual(prepare.source_leaves(source, {"bbq": {"discriminatory_bias": 0.9}}),
+                         {"cbrn": prepare.DEFAULT_RELEVANCE})
+        bare = Source(name="s", risk="cbrn", question_type=GRADED, path="raw/bbq/x")
+        self.assertEqual(prepare.source_leaves(bare, {"bbq": {"discriminatory_bias": 0.9}}),
+                         {"discriminatory_bias": 0.9})
+        with self.assertRaises(SchemaError):
+            prepare.source_leaves(bare, {})
 
 
-class TestRelevanceFilter(unittest.TestCase):
 
-    def leaf(self, vectors, threshold=None):
-        '''A leaf whose legal text and exemplars embed to `vectors`, in order.'''
-        from datasets.prepare.cluster.leaves import Leaf, anchor_texts
-        leaf = Leaf(id="leaf", title="Leaf", cop_ref="Appendix 1.4(a)", legal_text="the law",
-                    exemplars=tuple(f"exemplar {i}" for i in range(len(vectors) - 1)),
-                    threshold=threshold)
-        cache = {prepare.embed_key(text): unit(*v) for text, v in zip(anchor_texts(leaf), vectors)}
-        return leaf, cache
 
-    def source(self, name="src", **overrides) -> Source:
-        return Source(**{"name": name, "risk": "cbrn", "question_type": GRADED,
-                         "path": "unused", "leaf": "leaf", **overrides})
+class TestScoring(unittest.TestCase):
 
-    def rows(self, name, vectors, **fields):
-        rows = [make_row(sample_id=f"{name}:{i}", source=name, query=f"{name} item {i}", **fields)
-                for i in range(len(vectors))]
-        return rows, embedded(rows, vectors)
+    def test_temperature_is_identity_at_half_and_monotone(self):
+        scores = np.array([0.0, 0.3, 0.6, 0.9, -0.2])
+        np.testing.assert_array_equal(prepare.smooth(scores, 0.5), [0.0, 0.3, 0.6, 0.9, 0.0])
+        lifted = prepare.smooth(scores, 1.0)
+        lowered = prepare.smooth(scores, 0.0)
+        self.assertTrue(np.all(lifted[:4] >= scores[:4]) and np.all(lowered[:4] <= scores[:4]))
+        self.assertEqual(lifted[:4].argsort().tolist(), scores[:4].argsort().tolist())
+        with self.assertRaises(ValueError):
+            prepare.smooth(scores, 1.5)
 
-    def run_filter(self, pools, embeddings, leaf, cache, budget):
-        return prepare.relevance_filter(pools, {"leaf": leaf}, embeddings, cache, budget)
+    def test_higher_relevance_pushes_more_rows_over_the_threshold(self):
+        scores = np.linspace(0.5, 0.95, 50)
+        over = lambda r: int((prepare.smooth(scores, r) >= prepare.THRESHOLD).sum())
+        self.assertGreater(over(1.0), over(0.5))
+        self.assertGreater(over(0.5), over(0.0))
 
-    def test_threshold_is_the_exemplars_leave_one_out_tenth_percentile(self):
-        # Legal (1, 0) is a neighbour only. Exemplar maxima: 0.8, 0.8, 0.0 -> p10 = 0.2 * 0.8.
-        leaf, cache = self.leaf([(1, 0), (0.6, 0.8), (0, 1), (-1, 0)])
-        _, matrix = prepare.leaf_anchors(leaf, cache)
-        self.assertAlmostEqual(prepare.leaf_threshold(matrix, None), 0.16, places=6)
-        self.assertEqual(prepare.leaf_threshold(matrix, 0.9), 0.9)
+    def test_threshold_is_constant_when_enough_cross_else_the_floor_rank(self):
+        self.assertEqual(prepare.source_threshold([0.95, 0.92, 0.3]), (prepare.THRESHOLD, False))
+        scores = [0.8, 0.7, 0.6] + [0.1] * 297   # 300 units: floor rank 3
+        self.assertEqual(prepare.source_threshold(scores), (0.6, True))
+        self.assertEqual(prepare.source_threshold([0.4]), (0.4, True))
+        self.assertEqual(prepare.source_threshold([]), (prepare.THRESHOLD, False))
 
-    def test_a_distant_legal_anchor_does_not_lower_the_threshold(self):
-        # Exemplar maxima 0.8, 0.96, 0.96 -> p10 0.832; counting legal's own max (0) would give 0.24.
-        leaf, cache = self.leaf([(0, -1), (1, 0), (0.8, 0.6), (0.6, 0.8)])
-        _, matrix = prepare.leaf_anchors(leaf, cache)
-        self.assertAlmostEqual(prepare.leaf_threshold(matrix, None), 0.832, places=6)
+    def test_score_rows_takes_the_best_leaf_and_records_it(self):
+        rows = [make_row(sample_id="s:1", query="one"), make_row(sample_id="s:2", query="two")]
+        source = Source(name="s", risk="cbrn", question_type=GRADED, path="unused")
+        leaves = {
+            "a": Leaf(id="a", title="A", cop_ref="x", legal_text="law a", exemplars=("ex a",)),
+            "b": Leaf(id="b", title="B", cop_ref="x", legal_text="law b"),
+        }
+        embeddings = embedded(rows, [(1, 0), (0, 1)])
+        anchors = {prepare.embed_key("law a"): unit(1, 0), prepare.embed_key("ex a"): unit(0.8, 0.6),
+                   prepare.embed_key("law b"): unit(0, 1)}
+        scores = prepare.score_rows(source, rows, {"a": 0.5, "b": 1.0}, leaves, embeddings, anchors)
+        self.assertEqual(scores.tolist(), [1.0, 1.0])
+        self.assertEqual(rows[0].metadata["relevance_leaf"], "a")
+        self.assertEqual(rows[0].metadata["relevance_anchor"], "legal")
+        self.assertEqual(rows[1].metadata["relevance_leaf"], "b")
+        self.assertEqual(rows[1].metadata["relevance_anchor"], "legal")
+        # Row 3: cos 0.96 to leaf a's exemplar beats law b's 0.8 even after
+        # leaf b's r = 1.0 lifts it to 0.862. Row 4 is where the smoothing decides.
+        rows2 = [make_row(sample_id="s:3", query="three")]
+        emb2 = embedded(rows2, [(0.6, 0.8)])
+        prepare.score_rows(source, rows2, {"a": 0.5, "b": 1.0}, leaves, emb2, anchors)
+        self.assertEqual(rows2[0].metadata["relevance_leaf"], "a")
+        rows2 = [make_row(sample_id="s:4", query="four")]
+        # cos to ex a 0.908 > cos to law b 0.88, but 0.88 ** (1 / 1.5) = 0.918 wins.
+        emb2 = embedded(rows2, [(0.475, 0.88)])
+        prepare.score_rows(source, rows2, {"a": 0.5, "b": 1.0}, leaves, emb2, anchors)
+        self.assertEqual(rows2[0].metadata["relevance_leaf"], "b")
+        raw = 0.88 / np.sqrt(0.475 ** 2 + 0.88 ** 2)
+        self.assertAlmostEqual(rows2[0].metadata["relevance_raw"], raw, places=5)
+        self.assertAlmostEqual(rows2[0].metadata["relevance"], raw ** (1 / 1.5), places=5)
 
-    def test_fewer_than_two_exemplars_calibrate_nothing(self):
-        for vectors in ([(1, 0)], [(1, 0), (0, 1)]):
-            leaf, cache = self.leaf(vectors)
-            _, matrix = prepare.leaf_anchors(leaf, cache)
-            self.assertIsNone(prepare.leaf_threshold(matrix, None))
-            self.assertFalse(leaf.calibrated)
-        self.assertTrue(self.leaf([(1, 0)], threshold=0.5)[0].calibrated)
 
-    def test_an_uncalibrated_leaf_scores_but_drops_nothing(self):
-        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0)])  # one exemplar
-        rows, embeddings = self.rows("src", [(1, 0, 0)] * 3 + [(0, 0, 1)] * 2000)
-        pools, dropped, report = self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 1)
-        self.assertEqual(len(pools[0][1]), 2003)
+class TestClusterSelect(unittest.TestCase):
+
+    def source(self, name: str) -> Source:
+        return Source(name=name, risk="cbrn", question_type=GRADED, path="unused")
+
+    def rows(self, name: str, n: int) -> list[Row]:
+        return [make_row(sample_id=f"{name}:{i}", source=name, query=f"{name} item {i}") for i in range(n)]
+
+    def select(self, pools, vectors, scores, thetas, seed=0):
+        rows = [row for _, rows in pools for row in rows]
+        embeddings = embedded(rows, vectors)
+        units = []
+        offset = 0
+        for source, source_rows in pools:
+            units.extend(prepare.units_for(source, source_rows, np.array(scores[offset:offset + len(source_rows)]), seed))
+            offset += len(source_rows)
+        kept, dropped = prepare.cluster_select(units, thetas, embeddings)
+        return [row.sample_id for row in kept], dropped
+
+    def test_penalty_is_zero_below_penalty_free(self):
+        pools = [(self.source("a"), self.rows("a", 2))]
+        # cosine 0.6 between the two rows: below PENALTY_FREE, no penalty
+        kept, dropped = self.select(pools, [(1, 0), (0.6, 0.8)], [0.95, 0.91], {"a": 0.9})
+        self.assertEqual(kept, ["a:0", "a:1"])
         self.assertEqual(dropped, [])
-        self.assertEqual(report["src"]["relevance_status"], "uncalibrated")
-        self.assertNotIn("relevance_floor_used", report["src"])
-        self.assertEqual(report["src"]["score_quantiles"]["max"], 1.0)
-        self.assertEqual(rows[0].metadata["relevance"], 1.0)
 
-    def test_strata_before_the_filter_are_recorded(self):
-        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
-        rows, embeddings = self.rows("src", [(1, 0, 0)] * 3 + [(0, 0, 1)] * 2000)
-        for i, row in enumerate(rows):
-            row.metadata = {"kind": "near" if i < 3 else "far", "tag": "t"}
-        source = self.source(stratify=["kind", "tag"])
-        pools, _, report = self.run_filter([(source, rows)], embeddings, leaf, cache, 1)
-        self.assertEqual(report["src"]["relevance_strata_before"], {"far|t": 2000, "near|t": 3})
-        self.assertNotIn("relevance_strata_before",
-                         self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 1)[2]["src"])
+    def test_near_copy_across_sources_is_dropped_against_the_higher_score(self):
+        pools = [(self.source("a"), self.rows("a", 1)), (self.source("b"), self.rows("b", 1))]
+        vectors = [(1, 0), (0.99, np.sqrt(1 - 0.99 ** 2))]   # cosine 0.99
+        kept, dropped = self.select(pools, vectors, [0.91, 0.95], {"a": 0.9, "b": 0.9})
+        self.assertEqual(kept, ["b:0"])
+        self.assertEqual(len(dropped), 1)
+        self.assertEqual((dropped[0]["tier"], dropped[0]["dropped"], dropped[0]["kept"]),
+                         ("redundant", "a:0", "b:0"))
+        self.assertAlmostEqual(dropped[0]["similarity"], 0.99, places=5)
+        # With margin to spare under its threshold, the copy survives the penalty.
+        kept, dropped = self.select(pools, vectors, [0.91, 0.95], {"a": 0.5, "b": 0.9})
+        self.assertEqual(sorted(kept), ["a:0", "b:0"])
 
-    def test_a_missing_anchor_raises_cache_miss(self):
-        leaf, _ = self.leaf([(1, 0), (0, 1)])
-        with self.assertRaises(prepare.CacheMiss):
-            prepare.leaf_anchors(leaf, {})
+    def test_below_theta_is_a_threshold_drop(self):
+        pools = [(self.source("a"), self.rows("a", 2))]
+        kept, dropped = self.select(pools, [(1, 0), (0, 1)], [0.95, 0.5], {"a": 0.9})
+        self.assertEqual(kept, ["a:0"])
+        self.assertEqual([(d["tier"], d["dropped"], d["threshold"]) for d in dropped],
+                         [("threshold", "a:1", 0.9)])
 
-    def test_a_pool_smaller_than_the_floor_keeps_everything(self):
-        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
-        rows, embeddings = self.rows("src", [(0, i + 1, 1) for i in range(5)])
-        pools, dropped, report = self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 2)
-        self.assertEqual(len(pools[0][1]), 5)
-        self.assertEqual(dropped, [])
-        # The floor lowered the threshold but cut nothing, so it was not "used".
-        self.assertLess(report["src"]["relevance_threshold_eff"], report["src"]["relevance_threshold"])
-        self.assertFalse(report["src"]["relevance_floor_used"])
+    def test_source_order_does_not_matter(self):
+        a, b = (self.source("a"), self.rows("a", 3)), (self.source("b"), self.rows("b", 3))
+        vectors = [(1, 0, 0), (0, 1, 0), (0.9, 0.1, 0), (0.95, 0.05, 0), (0, 0, 1), (0.5, 0.5, 0.7)]
+        scores = [0.95, 0.93, 0.92, 0.94, 0.91, 0.96]
+        thetas = {"a": 0.9, "b": 0.9}
+        forward, _ = self.select([a, b], vectors, scores, thetas)
+        backward, _ = self.select([b, a], vectors[3:] + vectors[:3], scores[3:] + scores[:3], thetas)
+        self.assertEqual(sorted(forward), sorted(backward))
 
-    def planted(self, n_planted):
-        '''2,000 rows: n_planted copies of the legal anchor, the rest with distinct low scores.'''
-        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
-        vectors = [(1, 0, 0) if i < n_planted else (i, 2000, 0) for i in range(2000)]
-        rows, embeddings = self.rows("src", vectors)
-        # One source, budget 10 -> share 10 rows -> floor max(2 x 35, 20, 1) = 70.
-        return self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 10)
-
-    def test_look_alikes_above_the_floor_are_kept_exactly(self):
-        pools, dropped, report = self.planted(80)
-        self.assertEqual({row.sample_id for row in pools[0][1]}, {f"src:{i}" for i in range(80)})
-        self.assertFalse(report["src"]["relevance_floor_used"])
-        self.assertEqual(len(dropped), 1920)
-        self.assertEqual(report["src"]["anchor_hits"], {"legal": 80})
-        self.assertEqual(pools[0][1][0].metadata["relevance_anchor"], "legal")
-        self.assertEqual(pools[0][1][0].metadata["relevance"], 1.0)
-
-    def test_too_few_look_alikes_fill_up_to_the_floor_by_rank(self):
-        pools, _, report = self.planted(20)
-        top = {f"src:{i}" for i in range(1999, 1949, -1)}  # the 50 best-scoring others
-        self.assertEqual({row.sample_id for row in pools[0][1]},
-                         {f"src:{i}" for i in range(20)} | top)
-        self.assertTrue(report["src"]["relevance_floor_used"])
-        self.assertEqual(report["src"]["relevance_kept"], 70)
-        ids = [row.sample_id for row in pools[0][1]]
-        self.assertEqual(ids, sorted(ids, key=lambda i: int(i.split(":")[1])))
-
-    def test_the_one_percent_term_sets_the_floor_on_a_big_pool(self):
-        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
-        rows, embeddings = self.rows("src", [(i, 5000, 0) for i in range(5000)])
-        # Budget 1 -> share 1 -> 2 x SCREEN_FACTOR term 7, while 1% of 5,000 is 50.
-        pools, _, report = self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 1)
-        self.assertEqual({row.sample_id for row in pools[0][1]},
-                         {f"src:{i}" for i in range(4950, 5000)})
-        self.assertTrue(report["src"]["relevance_floor_used"])
-        self.assertEqual(report["src"]["relevance_status"], "scored")
-
-    def test_a_row_with_no_words_matches_no_anchor(self):
-        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
-        rows, embeddings = self.rows("src", [(1, 0, 0)] * 3)
-        rows[2].query = "--"
-        pools, _, report = self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 2)
-        self.assertEqual(len(pools[0][1]), 3)  # the floor (14) exceeds the pool
-        self.assertEqual(rows[2].metadata["relevance"], 0.0)
-        self.assertIsNone(rows[2].metadata["relevance_anchor"])
-        self.assertEqual(report["src"]["anchor_hits"], {"legal": 2})
-
-    def test_a_leafless_source_passes_through_unscored(self):
-        leaf, cache = self.leaf([(1, 0), (0, 1)])
-        rows, embeddings = self.rows("src", [(1, 1)] * 3)
-        pools, dropped, report = self.run_filter(
-            [(self.source(leaf=None), rows)], embeddings, leaf, cache, 2)
-        self.assertIs(pools[0][1], rows)
-        self.assertEqual(dropped, [])
-        self.assertEqual(report["src"], {"leaf": None, "relevance_status": "unscored"})
-        self.assertNotIn("relevance", rows[0].metadata)
-
-    def test_input_order_does_not_change_the_result(self):
-        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
-        vectors = [(1, 0, 0) if i < 20 else (i % 50, 2000, 0) for i in range(2000)]  # ties at the floor
-
-        def run(order):
-            rows, embeddings = self.rows("src", vectors)
-            pools, dropped, _ = self.run_filter(
-                [(self.source(), [rows[i] for i in order])], embeddings, leaf, cache, 10)
-            return (sorted(row.sample_id for row in pools[0][1]),
-                    sorted(dropped, key=lambda record: record["dropped"]))
-
-        shuffled = list(range(2000))
-        np.random.default_rng(1).shuffle(shuffled)
-        self.assertEqual(run(range(2000)), run(shuffled))
-
-    def test_two_runs_are_identical(self):
-        first, second = self.planted(20), self.planted(20)
-        self.assertEqual([row.sample_id for row in first[0][0][1]],
-                         [row.sample_id for row in second[0][0][1]])
-        self.assertEqual(first[1], second[1])
-        self.assertEqual(first[2], second[2])
-
-    def test_a_filtered_source_frees_budget_for_the_others(self):
-        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
-        scored, scored_vectors = self.rows("a", [(1, 0, 0) if i < 40 else (i, 2000, 0) for i in range(1000)])
-        other, other_vectors = self.rows("b", [(0, 0, 1)] * 1000)
-        pools = [(self.source("a"), scored), (self.source("b", leaf=None), other)]
-        # The floor keeps >= SCREEN_FACTOR x the provisional share, so a filtered source
-        # still covers its share at the same budget: re-flow only happens for pools
-        # already below their floor. Hence filter at budget 10 (floor 35), re-allocate at 200.
-        filtered, _, _ = self.run_filter(pools, {**scored_vectors, **other_vectors}, leaf, cache, 10)
-        self.assertEqual(len(filtered[0][1]), 40)
-        self.assertEqual(prepare.allocate_budget(pools, 200), {"a": 100, "b": 100})
-        self.assertEqual(prepare.allocate_budget(filtered, 200), {"a": 40, "b": 160})
-
-    def test_group_key_sources_keep_or_drop_whole_groups(self):
-        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
-        rows = [make_row(sample_id=f"src:{g}-{arm}", query=f"scenario {g} arm {arm}",
-                         metadata={"scenario": f"s{g}"})
-                for g in range(30) for arm in range(3)]
-        # One arm of each of the first eight scenarios is a look-alike.
-        embeddings = embedded(rows, [(1, 0, 0) if g < 8 and arm == 1 else (0, 1, 0)
-                                     for g in range(30) for arm in range(3)])
-        source = self.source(group_key="scenario")
-        # Budget 3 = one 3-arm group -> floor ceil(2 * 3.5 * 3) = 21 rows, below the 24 planted.
-        pools, _, report = self.run_filter([(source, rows)], embeddings, leaf, cache, 3)
-        kept = pools[0][1]
-        self.assertEqual({row.metadata["scenario"] for row in kept}, {f"s{g}" for g in range(8)})
-        self.assertEqual(len(kept), 24)
-        self.assertFalse(report["src"]["relevance_floor_used"])
-        # The kept non-planted arms sit closer to the exemplar than to the legal anchor.
-        self.assertEqual(report["src"]["anchor_hits"], {"exemplar:0": 16, "legal": 8})
-        # Every arm carries its group's best score, so the leader (arm 0, a weak arm)
-        # ranks by the planted arm 1; each arm keeps its own score and anchor.
-        self.assertTrue(all(row.metadata["relevance"] == 1.0 for row in kept))
-        leader = next(row for row in kept if row.sample_id == "src:0-0")
-        self.assertLess(leader.metadata["relevance_own"], 0.1)
-        self.assertEqual(leader.metadata["relevance_anchor"], "exemplar:0")
-        planted = next(row for row in kept if row.sample_id == "src:0-1")
-        self.assertEqual(planted.metadata["relevance_own"], 1.0)
-
-    def test_ungrouped_rows_carry_no_own_score(self):
-        leaf, cache = self.leaf([(1, 0, 0), (1, 0.05, 0), (1, -0.05, 0)])
-        rows, embeddings = self.rows("src", [(1, 0, 0)] * 2)
-        self.run_filter([(self.source(), rows)], embeddings, leaf, cache, 2)
-        self.assertNotIn("relevance_own", rows[0].metadata)
+    def test_ties_break_by_seeded_hash_not_input_order(self):
+        pools = [(self.source("a"), self.rows("a", 2))]
+        vectors = [(1, 0), (1, 0)]   # identical: only one can survive
+        first, _ = self.select(pools, vectors, [0.95, 0.95], {"a": 0.9}, seed=0)
+        again, _ = self.select(pools, vectors, [0.95, 0.95], {"a": 0.9}, seed=0)
+        self.assertEqual(first, again)
+        self.assertEqual(len(first), 1)
+        survivors = {self.select(pools, vectors, [0.95, 0.95], {"a": 0.9}, seed=s)[0][0] for s in range(20)}
+        self.assertEqual(survivors, {"a:0", "a:1"}, "the seed, not input order, picks the survivor")
 
 
-class TestRelevanceWindow(unittest.TestCase):
-    '''The window narrows what selection may choose from; r = 1 and unscored rows change nothing.'''
+class TestBuildIsReproducible(unittest.TestCase):
+    '''A synthetic risk built in two subprocesses with different hash seeds gives identical bytes.'''
 
-    def rows(self, n: int, score, stratum=lambda i: "a") -> list[Row]:
-        return [make_row(sample_id=f"src:{i}", query=f"item {i}",
-                         metadata={"stratum": stratum(i), **({"relevance": score(i)} if score else {})})
-                for i in range(n)]
+    SCRIPT = '''
+import json, sys, tempfile
+from pathlib import Path
+from unittest import mock
+import numpy as np
+from datasets.prepare.cluster import prepare
+from datasets.prepare.cluster.leaves import Leaf
+from datasets.prepare.cluster.schema import GRADED, Row, Source
 
-    def setUp(self):
-        leaf = Leaf(id="lf", title="LF", cop_ref="Appendix 1.4(a)", legal_text="law", exemplars=("a", "b"))
-        patcher = mock.patch.object(prepare, "load_leaves", return_value={"lf": leaf})
-        patcher.start()
-        self.addCleanup(patcher.stop)
+rows = [Row(sample_id=f"s:{i}", source="s", risk="cbrn", question_type=GRADED, query=f"q {i}",
+            criterion="bad", categories=["yes", "no"], scale_map={"yes": 0.0, "no": 1.0},
+            item_text=f"q {i}") for i in range(40)]
+rng = np.random.default_rng(7)
+vectors = rng.normal(size=(40, 8)); vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+embeddings = {prepare.embed_key(r.query): v.astype(np.float32) for r, v in zip(rows, vectors)}
+leaf = Leaf(id="lf", title="L", cop_ref="x", legal_text="law", exemplars=("ex",))
+anchors = {prepare.embed_key("law"): vectors[0].astype(np.float32),
+           prepare.embed_key("ex"): vectors[1].astype(np.float32)}
+source = Source(name="s", risk="cbrn", question_type=GRADED, path="raw/x/y", leaves=("lf",))
+out = Path(sys.argv[1])
+with mock.patch.object(prepare, "for_risk", return_value=[source]), \\
+        mock.patch.object(prepare, "load_source", return_value=rows), \\
+        mock.patch.object(prepare, "load_annotations", return_value={}), \\
+        mock.patch.object(prepare, "load_leaves", return_value={"lf": leaf}), \\
+        mock.patch.object(prepare, "load_embeddings", side_effect=lambda r: anchors if r == "leaves" else embeddings), \\
+        mock.patch.object(prepare, "source_revisions", return_value={}), \\
+        mock.patch.object(prepare, "OUT_DIR", out):
+    kept, report, dropped = prepare.build_risk("cbrn", seed=0)
+    prepare.write_outputs("cbrn", kept, report, dropped, seed=0)
+'''
 
-    def source(self, **overrides) -> Source:
-        return Source(**{"name": "src", "risk": "cbrn", "question_type": GRADED, "path": "unused",
-                         "quota": 10, "leaf": "lf", **overrides})
-
-    def take(self, rows, take, source=None, indices=None):
-        return sorted(prepare._take(rows, indices or list(range(len(rows))), take, source or self.source(), 0))
-
-    def test_relevance_has_no_role_default(self):
-        self.assertIsNone(prepare.relevance_for(self.source()))
-        self.assertIsNone(prepare.relevance_for(self.source(role="diagnostic")))
-        self.assertEqual(prepare.relevance_for(self.source(relevance=0.3)), 0.3)
-
-    def test_full_relevance_with_varied_scores_matches_unscored(self):
-        scored = self.rows(100, lambda i: (i * 37 % 11) / 11)
-        unscored = self.rows(100, None)
-        for source in (self.source(relevance=1.0), self.source(relevance=1.0, select="diverse")):
-            caches = prepare.Caches(embedded(scored, [(i, 1, i % 3) for i in range(100)]))
-            with self.subTest(select=source.select):
-                self.assertEqual(sorted(prepare._take(scored, list(range(100)), 10, source, 0, caches)),
-                                 sorted(prepare._take(unscored, list(range(100)), 10, source, 0, caches)))
-
-    def test_smallest_relevance_takes_exactly_the_top_by_score(self):
-        rows = self.rows(100, lambda i: (i * 37 % 101) / 101)
-        top = sorted(range(100), key=lambda i: -rows[i].metadata["relevance"])[:10]
-        self.assertEqual(self.take(rows, 10, self.source(relevance=0.0001)), sorted(top))
-
-    def test_half_relevance_window_size(self):
-        caches = prepare.Caches({})
-        prepare._take(self.rows(100, lambda i: i / 100), list(range(100)), 10,
-                      self.source(relevance=0.5), 0, caches)
-        self.assertEqual(caches.relevance_window, 55)  # 10 + round(0.5 x 90)
-
-    def test_an_uncalibrated_leaf_is_not_windowed(self):
-        leaf = Leaf(id="lf", title="LF", cop_ref="Appendix 1.4(a)", legal_text="law", exemplars=("a",))
-        caches = prepare.Caches({})
-        with mock.patch.object(prepare, "load_leaves", return_value={"lf": leaf}):
-            prepare._take(self.rows(100, lambda i: i / 100), list(range(100)), 10,
-                          self.source(relevance=0.0001), 0, caches)
-        self.assertEqual(caches.relevance_window, 0)
-
-    def test_unscored_rows_are_untouched(self):
-        rows = self.rows(100, None)
-        self.assertEqual(self.take(rows, 10, self.source(relevance=0.25)), self.take(rows, 10))
-
-    def test_narrow_relevance_picks_only_from_the_top_window(self):
-        rows = self.rows(100, lambda i: 1.0 if i < 10 else 0.1)
-        caches = prepare.Caches({})
-        top = sorted(prepare._take(rows, list(range(100)), 2, self.source(relevance=0.05), 0, caches))
-        self.assertEqual(caches.relevance_window, 7)  # 2 + round(0.05 x 98)
-        self.assertTrue(all(i < 10 for i in top) and len(top) == 2)
-
-    def test_window_is_per_stratum(self):
-        rows = self.rows(100, lambda i: 1.0 if i % 10 < 2 else 0.1, stratum=lambda i: "a" if i < 50 else "b")
-        source = self.source(relevance=0.0001, stratify=["stratum"])
-        chosen, _ = prepare._row_sample(rows, source, 0, None, 8)
-        self.assertEqual({row.metadata["stratum"] for row in chosen}, {"a", "b"})
-        self.assertEqual(len(chosen), 8)
-        self.assertTrue(all(row.metadata["relevance"] == 1.0 for row in chosen))  # 4 per stratum, window 4 of 10 high
-
-    def test_deterministic(self):
-        rows = self.rows(100, lambda i: (i * 37 % 11) / 11 + 0.1)
-        source = self.source(relevance=0.25)
-        self.assertEqual(self.take(rows, 5, source), self.take(rows, 5, source))
-
-    def test_relevance_outside_unit_interval_is_rejected(self):
-        for bad in (0, -0.1, 1.5):
-            with self.subTest(r=bad), self.assertRaises(ValueError):
-                prepare.relevance_for(self.source(relevance=bad))
-
-    def test_screen_shortfall_still_raises_at_full_relevance(self):
-        rows = [make_row(sample_id=f"src:{i}", query=f"request {i}", metadata={"relevance": 1.0})
-                for i in range(100)]
-        source = self.source(elicitation_family=COMPLIANCE, relevance=1.0)
-        caches = prepare.Caches(embeddings={}, verdicts={
-            prepare.screen_key(row): {"verdict": "refused", "model": "test/hermes"} for row in rows})
-        with self.assertRaisesRegex(ValueError, "Raise SCREEN_FACTOR"):
-            prepare._take(rows, list(range(100)), 10, source, 0, caches)
-
-    def test_window_counter_sums_across_strata(self):
-        rows = self.rows(100, lambda i: 1.0, stratum=lambda i: "a" if i < 50 else "b")
-        source = self.source(relevance=0.5, stratify=["stratum"])
-        caches = prepare.Caches({})
-        prepare.stratified_sample(rows, source, 0, caches, quota=20)
-        self.assertEqual(caches.relevance_window, 60)  # 2 strata x (10 + round(0.5 x 40))
+    def test_two_hash_seeds_give_identical_outputs(self):
+        import os
+        import subprocess
+        import sys
+        outputs = []
+        for hash_seed in ("1", "4242"):
+            with tempfile.TemporaryDirectory() as tmp:
+                subprocess.run([sys.executable, "-c", self.SCRIPT, tmp], check=True,
+                               cwd=Path(__file__).resolve().parent.parent,
+                               env={**os.environ, "PYTHONHASHSEED": hash_seed})
+                outputs.append({name: (Path(tmp) / name).read_bytes()
+                                for name in ("cbrn.csv", "cbrn.meta.json", "cbrn.dropped.jsonl")})
+        self.assertEqual(outputs[0], outputs[1])
+        self.assertGreater(outputs[0]["cbrn.csv"].count(b"\n"), 1)

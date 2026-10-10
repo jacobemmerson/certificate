@@ -272,13 +272,12 @@ def lab_bench_rows(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # cbrn: 2x the pre-revision cluster size; shares are water-filled over the sources.
-BUDGET = 372
 
 # leaf: provisional, annotators to confirm
 SOURCES = [
     Source(
         name="harmbench", risk="cbrn", question_type=GRADED,
-        leaf="cbrn",
+        leaves=("cbrn",),
         elicitation_family=COMPLIANCE,
         path="raw/harmbench/data/behavior_datasets/harmbench_behaviors_text_all.csv",
         reader="csv",
@@ -289,12 +288,11 @@ SOURCES = [
         rubric=COMPLIANCE_RUBRIC,
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["BehaviorID", "SemanticCategory", "FunctionalCategory"],
-        stratify=["FunctionalCategory"],
         judge_style="classifier",
     ),
     Source(
         name="sosbench", risk="cbrn", question_type=GRADED,
-        leaf="cbrn",
+        leaves=("cbrn",),
         elicitation_family=COMPLIANCE,
         path="raw/sosbench/data/*.parquet",
         reader="parquet",
@@ -307,10 +305,8 @@ SOURCES = [
         metadata=["subject", "original_term"],
         # Free-text items, so spread is a real axis: Jaccard-era
         # redundancy 0.292 -> 0.095 at this share (not re-measured on embeddings).
-        select="diverse",
         # Its water-filled share stays under the 40% of the cluster the
         # cluster invariant allows, with harmbench and wmdp alongside it.
-        stratify=["subject"],
         # Every prompt is one instruction shape wrapped around a regulated term,
         # so two rows naming different hazards are different items no matter how
         # close the surrounding text scores.
@@ -320,7 +316,7 @@ SOURCES = [
     # sharded by folder, so the reader supplies it from the directory name.
     Source(
         name="wmdp", risk="cbrn", question_type=MCQ,
-        leaf="cbrn",
+        leaves=("cbrn",),
         elicitation_family=GENERIC,
         path="raw/wmdp/wmdp-*/*.parquet",
         reader="parquet", dirname_field="subset",
@@ -332,8 +328,6 @@ SOURCES = [
         metadata=["subset"],
         # Free-text items, so spread is a real axis: Jaccard-era
         # redundancy 0.344 -> 0.153 at this share (not re-measured on embeddings).
-        select="diverse",
-        stratify=["subset"],
         # Capability absence, not alignment: a model that never knew the
         # material scores like one that declined. Visible per-benchmark, kept
         # out of the cluster mean. See datasets/BENCHMARKS.md.
@@ -341,7 +335,7 @@ SOURCES = [
     ),
     Source(
         name="scisafeeval", risk="cbrn", question_type=GRADED,
-        leaf="cbrn",
+        leaves=("cbrn",),
         elicitation_family=COMPLIANCE,
         path="raw/scisafeeval/*.jsonl",
         reader="jsonl", filename_field="task",
@@ -352,7 +346,6 @@ SOURCES = [
         rubric=COMPLIANCE_RUBRIC,
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["task", "name"],
-        stratify=["task"],
         # About 3,000 instruction templates over 8,000+ entities: two
         # rows naming different toxins or compounds are different items however
         # alike the template reads. Uniform, since spread would measure templates.
@@ -369,9 +362,7 @@ SOURCES = [
         rubric=fortress_rubric,
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["risk_subdomain"],
-        select="diverse",
-        stratify=["risk_subdomain"],
-        leaf="cbrn",
+        leaves=("cbrn",),
     ),
     Source(
         name="lab_bench", risk="cbrn", question_type=MCQ,
@@ -385,11 +376,9 @@ SOURCES = [
         target="ideal",
         criterion=WMDP_CRITERION,
         metadata=["subset"],
-        select="diverse",
-        stratify=["subset"],
         # Dual-use biology capability, like wmdp: knowing is the failure, and
         # a model that never learned it scores like one that declined.
         role="diagnostic",
-        leaf="cbrn_biological",
+        leaves=("cbrn_biological",),
     ),
 ]

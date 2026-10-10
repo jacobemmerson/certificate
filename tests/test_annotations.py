@@ -78,5 +78,5 @@ class CheckedInExportTest(unittest.TestCase):
         loaded = annotations.load_annotations()
         for source in SOURCES:
             with self.subTest(source=source.name):
-                self.assertTrue(annotations.manifest_name(source.path) in loaded or source.leaf,
+                self.assertTrue(annotations.manifest_name(source.path) in loaded or source.leaves,
                                 f"{source.name}: no annotation and no leaf")

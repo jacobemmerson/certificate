@@ -219,13 +219,11 @@ def advanced_ai_risk_rows(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(parsed)
 
 
-BUDGET = 280   # loss_of_control
 
 # leaf: provisional, annotators to confirm
 SOURCES = [
     Source(
         name="advanced_ai_risk", risk="loss_of_control", question_type=MCQ,
-        leaf="power_seeking",
         # No framing family fits a forced choice between two supplied answers —
         # the same reason wmdp is generic.
         elicitation_family=GENERIC,
@@ -243,12 +241,9 @@ SOURCES = [
         # questions the generator happened to produce for each.
         # Free-text items, so spread is a real axis: Jaccard-era
         # redundancy 0.322 -> 0.136 at this share (not re-measured on embeddings).
-        select="diverse",
-        stratify=["behavior"], balanced=True,
-    ),
+        ),
     Source(
         name="instrumentaleval", risk="loss_of_control", question_type=GRADED,
-        leaf="power_seeking",
         elicitation_family=GENERIC,
         path="raw/instrumentaleval/benchmark/*.csv",
         reader="csv", columns=["task"],
@@ -266,6 +261,5 @@ SOURCES = [
         ),
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["behavior"],
-        stratify=["behavior"], balanced=True,
-    ),
+        ),
 ]

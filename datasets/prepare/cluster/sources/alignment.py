@@ -218,7 +218,6 @@ def privacylens_rows(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-BUDGET = 600   # alignment
 SYSTEMIC = False   # provisional cluster: scored per risk, excluded from model-level headlines
 
 # sorry_bench and decodingtrust are HF-gated and not fetched yet; register them
@@ -227,7 +226,6 @@ SYSTEMIC = False   # provisional cluster: scored per risk, excluded from model-l
 SOURCES = [
     Source(
         name="beavertails", risk="alignment", question_type=GRADED,
-        leaf="harmful_deployment",
         elicitation_family=COMPLIANCE,
         path="raw/beavertails/v1/test.jsonl.xz",
         reader="jsonl",
@@ -236,14 +234,11 @@ SOURCES = [
         rubric=COMPLIANCE_RUBRIC,
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["category"],
-        select="diverse",
-        stratify=["category"],
-    ),
+        ),
     # English only: the multilingual rewrite family already varies language,
     # and the nine translations are the same 315 items.
     Source(
         name="multijail", risk="alignment", question_type=GRADED,
-        leaf="harmful_deployment",
         elicitation_family=COMPLIANCE,
         path="raw/multijail/MultiJail.csv",
         reader="csv",
@@ -254,11 +249,9 @@ SOURCES = [
         rubric=COMPLIANCE_RUBRIC,
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["tags", "source"],
-        select="diverse",
     ),
     Source(
         name="medsafetybench", risk="alignment", question_type=GRADED,
-        leaf="lawlessness",
         elicitation_family=COMPLIANCE,
         path="raw/medsafetybench/datasets/test/*/med_safety_demonstrations_category_*.csv",
         reader="csv", filename_field="category", dirname_field="generator",
@@ -268,12 +261,9 @@ SOURCES = [
         rubric=COMPLIANCE_RUBRIC,
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["category", "generator"],
-        select="diverse",
-        stratify=["category"],
-    ),
+        ),
     Source(
         name="bbq", risk="alignment", question_type=MCQ,
-        leaf="discriminatory_bias",
         path="raw/bbq/data/*.jsonl",
         reader="jsonl",
         transform=bbq_rows,
@@ -283,16 +273,12 @@ SOURCES = [
         target="biased",
         criterion=lambda r: BBQ_CRITERION.format(target=r["biased"]),
         metadata=["category", "question_polarity"],
-        stratify=["category"],
         # Each context ships with a negative and a non-negative question whose
         # biased answers point at different people.
         distinct_on=["question_polarity"],
-        # A refusal is the correct answer here; the screen would select on the outcome.
-        screen=False,
     ),
     Source(
         name="truthfulqa", risk="alignment", question_type=GRADED,
-        leaf="hallucination_misinformation",
         path="raw/truthfulqa/generation/*.parquet",
         reader="parquet",
         query="question",
@@ -303,15 +289,11 @@ SOURCES = [
         rubric=TRUTHFULQA_RUBRIC,
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["category", "type"],
-        stratify=["category"],
         # Pooled, not diagnostic: repeating an imitative falsehood on the
         # adversarial half is a propensity, and misinformation is a propensity leaf.
-        # A refusal is the correct answer here; the screen would select on the outcome.
-        screen=False,
     ),
     Source(
         name="confaide", risk="alignment", question_type=GRADED,
-        leaf="lawlessness",
         path="raw/confaide/benchmark/tier_[34].txt",
         reader="text", filename_field="tier",
         transform=confaide_rows,
@@ -320,13 +302,9 @@ SOURCES = [
         rubric=LEAKAGE_RUBRIC,
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["tier", "info_type"],
-        stratify=["tier"],
-        # A refusal is the correct answer here; the screen would select on the outcome.
-        screen=False,
     ),
     Source(
         name="privacylens", risk="alignment", question_type=GRADED,
-        leaf="lawlessness",
         path="raw/privacylens/main_data.json",
         reader="json",
         transform=privacylens_rows,
@@ -336,8 +314,5 @@ SOURCES = [
         rubric=LEAKAGE_RUBRIC,
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["source_type", "final_action"],
-        stratify=["source_type"],
-        # A refusal is the correct answer here; the screen would select on the outcome.
-        screen=False,
     ),
 ]

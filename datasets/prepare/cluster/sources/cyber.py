@@ -293,14 +293,12 @@ def redcode_rows(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-BUDGET = 600   # cyber
 
-# leaf: provisional, annotators to confirm
 SOURCES = [
     Source(
         name="cysecbench", risk="cyber", question_type=GRADED,
-        leaf="cyber_operational_use",
         elicitation_family=COMPLIANCE,
+        leaves=("cyber_operational_use",),  # not in annotations.json
         path="raw/cysecbench/Dataset/Full dataset/cysecbench.csv",
         reader="csv",
         query="Prompt",
@@ -310,12 +308,9 @@ SOURCES = [
         metadata=["Category"],
         # Free-text items, so spread is a real axis: Jaccard-era
         # redundancy 0.293 -> 0.094 at this share (not re-measured on embeddings).
-        select="diverse",
-        stratify=["Category"],
-    ),
+        ),
     Source(
         name="cyberseceval_mitre", risk="cyber", question_type=GRADED,
-        leaf="cyber_operational_use",
         elicitation_family=COMPLIANCE,
         path="raw/cyberseceval_3/CybersecurityBenchmarks/datasets/mitre/"
              "mitre_benchmark_100_per_category_with_augmentation.json",
@@ -333,11 +328,9 @@ SOURCES = [
         # 0.276 -> 0.202 here (not re-measured on embeddings), because every
         # prompt is the same JSON wrapper around a varying attack
         # description, so much of the measured distance was wrapper, not item.
-        stratify=["mitre_category"],
-    ),
+        ),
     Source(
         name="agentharm", risk="cyber", question_type=GRADED,
-        leaf="cyber_operational_use",
         elicitation_family=COMPLIANCE,
         path="raw/agentharm/benchmark/harmful_behaviors_*.json",
         reader="json", record_path="behaviors", filename_field="split",
@@ -349,12 +342,10 @@ SOURCES = [
         rubric=COMPLIANCE_RUBRIC,
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["category", "name", "split", "detailed_prompt", "hint_included"],
-        stratify=["category"],
         distinct_on=["detailed_prompt", "hint_included"],
     ),
     Source(
         name="cyber_false_refusal", risk="cyber", question_type=DETECTION,
-        leaf="cyber_operational_use",
         detector=REFUSAL_REGEX,
         elicitation_family=GENERIC,
         path="raw/cyberseceval_3/CybersecurityBenchmarks/datasets/mitre_frr/"
@@ -366,7 +357,6 @@ SOURCES = [
         # Free-text benign requests, and only a small share of the 750 is kept: Jaccard-era
         # redundancy 0.455 -> 0.253 (not re-measured on embeddings), so
         # spreading covers materially more of the benign-request space than a uniform draw of the same size.
-        select="diverse",
         # A counter-metric: averaging it with cysecbench would let a
         # blanket-refusing model cancel out to mid-range and conceal both
         # halves. Visible per-benchmark, kept out of the cluster mean.
@@ -374,7 +364,6 @@ SOURCES = [
     ),
     Source(
         name="injecagent", risk="cyber", question_type=DETECTION,
-        leaf="misalignment_intent",
         detector=REACT_ATTACKER_TOOL_CALL,
         elicitation_family=GENERIC,
         path="raw/injecagent/data/test_cases_*_base.json",
@@ -388,7 +377,6 @@ SOURCES = [
         ),
         metadata=["attack", "Attack Type", "attacker_tools", "user_tool",
                   "attacker_instruction"],
-        stratify=["Attack Type"],
         # Susceptibility, not intent: the model is asked to do something benign
         # while an attacker tries to redirect it. Pooling it with cysecbench
         # mixes refusing a harmful request with resisting a hijack.
@@ -396,7 +384,6 @@ SOURCES = [
     ),
     Source(
         name="redcode_gen", risk="cyber", question_type=GRADED,
-        leaf="cyber_exploit_generation",
         elicitation_family=COMPLIANCE,
         path="raw/redcode/dataset/RedCode-Gen/**/*.py",
         reader="text", dirname_field="family", filename_field="file",
@@ -408,7 +395,6 @@ SOURCES = [
         rubric=COMPLIANCE_RUBRIC,
         categories=YES_NO, scale_map=YES_NO_MAP,
         metadata=["family"],
-        stratify=["family"],
         # Rewrites of a Python stub are not meaningful perturbations; persona is dropped by the system prompt anyway.
         families=["framing", "reconsideration", "scenario"],
     ),

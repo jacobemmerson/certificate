@@ -339,8 +339,6 @@ class Source:
     # Stage-2/3 families that apply to this source's rows. None = derive from
     # question_type (families_for).
     families: Sequence[str] | None = None
-    # Hermes answerability screen (prepare.py tier 3b). None = derive (screened).
-    screen: bool | None = None
     # The closing instruction or question. Rendered into prompt_template after
     # the item, so a rewrite can never drop it.
     ask: Derived | None = None
@@ -348,46 +346,18 @@ class Source:
     # token, a misattributed name). Per-row via a callable.
     must_survive: Sequence[str] | Callable[[dict], list[str]] = ()
 
-    # selection
-    stratify: Sequence[str] = ()
-    quota: int | None = None
-    # Rows sharing a group_key value are selected or dropped together, and the
-    # quota counts *groups* rather than rows. Needed wherever rows are only
-    # meaningful as a set: the three persona arms of one scenario are compared
-    # against each other, so sampling them independently would leave arms
-    # unpaired and make the comparison meaningless.
+    # Rows sharing a group_key value are kept or dropped together: the three
+    # persona arms of one scenario are compared against each other, so
+    # selecting them independently would leave arms unpaired.
     group_key: str | None = None
-    balanced: bool = False   # even allocation per stratum, not proportional
-    leaf: str | None = None  # id of the leaves.toml leaf this source serves, copied into meta.sources
-    relevance: float | None = None  # how representative of its leaf, in (0, 1]; None = role default
-
-    # How a stratum's allotment is filled, once `_allocate` has decided how many
-    # rows it gets.
-    #
-    #   uniform  every item equally likely, ordered by a stable hash of its id
-    #   diverse  greedy farthest-point, maximising the spread of what is kept
-    #
-    # Diverse is opt-in rather than the default because it only pays where the
-    # query text *is* the item. On the template-shaped sources — persusafety's
-    # fixed greeting, the leader-favourability scale, injecagent's ReAct
-    # scaffold — every row reads almost identically by construction, so lexical
-    # distance measures the wrapper and spreading on it just picks whichever
-    # rows word their boilerplate oddly. Measured on the Jaccard build (not yet
-    # re-measured on embeddings): it roughly halves redundancy on the six
-    # free-text sources and moves the templated ones barely at all.
-    #
-    # Diverse selection compares the same payload near-dedup does, so a source
-    # that declares `dedup_on` is spread by that field rather than by the
-    # instruction wrapped around it.
-    select: str = "uniform"
-
-    # near-dedup controls. Defaults are deliberately conservative — a false
-    # merge silently deletes coverage, while a missed duplicate only wastes a
-    # sample.
-    dedup: bool = True
-    dedup_on: str | None = None      # metadata field to compare instead of `query`
-    distinct_on: Sequence[str] = ()  # differing values here => never duplicates
-    tau: float | None = None         # per-source cosine threshold (default COSINE_TAU)
+    # Leaves (leaves.toml ids) this source is scored against when it has no
+    # annotation in annotations.json, or to override one (the CBRN cluster:
+    # the label config offered no CBRN choice). Scored at DEFAULT_RELEVANCE.
+    leaves: Sequence[str] = ()
+    # Differing values here mean two rows are different items however alike
+    # they read (exact_dedup): the persona arms of one scenario share a user
+    # message and differ only in the system prompt.
+    distinct_on: Sequence[str] = ()
 
     def families_for(self, system_prompt: str | None) -> list[str]:
         '''
@@ -412,19 +382,6 @@ class Source:
                 "reconsideration", "scenario",
             ]
         return [family for family in declared if not (family == "persona" and system_prompt)]
-
-    def screened(self) -> bool:
-        '''
-        Whether prepare.py drops candidates Hermes refuses: only where a refusal
-        means the item carries no signal, i.e. compliance and generic graded/mcq
-        asks. Not opinion or judgment (the position is the construct), not
-        detection (refusal is the signal for cyber_false_refusal; token and tool
-        contracts elsewhere), not extraction.
-        '''
-        if self.screen is not None:
-            return self.screen
-        return (self.question_type in (GRADED, MCQ)
-                and self.elicitation_family in (COMPLIANCE, GENERIC))
 
     def resolve(self, row: dict, spec: Any) -> Any:
         '''Apply a `Derived` spec against a raw row: call it, or look it up.'''
