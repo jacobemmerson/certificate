@@ -1,15 +1,13 @@
 # Contributing a New Benchmark
 
-Benchmarks are evaluated in **risk clusters**, not one task per benchmark. Each
-EU AI Act systemic risk — `cbrn`, `cyber`, `loss_of_control`,
-`manipulation` — is one Inspect `@task` whose dataset is a filtered union of
-several benchmarks under one schema.
-`alignment` is a provisional fifth cluster for benchmarks whose taxonomy leaves
-(values, bias, misinformation, privacy/lawfulness) fit none of the four systemic
-risks; it is scored beside them until the leaf mapping lands.
+Benchmarks are evaluated per **Code of Practice leaf**, not one task per
+benchmark. Each leaf in `datasets/prepare/cluster/leaves.toml` that at least one
+benchmark serves is one Inspect `@task` whose dataset is a filtered union of the
+benchmarks the annotators assigned to it, under one schema. Which leaves make up
+a systemic risk is a human mapping still to come.
 
 **So adding a benchmark changes nothing in `pipeline/`.** It is one `Source(...)`
-entry in `datasets/prepare/cluster/sources/<risk>.py`, plus data under
+entry in one of the `datasets/prepare/cluster/sources/*.py` modules, plus data under
 `datasets/raw/`. No `@task` file, no registry entry, no adapter, no scorer.
 
 > **If you have contributed here before**, the old flow (write a task file,
@@ -58,7 +56,8 @@ Record the licence in the manifest note. The public CSVs are not redistributed, 
 
 ## 2. Write the `Source(...)`
 
-One entry in `datasets/prepare/cluster/sources/<risk>.py`. The readers cover
+One entry in a `datasets/prepare/cluster/sources/*.py` module (the module split is only for
+reading; the pipeline sees one flat registry). The readers cover
 csv / jsonl / json / parquet and globs, so most benchmarks are configuration
 only:
 
@@ -216,37 +215,37 @@ ship.
 ## 7. Build, test, run
 
 ```bash
-# build your cluster (all risks if you omit --risk)
-uv run python3 -m datasets.prepare.cluster.prepare --risk cyber
+# build the leaves your benchmark serves (every leaf if you omit --leaf)
+uv run python3 -m datasets.prepare.cluster.prepare --leaf cyber_operational_use
 
 # the suite: polarity, template invariants, dedup, doc consistency
 uv run python3 -m unittest discover tests
 
 # cheap smoke run — no model calls at all
-PYTHONPATH=. uv run inspect eval pipeline/stage1_evaluation/evals/clusters.py@cluster -T risk=cyber \
+PYTHONPATH=. uv run inspect eval pipeline/stage1_evaluation/evals/clusters.py@cluster -T leaf=cyber_operational_use \
     --model mockllm/model -T grader=mockllm/model --limit 5
 
 # real run, 2 samples, results NOT written to models.json
-uv run python3 certify.py -m <target-model> -g <grader-model> --only cyber --limit 2
+uv run python3 certify.py -m <target-model> -g <grader-model> --only cyber_operational_use --limit 2
 ```
 
-Check the build report before anything else: `loaded` / `exact` / `cross` / `leaves` /
-`theta` / `floor` / `kept` / `thr` / `red` per source. A large `exact` drop means missing
+Check the build report before anything else: `loaded` / `exact` / `cross` / `rel` /
+`rank` / `cut` / `guard` / `kept` / `thr` / `red` per source. A large `exact` drop means missing
 `distinct_on` (step 2). Any `cross` drop means your source ships prompts an earlier
-source in the same cluster already ships — worth checking whether it is vendoring
-another benchmark before you tune anything. `leaves` is how many leaves the annotation
-(or your `leaves=`) assigned; `theta` the score a row had to reach and `floor` whether
-the 1% floor set it; `thr` and `red` the rows dropped below theta and dropped as
-near-copies of rows already kept. A `red` count near `kept` means the source is templated
-and its rows embed alike; that is expected, not a defect. `<risk>.dropped.jsonl` tags every
+source in the same leaf already ships — worth checking whether it is vendoring
+another benchmark before you tune anything. `rel` is the (benchmark, leaf) relevance from
+the annotation (0.5 for a hand `leaves=`); `rank` how many units that share is, `cut` the
+score a row had to reach and `guard` whether the leaf's off-topic guard raised it; `thr` and
+`red` the rows dropped below the cut and dropped as near-copies of rows already kept. A `red` count near `kept` means the source is templated
+and its rows embed alike; that is expected, not a defect. `<leaf>.dropped.jsonl` tags every
 record with its `tier` (`exact`, `exact_cross_source`, `threshold`, `redundant`), so the
 constants are reviewable rather than trusted.
 
 `prepare.py` exits 2 when the embedding cache is missing an item or anchor and prints
 the command to run; the sequence is in `datasets/BENCHMARKS.md § Sampling`.
 
-`--only` takes risk names. Your benchmark appears in
-`models/results/<model_id>.json` under `results.<risk>.benchmarks.<your_benchmark>`.
+`--only` takes leaf ids. Your benchmark appears in
+`models/results/<model_id>.json` under `results.<leaf>.benchmarks.<your_benchmark>`.
 
 ## 8. Scoring conventions
 

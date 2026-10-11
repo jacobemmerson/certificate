@@ -15,7 +15,7 @@ import unittest
 import pipeline.artifacts as artifacts
 from datasets.prepare.cluster.schema import COLUMNS
 from pipeline.generation import SampleView, generate_framing, generate_persona
-from pipeline.stage1_evaluation.evals.clusters import RISKS, available, cluster
+from pipeline.stage1_evaluation.evals.clusters import LEAVES, available, cluster
 from pipeline.stage2_perturbation.adapters import render
 from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY
 
@@ -31,7 +31,7 @@ def _ids(rows_by_id: dict[str, list[dict]], real_only: bool) -> set[str]:
 class TestArtifactsAreCurrent(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tasks = {risk: cluster(risk, grader="openai/gpt-4o") for risk in RISKS if available(risk)}
+        cls.tasks = {risk: cluster(risk, grader="openai/gpt-4o") for risk in LEAVES if available(risk)}
 
     def test_csv_header_is_the_schema(self):
         for risk in self.tasks:

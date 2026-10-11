@@ -1,10 +1,7 @@
 '''
-alignment — provisional home for value-alignment benchmarks.
-
-These sources measure taxonomy leaves (misalignment with human values,
-discriminatory bias, misinformation, lawlessness and privacy) that fit none of
-the four risk clusters, so they are pooled here only until the leaf mapping
-assigns each one a permanent cluster.
+Value-alignment benchmarks: misalignment with human values, discriminatory
+bias, misinformation, lawlessness and privacy. The module split is only for
+reading; each source is sampled into the leaves its annotation names.
 '''
 
 import ast
@@ -218,14 +215,13 @@ def privacylens_rows(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-SYSTEMIC = False   # provisional cluster: scored per risk, excluded from model-level headlines
 
 # sorry_bench and decodingtrust are HF-gated and not fetched yet; register them
 # here once they are.
 # leaf: provisional, annotators to confirm
 SOURCES = [
     Source(
-        name="beavertails", risk="alignment", question_type=GRADED,
+        name="beavertails", question_type=GRADED,
         elicitation_family=COMPLIANCE,
         path="raw/beavertails/v1/test.jsonl.xz",
         reader="jsonl",
@@ -238,7 +234,7 @@ SOURCES = [
     # English only: the multilingual rewrite family already varies language,
     # and the nine translations are the same 315 items.
     Source(
-        name="multijail", risk="alignment", question_type=GRADED,
+        name="multijail", question_type=GRADED,
         elicitation_family=COMPLIANCE,
         path="raw/multijail/MultiJail.csv",
         reader="csv",
@@ -251,7 +247,7 @@ SOURCES = [
         metadata=["tags", "source"],
     ),
     Source(
-        name="medsafetybench", risk="alignment", question_type=GRADED,
+        name="medsafetybench", question_type=GRADED,
         elicitation_family=COMPLIANCE,
         path="raw/medsafetybench/datasets/test/*/med_safety_demonstrations_category_*.csv",
         reader="csv", filename_field="category", dirname_field="generator",
@@ -263,7 +259,7 @@ SOURCES = [
         metadata=["category", "generator"],
         ),
     Source(
-        name="bbq", risk="alignment", question_type=MCQ,
+        name="bbq", question_type=MCQ,
         path="raw/bbq/data/*.jsonl",
         reader="jsonl",
         transform=bbq_rows,
@@ -278,7 +274,7 @@ SOURCES = [
         distinct_on=["question_polarity"],
     ),
     Source(
-        name="truthfulqa", risk="alignment", question_type=GRADED,
+        name="truthfulqa", question_type=GRADED,
         path="raw/truthfulqa/generation/*.parquet",
         reader="parquet",
         query="question",
@@ -293,7 +289,7 @@ SOURCES = [
         # adversarial half is a propensity, and misinformation is a propensity leaf.
     ),
     Source(
-        name="confaide", risk="alignment", question_type=GRADED,
+        name="confaide", question_type=GRADED,
         path="raw/confaide/benchmark/tier_[34].txt",
         reader="text", filename_field="tier",
         transform=confaide_rows,
@@ -304,7 +300,7 @@ SOURCES = [
         metadata=["tier", "info_type"],
     ),
     Source(
-        name="privacylens", risk="alignment", question_type=GRADED,
+        name="privacylens", question_type=GRADED,
         path="raw/privacylens/main_data.json",
         reader="json",
         transform=privacylens_rows,

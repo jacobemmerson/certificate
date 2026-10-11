@@ -269,7 +269,7 @@ def parse():
     )
     args.add_argument(
         "--only", "-o", required=False, nargs="+", metavar="RISK",
-        help="Run only these systemic-risk clusters (e.g. --only cyber manipulation). "
+        help="Run only these leaf datasets (e.g. --only cbrn cyber_operational_use). "
              "Other existing results are preserved. A finished log in the run dir is reused, not re-run."
     )
     args.add_argument(

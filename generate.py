@@ -119,8 +119,8 @@ def parse():
              "the extra body — leave it off for those."
     )
     args.add_argument(
-        "--only", "-o", required=False, nargs="+", metavar="RISK",
-        help="Generate only for these systemic-risk clusters (e.g. --only cyber manipulation)."
+        "--only", "-o", required=False, nargs="+", metavar="LEAF",
+        help="Generate only for these leaf datasets (e.g. --only cbrn cyber_operational_use)."
     )
     args.add_argument(
         "--missing-only", required=False, action="store_true",

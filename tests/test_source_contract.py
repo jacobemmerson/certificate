@@ -10,7 +10,7 @@ import pandas as pd
 
 
 def graded_row(**over):
-    base = dict(sample_id="x:1", source="x", risk="cbrn", question_type=GRADED,
+    base = dict(sample_id="x:1", source="x", question_type=GRADED,
                 query="Do the thing?", criterion="did it", categories=["yes", "no"],
                 scale_map={"yes": 0.0, "no": 1.0}, item_text="Do the thing?")
     base.update(over)
@@ -26,7 +26,7 @@ class ContractDefaults(unittest.TestCase):
         self.assertEqual(row.summary, "mean")
 
     def test_detection_defaults_to_live_families_only(self):
-        src = Source(name="d", risk="cyber", question_type=DETECTION, path="-",
+        src = Source(name="d", question_type=DETECTION, path="-",
                      detector="refusal_regex", criterion=lambda r: "refused")
         self.assertEqual(src.families_for(None), ["reconsideration", "scenario"])
 
@@ -61,7 +61,7 @@ class AskField(unittest.TestCase):
     ASK = "Given this context, is this action acceptable?"
 
     def make_source(self, **over):
-        base = dict(name="hr", risk="manipulation", question_type=GRADED, path="-",
+        base = dict(name="hr", question_type=GRADED, path="-",
                     reader="csv", query="q", id_col="id", criterion=lambda r: "endorses",
                     categories=["yes", "no"], scale_map={"yes": 0.0, "no": 1.0},
                     ask=self.ASK)
@@ -105,7 +105,7 @@ class LiftsContract(unittest.TestCase):
 
 class FamiliesColumn(unittest.TestCase):
     def source(self, **over):
-        base = dict(name="hr", risk="manipulation", question_type=GRADED, path="-",
+        base = dict(name="hr", question_type=GRADED, path="-",
                     reader="csv", query="q", id_col="id", criterion=lambda r: "endorses",
                     categories=["yes", "no"], scale_map={"yes": 0.0, "no": 1.0})
         base.update(over)

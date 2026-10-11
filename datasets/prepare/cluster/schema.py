@@ -1,7 +1,7 @@
 '''
 The canonical cluster row: the one format every benchmark is flattened into.
 
-A cluster CSV (datasets/public/<risk>.csv) is a union of samples drawn from
+A leaf CSV (datasets/public/<leaf>.csv) is a union of samples drawn from
 several benchmarks. Stage 1 dispatches on `question_type` alone, so the pipeline
 never needs to know which benchmark a row came from.
 
@@ -60,7 +60,7 @@ DETECTORS = frozenset({
 })
 
 COLUMNS = [
-    "sample_id", "source", "risk", "question_type", "query",
+    "sample_id", "source", "leaf", "question_type", "query",
     "criterion", "rubric", "categories", "scale_map", "choices", "target",
     "fallback_categories", "fallback_scale_map",
     "detector", "system_prompt", "item_text", "prompt_template",
@@ -131,7 +131,6 @@ Rules:
 class Row:
     sample_id: str
     source: str
-    risk: str
     question_type: str
     query: str
     criterion: str = ""
@@ -173,6 +172,10 @@ class Row:
     pool: str = ""                  # sources sharing a pool enter the cluster mean once
     summary: str = "mean"           # a summary registered in scorers/source_metrics.py
     families: list[str] = field(default_factory=list)  # stage-2/3 families that apply (FAMILIES)
+    leaf: str = ""  # the dataset this row was selected into; set by the build
+    # Text the build scores for leaf similarity when the query itself is a poor
+    # proxy (a JSON wrapper, an answer cue); never written to the CSV.
+    scoring_text: str = ""
 
     def to_csv_row(self) -> dict:
         '''Flatten to a CSV row, JSON-encoding the structured columns.'''
@@ -180,7 +183,7 @@ class Row:
         for col in ("categories", "scale_map", "choices", "metadata",
                     "fallback_categories", "fallback_scale_map", "families"):
             row[col] = json.dumps(row[col], ensure_ascii=False, sort_keys=True)
-        return row
+        return {col: row[col] for col in COLUMNS}
 
 
 class SchemaError(ValueError):
@@ -293,11 +296,13 @@ Derived = str | Callable[[dict], Any]
 @dataclass(frozen=True)
 class Source:
     name: str
-    risk: str
     question_type: str
 
     # where the data is — path is relative to datasets/, glob allowed
     path: str
+    # Column or callable giving the text to score for leaf similarity instead of
+    # the query (Row.scoring_text). Sampling only; the prompt sent is unchanged.
+    scoring_text: Derived | None = None
     reader: str = "csv"
     columns: Sequence[str] | None = None
     record_path: str | None = None

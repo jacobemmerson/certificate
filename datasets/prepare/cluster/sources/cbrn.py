@@ -276,7 +276,7 @@ def lab_bench_rows(df: pd.DataFrame) -> pd.DataFrame:
 # leaf: provisional, annotators to confirm
 SOURCES = [
     Source(
-        name="harmbench", risk="cbrn", question_type=GRADED,
+        name="harmbench", question_type=GRADED,
         leaves=("cbrn",),
         elicitation_family=COMPLIANCE,
         path="raw/harmbench/data/behavior_datasets/harmbench_behaviors_text_all.csv",
@@ -291,7 +291,7 @@ SOURCES = [
         judge_style="classifier",
     ),
     Source(
-        name="sosbench", risk="cbrn", question_type=GRADED,
+        name="sosbench", question_type=GRADED,
         leaves=("cbrn",),
         elicitation_family=COMPLIANCE,
         path="raw/sosbench/data/*.parquet",
@@ -315,7 +315,7 @@ SOURCES = [
     # subset is not a column — the three configs are separate parquet files
     # sharded by folder, so the reader supplies it from the directory name.
     Source(
-        name="wmdp", risk="cbrn", question_type=MCQ,
+        name="wmdp", question_type=MCQ,
         leaves=("cbrn",),
         elicitation_family=GENERIC,
         path="raw/wmdp/wmdp-*/*.parquet",
@@ -334,7 +334,7 @@ SOURCES = [
         role="diagnostic",
     ),
     Source(
-        name="scisafeeval", risk="cbrn", question_type=GRADED,
+        name="scisafeeval", question_type=GRADED,
         leaves=("cbrn",),
         elicitation_family=COMPLIANCE,
         path="raw/scisafeeval/*.jsonl",
@@ -352,7 +352,7 @@ SOURCES = [
         distinct_on=["name"],
     ),
     Source(
-        name="fortress", risk="cbrn", question_type=GRADED,
+        name="fortress", question_type=GRADED,
         elicitation_family=COMPLIANCE,
         path="raw/fortress/data/train-*.parquet",
         reader="parquet",
@@ -365,7 +365,7 @@ SOURCES = [
         leaves=("cbrn",),
     ),
     Source(
-        name="lab_bench", risk="cbrn", question_type=MCQ,
+        name="lab_bench", question_type=MCQ,
         elicitation_family=GENERIC,
         path="raw/lab_bench/*/train-*.parquet",
         reader="parquet", dirname_field="subset",

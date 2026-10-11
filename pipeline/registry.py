@@ -1,4 +1,4 @@
-from pipeline.stage1_evaluation.evals.clusters import RISKS, available, cluster
+from pipeline.stage1_evaluation.evals.clusters import LEAVES, available, cluster
 
 from inspect_ai import Task
 
@@ -18,11 +18,11 @@ PREGENERATED_FAMILIES = ALL_PERTURB_FAMILIES - {"reconsideration"}
 
 def init_benchmarks(grader, llamaguard_model: str | None = None):
     '''
-    One entry per systemic-risk cluster, keyed by risk name.
+    One entry per leaf dataset, keyed by leaf id.
 
-    A cluster's dataset is a filtered union of several benchmarks under one
-    schema (datasets/public/<risk>.csv), so each entry holds a single task
-    rather than a list of per-benchmark ones. Risks whose dataset has not been
+    A leaf's dataset is a filtered union of several benchmarks under one
+    schema (datasets/public/<leaf>.csv), so each entry holds a single task
+    rather than a list of per-benchmark ones. Leaves whose dataset has not been
     built are skipped.
 
     `llamaguard_model` is accepted but unused: cluster tasks do not attach
@@ -31,9 +31,9 @@ def init_benchmarks(grader, llamaguard_model: str | None = None):
     than its generic taxonomy. See datasets/BENCHMARKS.md.
     '''
     return {
-        risk: {"tasks": [cluster(risk, grader=grader)], "name": risk}
-        for risk in RISKS
-        if available(risk)
+        leaf: {"tasks": [cluster(leaf, grader=grader)], "name": leaf}
+        for leaf in LEAVES
+        if available(leaf)
     }
 
 
@@ -52,7 +52,7 @@ def require_families_column(benchmarks: dict) -> None:
         raise SystemExit(
             f"datasets/public/{{{','.join(stale)}}}.csv predate the `families` column. Rebuild them "
             f"first (datasets/prepare/cluster/prepare.py): "
-            f"uv run python3 -m datasets.prepare.cluster.prepare --risk <risk>"
+            f"uv run python3 -m datasets.prepare.cluster.prepare --leaf <leaf>"
         )
 
 

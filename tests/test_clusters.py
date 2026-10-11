@@ -46,7 +46,8 @@ from datasets.prepare.cluster.schema import (
     validate,
 )
 from datasets.prepare.cluster.schema import Source
-from datasets.prepare.cluster.sources import RISKS, SOURCES, for_risk
+from datasets.prepare.cluster import sources as registry
+from datasets.prepare.cluster.sources import LEAVES, SOURCES, for_leaf
 from datasets.prepare.cluster.sources import loss_of_control
 from datasets.prepare.cluster.sources.manipulation import (
     ape_rows, darkbench_rows, favorability_scale_map, mentalmanip_rows,
@@ -75,7 +76,7 @@ POLARITY_EXEMPLARS = {
 
 def make_row(**overrides) -> Row:
     defaults = dict(
-        sample_id="src:1", source="src", risk="manipulation",
+        sample_id="src:1", source="src",
         question_type=GRADED, query="a question",
         criterion="The response does the bad thing.",
         categories=["yes", "no"], scale_map={"yes": 0.0, "no": 1.0},
@@ -184,7 +185,7 @@ class TestPerturbationSplit(unittest.TestCase):
     '''
 
     def test_template_reconstructs_query_for_every_built_row(self):
-        for risk in RISKS:
+        for risk in LEAVES:
             path = PUBLIC_DIR / f"{risk}.csv"
             if not path.exists():
                 continue
@@ -202,19 +203,20 @@ class TestPerturbationSplit(unittest.TestCase):
             with self.subTest(source=source.name):
                 self.assertIn(source.elicitation_family, ELICITATION_FAMILIES)
 
-    def test_manipulation_compliance_sources_opt_out_of_framing(self):
+    def test_artifact_compliance_sources_opt_out_of_framing(self):
         '''
         The compliance wrappers ask for a procedure. cbrn/cyber items already
-        ask for one, so the wrapper preserves the ask; manipulation's compliance
-        items ask for an artifact (a story, an essay), so it does not
-        (analysis/third_rater.md §3). They keep the family for the refusal floor.
+        ask for one, so the wrapper preserves the ask; compliance items that ask
+        for an artifact (a story, an essay) do not (analysis/third_rater.md §3).
+        They keep the family for the refusal floor.
         '''
+        artifact_sources = {"social_harm", "historical_revisionism", "darkbench", "ape"}
         for source in SOURCES:
             if source.elicitation_family != COMPLIANCE:
                 continue
             with self.subTest(source=source.name):
                 self.assertEqual(
-                    "framing" in source.families_for(None), source.risk != "manipulation"
+                    "framing" in source.families_for(None), source.name not in artifact_sources
                 )
 
     def test_rigid_wrappers_do_not_expose_the_contract_as_rewordable(self):
@@ -223,7 +225,7 @@ class TestPerturbationSplit(unittest.TestCase):
         perturbation must only ever see the statement/question — never the
         options block or the JSON instructions.
         '''
-        for risk in RISKS:
+        for risk in LEAVES:
             path = PUBLIC_DIR / f"{risk}.csv"
             if not path.exists():
                 continue
@@ -299,7 +301,7 @@ class TestFamilies(unittest.TestCase):
     '''`families` is the single stage-2/3 applicability gate (contract C1).'''
 
     def source(self, **overrides) -> Source:
-        return Source(**{"name": "src", "risk": "cbrn", "question_type": GRADED,
+        return Source(**{"name": "src", "question_type": GRADED,
                          "path": "unused", **overrides})
 
     def test_rewrite_families_are_pinned(self):
@@ -353,7 +355,7 @@ class TestGroupedSelection(unittest.TestCase):
 
     def grouped_source(self) -> Source:
         return Source(
-            name="paired", risk="manipulation", question_type=GRADED,
+            name="paired", question_type=GRADED,
             path="unused", metadata=["scenario_id", "arm"], group_key="scenario_id",
         )
 
@@ -373,7 +375,7 @@ class TestGroupedSelection(unittest.TestCase):
         units = prepare.units_for(self.grouped_source(), rows, scores, seed=0)
         self.assertEqual(sorted(unit.score for unit in units), [0.3, 0.6, 0.91, 0.95])
         embeddings = embedded(rows, [(1, 0, 0)] * 3 + [(0, 1, 0)] * 3 + [(0, 0, 1)] * 3 + [(1, 1, 1)] * 3)
-        kept, dropped = prepare.cluster_select(units, {"paired": 0.9}, embeddings)
+        kept, dropped = prepare.cluster_select(units, {"paired": 0.9}, embeddings, penalty_free=0.8)
         by_group = {}
         for row in kept:
             by_group.setdefault(row.metadata["scenario_id"], set()).add(row.metadata["arm"])
@@ -386,16 +388,15 @@ class TestGroupedSelection(unittest.TestCase):
         leaf = Leaf(id="lf", title="L", cop_ref="x", legal_text="law", exemplars=("ex",))
         embeddings = embedded(rows, [(1, 0), (0, 1), (0, 1), (0.6, 0.8)])
         anchors = {prepare.embed_key("law"): unit(1, 0), prepare.embed_key("ex"): unit(0, 1)}
-        scores = prepare.score_rows(self.grouped_source(), rows, {"lf": 0.5}, {"lf": leaf},
-                                    embeddings, anchors)
+        scores = prepare.score_rows(self.grouped_source(), rows, leaf, embeddings, anchors)
         self.assertEqual(scores.tolist(), [1.0, 1.0, 1.0, 1.0])
         self.assertEqual([row.metadata["relevance_own"] for row in rows], [1.0, 1.0, 1.0, 0.8])
 
     def test_built_persona_arms_are_never_partial(self):
         '''The same invariant, against the real built data.'''
-        path = PUBLIC_DIR / "manipulation.csv"
+        path = PUBLIC_DIR / "misalignment_values.csv"
         if not path.exists():
-            self.skipTest("manipulation.csv not built")
+            self.skipTest("misalignment_values.csv not built")
         arms = {}
         with open(path, newline="") as f:
             for record in csv.DictReader(f):
@@ -410,9 +411,9 @@ class TestGroupedSelection(unittest.TestCase):
                 self.assertEqual(personas, {"none", "individual-rights", "government-power"})
 
     def test_only_the_steered_arms_carry_a_system_prompt(self):
-        path = PUBLIC_DIR / "manipulation.csv"
+        path = PUBLIC_DIR / "manipulation_propensity.csv"
         if not path.exists():
-            self.skipTest("manipulation.csv not built")
+            self.skipTest("manipulation_propensity.csv not built")
         with open(path, newline="") as f:
             for record in csv.DictReader(f):
                 meta = json.loads(record["metadata"])
@@ -612,7 +613,7 @@ class TestAdvancedAIRisk(unittest.TestCase):
 
 class TestSourceResolve(unittest.TestCase):
 
-    source = Source(name="src", risk="cbrn", question_type=GRADED, path="unused")
+    source = Source(name="src", question_type=GRADED, path="unused")
 
     def test_column_names_resolve_and_sentences_pass_through(self):
         row = {"prompt": "hello"}
@@ -624,7 +625,7 @@ class TestSourceResolve(unittest.TestCase):
             self.source.resolve({"prompt": "hello"}, "promt")
 
     def test_missing_metadata_column_raises(self):
-        source = Source(name="src", risk="cbrn", question_type=GRADED, path="unused",
+        source = Source(name="src", question_type=GRADED, path="unused",
                         query="prompt", metadata=("absent",))
         with self.assertRaises(KeyError):
             prepare.rows_from_frame(source, pd.DataFrame({"prompt": ["hello"]}))
@@ -727,13 +728,16 @@ class TestTextHelpers(unittest.TestCase):
 class TestEmbeddingCache(unittest.TestCase):
 
     def source(self, **overrides) -> Source:
-        return Source(**{"name": "src", "risk": "cbrn", "question_type": GRADED,
+        return Source(**{"name": "src", "question_type": GRADED,
                          "path": "unused", **overrides})
 
     def test_texts_that_normalise_identically_share_one_key(self):
         self.assertEqual(prepare.embed_key("Sino-Vietnamese War (1979)"),
                          prepare.embed_key("sino vietnamese war 1979"))
         self.assertIsNone(prepare.embed_key(" -- "))
+
+    LEAF = Leaf(id="x", title="X", cop_ref="App 1.3(1)", legal_text="law", exemplars=("ex one",))
+    ANCHORS = {prepare.embed_key("law"): unit(1, 0), prepare.embed_key("ex one"): unit(0, 1)}
 
     def test_cache_miss_writes_input_and_names_the_command(self):
         rows = [make_row(sample_id="src:1", query="Alpha, beta?"),
@@ -742,44 +746,54 @@ class TestEmbeddingCache(unittest.TestCase):
         known = {prepare.embed_key("gamma"): unit(1, 0)}
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
             with self.assertRaises(prepare.CacheMiss) as raised:
-                prepare.require_embeddings("cbrn", [(self.source(), rows)], known, {})
-            lines = (Path(tmp) / "cbrn.embed_input.jsonl").read_text().splitlines()
+                prepare.require_embeddings([(self.source(), rows)], known, self.LEAF, self.ANCHORS)
+            lines = (Path(tmp) / "items.embed_input.jsonl").read_text().splitlines()
         self.assertEqual([json.loads(line) for line in lines],
                          [{"key": prepare.embed_key("alpha beta"), "text": "alpha beta"}])
         self.assertIn("--no-project", str(raised.exception))
-        self.assertIn("scripts/embed_items.py --risk cbrn", str(raised.exception))
+        self.assertIn("scripts/embed_items.py", str(raised.exception))
+
+    def test_misses_accumulate_across_builds(self):
+        '''A run over several leaves must leave every leaf's misses in the input, not the last one's.'''
+        first = [make_row(sample_id="src:1", query="alpha")]
+        second = [make_row(sample_id="src:2", query="beta")]
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
+            for rows in (first, second):
+                with self.assertRaises(prepare.CacheMiss):
+                    prepare.require_embeddings([(self.source(), rows)], {}, self.LEAF, self.ANCHORS)
+            written = [json.loads(line)["text"] for line in
+                       (Path(tmp) / "items.embed_input.jsonl").read_text().splitlines()]
+        self.assertEqual(sorted(written), ["alpha", "beta"])
 
     def test_nothing_missing_writes_nothing(self):
         rows = [make_row(query="gamma")]
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
-            prepare.require_embeddings("cbrn", [(self.source(), rows)], embedded(rows, [(1, 0)]), {},
-                                       leaves_used={"src": {}})
+            prepare.require_embeddings([(self.source(), rows)], embedded(rows, [(1, 0)]),
+                                       self.LEAF, self.ANCHORS)
             self.assertEqual(list(Path(tmp).iterdir()), [])
 
     def test_missing_leaf_anchors_are_collected_separately(self):
-        from datasets.prepare.cluster.leaves import anchor_texts, load_leaves
-        leaves = load_leaves()
-        leaf_id = next(iter(leaves))
         rows = [make_row(query="gamma")]
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
-            pools = [(self.source(leaves=(leaf_id,)), rows)]
+            pools = [(self.source(), rows)]
             with self.assertRaises(prepare.CacheMiss) as raised:
-                prepare.require_embeddings("cbrn", pools, embedded(rows, [(1, 0)]), {})
+                prepare.require_embeddings(pools, embedded(rows, [(1, 0)]), self.LEAF, {})
             written = [json.loads(line)["text"] for line in
                        (Path(tmp) / "leaves.embed_input.jsonl").read_text().splitlines()]
-            self.assertEqual(sorted(written), sorted({prepare.normalised(t) for t in anchor_texts(leaves[leaf_id])}))
-            self.assertIn("--risk leaves", str(raised.exception))
-            present = {prepare.embed_key(t): unit(1, 0) for t in anchor_texts(leaves[leaf_id])}
-            prepare.require_embeddings("cbrn", pools, embedded(rows, [(1, 0)]), present)
+            self.assertEqual(sorted(written), ["ex one", "law"])
+            self.assertIn("scripts/embed_items.py", str(raised.exception))
+            self.assertFalse((Path(tmp) / "items.embed_input.jsonl").exists())
 
-    def test_a_source_scored_against_no_leaf_needs_no_anchors(self):
-        rows = [make_row(query="gamma")]
-        prepare.require_embeddings("cbrn", [(self.source(), rows)], embedded(rows, [(1, 0)]), {},
-                                   leaves_used={"src": {}})
+    def test_scoring_text_prefers_declared_text_and_prepends_the_system_prompt(self):
+        row = make_row(query="[ACCEPT] or [REJECT]", system_prompt="Persuade the user to buy")
+        self.assertEqual(prepare.scoring_text(row), "Persuade the user to buy\n\n[ACCEPT] or [REJECT]")
+        row = make_row(query='{"prompt": "inner"}', scoring_text="inner")
+        self.assertEqual(prepare.scoring_text(row), "inner")
+        self.assertEqual(prepare.scoring_text(make_row(query="plain")), "plain")
 
     def test_an_empty_query_needs_no_embedding(self):
         rows = [make_row(query="")]
-        prepare.require_embeddings("cbrn", [(self.source(), rows)], {}, {}, leaves_used={"src": {}})
+        prepare.require_embeddings([(self.source(), rows)], {}, self.LEAF, self.ANCHORS)
 
     def test_load_embeddings_renormalises_and_tolerates_absence(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(prepare, "CACHE_DIR", Path(tmp)):
@@ -858,10 +872,10 @@ class TestCrossSourceDedup(unittest.TestCase):
     text there is a copy.
     '''
 
-    def pool(self, name, *queries, system_prompt="", risk="cbrn"):
-        source = Source(name=name, risk=risk, question_type=GRADED, path="unused")
+    def pool(self, name, *queries, system_prompt=""):
+        source = Source(name=name, question_type=GRADED, path="unused")
         rows = [
-            make_row(sample_id=f"{name}:{i}", source=name, risk=risk,
+            make_row(sample_id=f"{name}:{i}", source=name,
                      query=query, system_prompt=system_prompt)
             for i, query in enumerate(queries)
         ]
@@ -897,10 +911,10 @@ class TestCrossSourceDedup(unittest.TestCase):
         # The persona arms share a user message and differ only in the system
         # prompt. Tier 1 already ruled on them via distinct_on; this tier must
         # not overrule it.
-        source = Source(name="arms", risk="manipulation", question_type=GRADED,
+        source = Source(name="arms", question_type=GRADED,
                         path="unused")
         rows = [
-            make_row(sample_id=f"arms:{i}", source="arms", risk="manipulation",
+            make_row(sample_id=f"arms:{i}", source="arms",
                      query="the same scenario text", system_prompt=prompt)
             for i, prompt in enumerate(["", "defend individuals", "defend the state"])
         ]
@@ -930,7 +944,7 @@ class TestClusterUniqueness(unittest.TestCase):
     '''The property tier 1b exists to hold, asserted on the emitted CSVs.'''
 
     def test_no_two_sources_contribute_the_same_prompt(self):
-        for risk in RISKS:
+        for risk in LEAVES:
             path = PUBLIC_DIR / f"{risk}.csv"
             if not path.exists():
                 continue
@@ -950,35 +964,34 @@ class TestClusterUniqueness(unittest.TestCase):
 
 class TestMeta(unittest.TestCase):
 
-    def test_meta_records_constants_leaves_and_sources(self):
+    def test_meta_records_constants_leaf_and_sources(self):
         report = {"advanced_ai_risk": {
             "loaded": 10, "exact_dropped": 0, "cross_source_dropped": 0,
-            "leaves": {"x": 0.8}, "annotated": True, "theta": 0.9, "floor_used": False,
+            "relevance": 0.8, "annotated": True, "theta": 0.9, "rank": 5, "guard_used": False,
             "units": 10, "kept": 1, "threshold_dropped": 9, "redundant_dropped": 0,
-        }}
+        }, "_auc": 0.75, "_guard": 0.31, "_penalty_free": 0.7}
         leaf = Leaf(id="x", title="X", cop_ref="App 1.3(1)", legal_text="law",
                     exemplars=("a", "b", "c"), label="x label")
         with tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.object(prepare, "OUT_DIR", Path(tmp)), \
                 mock.patch.object(prepare, "load_leaves", return_value={"x": leaf}):
-            prepare.write_outputs("loss_of_control", [make_row(risk="loss_of_control")],
+            prepare.write_outputs("x", [make_row()],
                                   report, [{"tier": "threshold", "dropped": "a:1"}], seed=0)
-            meta = json.loads((Path(tmp) / "loss_of_control.meta.json").read_text())
-            dropped = (Path(tmp) / "loss_of_control.dropped.jsonl").read_text().splitlines()
+            meta = json.loads((Path(tmp) / "x.meta.json").read_text())
+            dropped = (Path(tmp) / "x.dropped.jsonl").read_text().splitlines()
         self.assertEqual(meta["embedding"], {
             "model": prepare.EMBEDDING_MODEL,
-            "cache": "datasets/cache/embeddings/loss_of_control.npz",
+            "cache": "datasets/cache/embeddings/items.npz",
         })
         self.assertEqual(meta["constants"], {
-            "threshold": prepare.THRESHOLD, "floor_fraction": prepare.FLOOR_FRACTION,
-            "penalty": prepare.PENALTY, "penalty_free": prepare.PENALTY_FREE,
+            "p_max": prepare.P_MAX, "floor_min": prepare.FLOOR_MIN, "penalty": prepare.PENALTY,
+            "hinge_quantile": prepare.HINGE_QUANTILE, "guard_quantile": prepare.GUARD_QUANTILE,
         })
-        self.assertEqual(meta["leaves"], {"x": {
-            "cop_ref": "App 1.3(1)", "label": "x label", "anchors": 4,
-            "anchor_keys": sorted(prepare.embed_key(t) for t in ("law", "a", "b", "c")),
-            "auc": None,
-        }})
-        self.assertEqual(meta["sources"], report)
+        self.assertEqual((meta["guard"], meta["penalty_free"]), (0.31, 0.7))
+        self.assertEqual((meta["leaf"], meta["cop_ref"], meta["label"], meta["anchors"], meta["auc"]),
+                         ("x", "App 1.3(1)", "x label", 4, 0.75))
+        self.assertEqual(meta["anchor_keys"], sorted(prepare.embed_key(t) for t in ("law", "a", "b", "c")))
+        self.assertEqual(meta["sources"], {"advanced_ai_risk": report["advanced_ai_risk"]})
         self.assertEqual((meta["rows"], meta["seed"]), (1, 0))
         self.assertFalse({"budget", "shortfall", "screen"} & set(meta))
         self.assertEqual(json.loads(dropped[0])["tier"], "threshold")
@@ -999,11 +1012,16 @@ class TestPremiseDependentCriteria(unittest.TestCase):
     '''
 
     def rows(self, source: str) -> list[dict]:
-        path = PUBLIC_DIR / "manipulation.csv"
-        if not path.exists():
-            self.skipTest("manipulation.csv not built")
-        with open(path, newline="") as f:
-            return [r for r in csv.DictReader(f) if r["source"] == source]
+        '''Every built row of `source`, from whichever leaf datasets hold it.'''
+        found = []
+        for leaf in LEAVES:
+            path = PUBLIC_DIR / f"{leaf}.csv"
+            if path.exists():
+                with open(path, newline="") as f:
+                    found.extend(r for r in csv.DictReader(f) if r["source"] == source)
+        if not found:
+            self.skipTest(f"no built leaf holds {source}")
+        return found
 
     def test_mimicry_criterion_does_not_quote_the_original_misattribution(self):
         rows = self.rows("sycophancy_mimicry")
@@ -1065,9 +1083,9 @@ class TestOrdinalFallbacks(unittest.TestCase):
                 self.assertEqual(max(fallback.values()), max(native.values()))
 
     def likert_rows(self):
-        path = PUBLIC_DIR / "manipulation.csv"
+        path = PUBLIC_DIR / "misalignment_values.csv"
         if not path.exists():
-            self.skipTest("manipulation.csv not built")
+            self.skipTest("misalignment_values.csv not built")
         with open(path, newline="") as f:
             rows = [r for r in csv.DictReader(f) if r["question_type"] == LIKERT]
         self.assertTrue(rows)
@@ -1082,22 +1100,22 @@ class TestRegistry(unittest.TestCase):
         names = [source.name for source in SOURCES]
         self.assertEqual(len(names), len(set(names)))
 
-    def test_declared_risks_are_known(self):
+    def test_every_source_serves_a_known_leaf(self):
+        from datasets.prepare.cluster.leaves import load_leaves
+        from datasets.prepare.cluster.sources import LEAF_RELEVANCE
+        known = load_leaves()
         for source in SOURCES:
             with self.subTest(source=source.name):
-                self.assertIn(source.risk, RISKS)
                 self.assertIn(source.question_type, QUESTION_TYPES)
+                self.assertTrue(LEAF_RELEVANCE[source.name])
+                self.assertLessEqual(set(LEAF_RELEVANCE[source.name]), set(known))
+        self.assertEqual(LEAVES, sorted({leaf for leaves in LEAF_RELEVANCE.values() for leaf in leaves}))
 
-    def test_risk_matches_defining_module(self):
-        '''RISKS is derived from module names, so a typo'd `risk=` would drop silently.'''
-        import importlib, pkgutil
-        from datasets.prepare.cluster import sources
-        for info in pkgutil.iter_modules(sources.__path__):
-            module = importlib.import_module(f"{sources.__name__}.{info.name}")
-            for source in getattr(module, "SOURCES", []):
-                with self.subTest(source=source.name):
-                    self.assertEqual(source.risk, info.name)
-        self.assertEqual(RISKS, sorted({source.risk for source in SOURCES}))
+    def test_for_leaf_pairs_every_source_with_its_relevance(self):
+        from datasets.prepare.cluster.sources import LEAF_RELEVANCE, for_leaf
+        for leaf in LEAVES:
+            for source, relevance in for_leaf(leaf):
+                self.assertEqual(relevance, LEAF_RELEVANCE[source.name][leaf])
 
     def test_distinct_and_group_fields_are_captured_in_metadata(self):
         for source in SOURCES:
@@ -1107,17 +1125,17 @@ class TestRegistry(unittest.TestCase):
 
 
 class TestPrintReport(unittest.TestCase):
-    def render(self, report: dict, rows: int = 7) -> list[str]:
+    def render(self, report: dict, rows: int = 7, leaf: str = LEAVES[0]) -> list[str]:
         import contextlib
         import io
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            prepare.print_report(RISKS[0], report, [mock.Mock()] * rows)
+            prepare.print_report(leaf, report, [mock.Mock()] * rows)
         return out.getvalue().splitlines()
 
     def stats(self, **overrides) -> dict:
         return {"loaded": 9, "exact_dropped": 1, "cross_source_dropped": 0,
-                "leaves": {"lf": 0.9}, "annotated": True, "theta": 0.9, "floor_used": False,
+                "relevance": 0.9, "annotated": True, "theta": 0.9, "rank": 5, "guard_used": False,
                 "units": 8, "kept": 7, "threshold_dropped": 1, "redundant_dropped": 0, **overrides}
 
     def test_total_prints_under_the_kept_column(self):
@@ -1129,14 +1147,14 @@ class TestPrintReport(unittest.TestCase):
 
     def test_columns_and_warnings(self):
         lines = self.render({
-            "a": self.stats(theta=0.6234, floor_used=True),
+            "a": self.stats(theta=0.6234, guard_used=True),
             "b": self.stats(kept=2, redundant_dropped=1),
-            "c": self.stats(leaves={"nolf": 0.5}),
+            "c": self.stats(relevance=0.5),
         })
         text = "\n".join(lines)
         row = next(l for l in lines if l.strip().startswith("a "))
-        self.assertEqual(row.split()[1:], ["9", "1", "0", "1", "0.623", "yes", "7", "1", "0"])
-        self.assertIn("[WARNING] a: floor used", text)
+        self.assertEqual(row.split()[1:], ["9", "1", "0", "0.90", "5", "0.623", "yes", "7", "1", "0"])
+        self.assertIn("[WARNING] a: guard bound", text)
         self.assertIn("[WARNING] b: only 2 rows kept", text)
         self.assertIn("[WARNING] b: 1 rows dropped as redundant against 2 kept", text)
         self.assertNotIn("[WARNING] c", text)
@@ -1144,13 +1162,12 @@ class TestPrintReport(unittest.TestCase):
     def test_leaf_without_exemplars_warns_once(self):
         leaf = Leaf(id="bare", title="B", cop_ref="x", legal_text="law")
         with mock.patch.object(prepare, "load_leaves", return_value={"bare": leaf}):
-            text = "\n".join(self.render({"a": self.stats(leaves={"bare": 0.5}),
-                                          "b": self.stats(leaves={"bare": 0.5})}))
+            text = "\n".join(self.render({"a": self.stats(), "b": self.stats()}, leaf="bare"))
         self.assertEqual(text.count("[WARNING] bare: no exemplars"), 1)
 
     def test_report_before_scoring_renders(self):
         lines = self.render({"src": {"loaded": 9, "exact_dropped": 0, "cross_source_dropped": 0,
-                                     "leaves": {}, "kept": 0}})
+                                     "kept": 0}})
         self.assertTrue(any(line.strip().startswith("src ") for line in lines))
 
 
@@ -1168,7 +1185,7 @@ class TestBuiltClusters(unittest.TestCase):
         generate.py batches stage-2/3 work off these files, so they must be
         readable with the standard library alone — no pandas, no eval framework.
         '''
-        for risk in RISKS:
+        for risk in LEAVES:
             if not (PUBLIC_DIR / f"{risk}.csv").exists():
                 continue
             with self.subTest(risk=risk), open(self.cluster_path(risk), newline="") as f:
@@ -1179,7 +1196,7 @@ class TestBuiltClusters(unittest.TestCase):
                     json.loads(row["metadata"])
 
     def test_rows_validate_and_ids_are_unique(self):
-        for risk in RISKS:
+        for risk in LEAVES:
             if not (PUBLIC_DIR / f"{risk}.csv").exists():
                 continue
             with self.subTest(risk=risk), open(self.cluster_path(risk), newline="") as f:
@@ -1187,7 +1204,7 @@ class TestBuiltClusters(unittest.TestCase):
                 for record in csv.DictReader(f):
                     row = Row(
                         sample_id=record["sample_id"], source=record["source"],
-                        risk=record["risk"], question_type=record["question_type"],
+                        question_type=record["question_type"],
                         query=record["query"], criterion=record["criterion"],
                         categories=json.loads(record["categories"]),
                         scale_map=json.loads(record["scale_map"]),
@@ -1207,12 +1224,12 @@ class TestBuiltClusters(unittest.TestCase):
 class TestDeterminism(unittest.TestCase):
 
     def test_same_seed_gives_identical_rows(self):
-        risk = next((r for r in RISKS if for_risk(r)), None)
+        risk = next((r for r in LEAVES if for_leaf(r)), None)
         try:
-            first, _, _ = prepare.build_risk(risk, seed=0)
+            first, _, _ = prepare.build_leaf(risk, seed=0)
         except prepare.CacheMiss:
             self.skipTest(f"{risk} caches not built; run prepare.py (it prints the commands)")
-        second, _, _ = prepare.build_risk(risk, seed=0)
+        second, _, _ = prepare.build_leaf(risk, seed=0)
         self.assertEqual(
             [row.sample_id for row in first], [row.sample_id for row in second]
         )
@@ -1515,87 +1532,80 @@ class TestLeaves(unittest.TestCase):
         annotations = load_annotations()
         for source in SOURCES:
             with self.subTest(source=source.name):
-                for leaf_id, r in prepare.source_leaves(source, annotations).items():
+                for leaf_id, r in registry.source_leaves(source, annotations).items():
                     self.assertIn(leaf_id, leaves)
                     self.assertTrue(0 < r <= 1)
                 for leaf_id in source.leaves:
                     self.assertIn(leaf_id, leaves)
 
     def test_hand_leaves_override_the_annotation(self):
-        source = Source(name="s", risk="cbrn", question_type=GRADED, path="raw/bbq/x",
+        source = Source(name="s", question_type=GRADED, path="raw/bbq/x",
                         leaves=("cbrn",))
-        self.assertEqual(prepare.source_leaves(source, {"bbq": {"discriminatory_bias": 0.9}}),
-                         {"cbrn": prepare.DEFAULT_RELEVANCE})
-        bare = Source(name="s", risk="cbrn", question_type=GRADED, path="raw/bbq/x")
-        self.assertEqual(prepare.source_leaves(bare, {"bbq": {"discriminatory_bias": 0.9}}),
+        self.assertEqual(registry.source_leaves(source, {"bbq": {"discriminatory_bias": 0.9}}),
+                         {"cbrn": registry.DEFAULT_RELEVANCE})
+        bare = Source(name="s", question_type=GRADED, path="raw/bbq/x")
+        self.assertEqual(registry.source_leaves(bare, {"bbq": {"discriminatory_bias": 0.9}}),
                          {"discriminatory_bias": 0.9})
         with self.assertRaises(SchemaError):
-            prepare.source_leaves(bare, {})
+            registry.source_leaves(bare, {})
 
 
 
 
 class TestScoring(unittest.TestCase):
 
-    def test_temperature_is_identity_at_half_and_monotone(self):
-        scores = np.array([0.0, 0.3, 0.6, 0.9, -0.2])
-        np.testing.assert_array_equal(prepare.smooth(scores, 0.5), [0.0, 0.3, 0.6, 0.9, 0.0])
-        lifted = prepare.smooth(scores, 1.0)
-        lowered = prepare.smooth(scores, 0.0)
-        self.assertTrue(np.all(lifted[:4] >= scores[:4]) and np.all(lowered[:4] <= scores[:4]))
-        self.assertEqual(lifted[:4].argsort().tolist(), scores[:4].argsort().tolist())
-        with self.assertRaises(ValueError):
-            prepare.smooth(scores, 1.5)
+    def test_cut_is_the_relevance_weighted_percentile_with_a_minimum(self):
+        scores = [1 - i / 1000 for i in range(1000)]   # 1.0, 0.999, ...
+        # r = 1: top 5% = rank 50; r = 0.4: rank 20; r = 0.02: 1 < FLOOR_MIN -> 5
+        self.assertEqual(prepare.source_cut(scores, 1.0, None), (scores[49], 50, False))
+        self.assertEqual(prepare.source_cut(scores, 0.4, None), (scores[19], 20, False))
+        self.assertEqual(prepare.source_cut(scores, 0.02, None), (scores[4], 5, False))
+        self.assertEqual(prepare.source_cut([0.4, 0.3], 1.0, None), (0.3, 2, False))
+        self.assertEqual(prepare.source_cut([], 1.0, None)[1:], (0, False))
 
-    def test_higher_relevance_pushes_more_rows_over_the_threshold(self):
-        scores = np.linspace(0.5, 0.95, 50)
-        over = lambda r: int((prepare.smooth(scores, r) >= prepare.THRESHOLD).sum())
-        self.assertGreater(over(1.0), over(0.5))
-        self.assertGreater(over(0.5), over(0.0))
+    def test_guard_raises_the_cut_but_never_lowers_it(self):
+        scores = [0.9, 0.5, 0.2, 0.1, 0.05]
+        self.assertEqual(prepare.source_cut(scores, 1.0, 0.3), (0.3, 5, True))
+        self.assertEqual(prepare.source_cut(scores, 1.0, 0.01), (0.05, 5, False))
 
-    def test_threshold_is_constant_when_enough_cross_else_the_floor_rank(self):
-        self.assertEqual(prepare.source_threshold([0.95, 0.92, 0.3]), (prepare.THRESHOLD, False))
-        scores = [0.8, 0.7, 0.6] + [0.1] * 297   # 300 units: floor rank 3
-        self.assertEqual(prepare.source_threshold(scores), (0.6, True))
-        self.assertEqual(prepare.source_threshold([0.4]), (0.4, True))
-        self.assertEqual(prepare.source_threshold([]), (prepare.THRESHOLD, False))
+    def test_guard_is_the_quantile_of_off_topic_scores(self):
+        leaf = Leaf(id="a", title="A", cop_ref="x", legal_text="law", exemplars=("ex",))
+        anchors = {prepare.embed_key("law"): unit(1, 0), prepare.embed_key("ex"): unit(0, 1)}
+        pool = {prepare.embed_key("p")}
+        embeddings = {prepare.embed_key("p"): unit(1, 0)}
+        # 100 off-topic items whose best anchor cosine runs 0.00 .. 0.99
+        for i in range(100):
+            c = i / 100
+            embeddings[prepare.embed_key(f"o{i}")] = unit(c, np.sqrt(1 - c * c))
+        guard = prepare.on_topic_guard(leaf, pool, embeddings, anchors)
+        self.assertAlmostEqual(guard, np.percentile([max(i / 100, np.sqrt(1 - (i / 100) ** 2)) for i in range(100)], prepare.GUARD_QUANTILE), places=5)
+        self.assertIsNone(prepare.on_topic_guard(leaf, set(embeddings), embeddings, anchors))
 
-    def test_score_rows_takes_the_best_leaf_and_records_it(self):
+    def test_hinge_starts_at_the_nearest_neighbour_quantile(self):
+        embeddings = {f"k{i}": unit(np.cos(i), np.sin(i)) for i in range(50)}
+        start = prepare.hinge_start(embeddings, seed=0, sample=50)
+        matrix = np.array([embeddings[k] for k in sorted(embeddings)])
+        sim = matrix @ matrix.T; np.fill_diagonal(sim, -np.inf)
+        self.assertAlmostEqual(start, np.percentile(sim.max(axis=1), prepare.HINGE_QUANTILE), places=5)
+        self.assertEqual(prepare.hinge_start({"k": unit(1, 0)}, seed=0), 1.0)
+
+    def test_score_rows_takes_the_best_anchor(self):
         rows = [make_row(sample_id="s:1", query="one"), make_row(sample_id="s:2", query="two")]
-        source = Source(name="s", risk="cbrn", question_type=GRADED, path="unused")
-        leaves = {
-            "a": Leaf(id="a", title="A", cop_ref="x", legal_text="law a", exemplars=("ex a",)),
-            "b": Leaf(id="b", title="B", cop_ref="x", legal_text="law b"),
-        }
-        embeddings = embedded(rows, [(1, 0), (0, 1)])
-        anchors = {prepare.embed_key("law a"): unit(1, 0), prepare.embed_key("ex a"): unit(0.8, 0.6),
-                   prepare.embed_key("law b"): unit(0, 1)}
-        scores = prepare.score_rows(source, rows, {"a": 0.5, "b": 1.0}, leaves, embeddings, anchors)
-        self.assertEqual(scores.tolist(), [1.0, 1.0])
-        self.assertEqual(rows[0].metadata["relevance_leaf"], "a")
+        source = Source(name="s", question_type=GRADED, path="unused")
+        leaf = Leaf(id="a", title="A", cop_ref="x", legal_text="law a", exemplars=("ex a",))
+        embeddings = embedded(rows, [(1, 0), (0.6, 0.8)])
+        anchors = {prepare.embed_key("law a"): unit(1, 0), prepare.embed_key("ex a"): unit(0.8, 0.6)}
+        scores = prepare.score_rows(source, rows, leaf, embeddings, anchors)
+        np.testing.assert_allclose(scores, [1.0, 0.96], atol=1e-6)
         self.assertEqual(rows[0].metadata["relevance_anchor"], "legal")
-        self.assertEqual(rows[1].metadata["relevance_leaf"], "b")
-        self.assertEqual(rows[1].metadata["relevance_anchor"], "legal")
-        # Row 3: cos 0.96 to leaf a's exemplar beats law b's 0.8 even after
-        # leaf b's r = 1.0 lifts it to 0.862. Row 4 is where the smoothing decides.
-        rows2 = [make_row(sample_id="s:3", query="three")]
-        emb2 = embedded(rows2, [(0.6, 0.8)])
-        prepare.score_rows(source, rows2, {"a": 0.5, "b": 1.0}, leaves, emb2, anchors)
-        self.assertEqual(rows2[0].metadata["relevance_leaf"], "a")
-        rows2 = [make_row(sample_id="s:4", query="four")]
-        # cos to ex a 0.908 > cos to law b 0.88, but 0.88 ** (1 / 1.5) = 0.918 wins.
-        emb2 = embedded(rows2, [(0.475, 0.88)])
-        prepare.score_rows(source, rows2, {"a": 0.5, "b": 1.0}, leaves, emb2, anchors)
-        self.assertEqual(rows2[0].metadata["relevance_leaf"], "b")
-        raw = 0.88 / np.sqrt(0.475 ** 2 + 0.88 ** 2)
-        self.assertAlmostEqual(rows2[0].metadata["relevance_raw"], raw, places=5)
-        self.assertAlmostEqual(rows2[0].metadata["relevance"], raw ** (1 / 1.5), places=5)
+        self.assertEqual(rows[1].metadata["relevance_anchor"], "exemplar:0")
+        self.assertAlmostEqual(rows[1].metadata["relevance"], 0.96, places=6)
 
 
 class TestClusterSelect(unittest.TestCase):
 
     def source(self, name: str) -> Source:
-        return Source(name=name, risk="cbrn", question_type=GRADED, path="unused")
+        return Source(name=name, question_type=GRADED, path="unused")
 
     def rows(self, name: str, n: int) -> list[Row]:
         return [make_row(sample_id=f"{name}:{i}", source=name, query=f"{name} item {i}") for i in range(n)]
@@ -1608,12 +1618,12 @@ class TestClusterSelect(unittest.TestCase):
         for source, source_rows in pools:
             units.extend(prepare.units_for(source, source_rows, np.array(scores[offset:offset + len(source_rows)]), seed))
             offset += len(source_rows)
-        kept, dropped = prepare.cluster_select(units, thetas, embeddings)
+        kept, dropped = prepare.cluster_select(units, thetas, embeddings, penalty_free=0.8)
         return [row.sample_id for row in kept], dropped
 
     def test_penalty_is_zero_below_penalty_free(self):
         pools = [(self.source("a"), self.rows("a", 2))]
-        # cosine 0.6 between the two rows: below PENALTY_FREE, no penalty
+        # cosine 0.6 between the two rows: below the 0.8 hinge start, no penalty
         kept, dropped = self.select(pools, [(1, 0), (0.6, 0.8)], [0.95, 0.91], {"a": 0.9})
         self.assertEqual(kept, ["a:0", "a:1"])
         self.assertEqual(dropped, [])
@@ -1670,7 +1680,7 @@ from datasets.prepare.cluster import prepare
 from datasets.prepare.cluster.leaves import Leaf
 from datasets.prepare.cluster.schema import GRADED, Row, Source
 
-rows = [Row(sample_id=f"s:{i}", source="s", risk="cbrn", question_type=GRADED, query=f"q {i}",
+rows = [Row(sample_id=f"s:{i}", source="s", question_type=GRADED, query=f"q {i}",
             criterion="bad", categories=["yes", "no"], scale_map={"yes": 0.0, "no": 1.0},
             item_text=f"q {i}") for i in range(40)]
 rng = np.random.default_rng(7)
@@ -1679,17 +1689,16 @@ embeddings = {prepare.embed_key(r.query): v.astype(np.float32) for r, v in zip(r
 leaf = Leaf(id="lf", title="L", cop_ref="x", legal_text="law", exemplars=("ex",))
 anchors = {prepare.embed_key("law"): vectors[0].astype(np.float32),
            prepare.embed_key("ex"): vectors[1].astype(np.float32)}
-source = Source(name="s", risk="cbrn", question_type=GRADED, path="raw/x/y", leaves=("lf",))
+source = Source(name="s", question_type=GRADED, path="raw/x/y", leaves=("lf",))
 out = Path(sys.argv[1])
-with mock.patch.object(prepare, "for_risk", return_value=[source]), \\
+with mock.patch.object(prepare, "for_leaf", return_value=[(source, 0.5)]), \\
         mock.patch.object(prepare, "load_source", return_value=rows), \\
-        mock.patch.object(prepare, "load_annotations", return_value={}), \\
         mock.patch.object(prepare, "load_leaves", return_value={"lf": leaf}), \\
         mock.patch.object(prepare, "load_embeddings", side_effect=lambda r: anchors if r == "leaves" else embeddings), \\
         mock.patch.object(prepare, "source_revisions", return_value={}), \\
         mock.patch.object(prepare, "OUT_DIR", out):
-    kept, report, dropped = prepare.build_risk("cbrn", seed=0)
-    prepare.write_outputs("cbrn", kept, report, dropped, seed=0)
+    kept, report, dropped = prepare.build_leaf("lf", seed=0)
+    prepare.write_outputs("lf", kept, report, dropped, seed=0)
 '''
 
     def test_two_hash_seeds_give_identical_outputs(self):
@@ -1703,6 +1712,6 @@ with mock.patch.object(prepare, "for_risk", return_value=[source]), \\
                                cwd=Path(__file__).resolve().parent.parent,
                                env={**os.environ, "PYTHONHASHSEED": hash_seed})
                 outputs.append({name: (Path(tmp) / name).read_bytes()
-                                for name in ("cbrn.csv", "cbrn.meta.json", "cbrn.dropped.jsonl")})
+                                for name in ("lf.csv", "lf.meta.json", "lf.dropped.jsonl")})
         self.assertEqual(outputs[0], outputs[1])
-        self.assertGreater(outputs[0]["cbrn.csv"].count(b"\n"), 1)
+        self.assertGreater(outputs[0]["lf.csv"].count(b"\n"), 1)

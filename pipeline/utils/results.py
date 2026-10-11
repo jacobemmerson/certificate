@@ -18,7 +18,6 @@ from statistics import fmean
 from inspect_ai.log import EvalLog
 from inspect_ai.scorer import Score, SampleScore
 
-from datasets.prepare.cluster.sources import HEADLINE_RISKS, RISKS
 from pipeline.stage1_evaluation.scorers.source_metrics import (
     NEUTRAL_ARM, POOL_DERIVED, SUMMARIES, contract, summarise,
 )
@@ -480,12 +479,12 @@ def _round(value: float | None) -> float | None:
 
 
 def model_aggregate(tree: dict) -> dict:
-    '''The top of the tree: one figure per reduction, across the risks.'''
+    '''The top of the tree: one figure per reduction, a plain mean across the
+    leaf datasets. Weighting by systemic risk waits on the leaf-to-risk mapping.'''
     return {
         how: _round(_mean([
             risk["aggregate"][how] for name, risk in tree.items()
-            if (name not in RISKS or name in HEADLINE_RISKS)
-            and risk.get("aggregate") and risk["aggregate"].get(how) is not None
+            if risk.get("aggregate") and risk["aggregate"].get(how) is not None
         ]))
         for how in ("average", "worst", "tail")
     }

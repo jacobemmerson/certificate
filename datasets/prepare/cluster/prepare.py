@@ -1,29 +1,33 @@
 '''
-Build the risk-cluster datasets.
+Build one dataset per CoP leaf.
 
-    uv run python3 -m datasets.prepare.cluster.prepare --risk cyber
+    uv run python3 -m datasets.prepare.cluster.prepare --leaf cyber_operational_use
     uv run python3 -m datasets.prepare.cluster.prepare --dry-run
 
-Selection, per risk (datasets/BENCHMARKS.md § Sampling):
+Selection, per leaf (datasets/BENCHMARKS.md § Sampling):
 
-1. Load every source, drop exact repeats inside a source and across sources.
-2. Score every row against the leaves its source serves (annotations.json, or
-   the Source's hand `leaves`): max cosine to the leaf's anchors (legal text
-   and exemplars), then the leaf's relevance r smooths the score like a
-   temperature, s' = s ** (1 / (0.5 + r)). A row's score is its best leaf.
-3. Per source, theta = min(THRESHOLD, the score at rank ceil(FLOOR_FRACTION x
-   units)), so a source always contributes its top slice.
-4. One pass over the whole risk in score order: a row is kept when its score,
+1. Load every source annotated with the leaf (annotations.json, or the
+   Source's hand `leaves`); drop exact repeats inside a source and across them.
+2. Score every row by its max cosine to the leaf's anchors (legal text and
+   exemplars).
+3. Per source, keep its top P_MAX x r share of units (r = the annotators'
+   relevance of the source to the leaf), never fewer than FLOOR_MIN, and never a
+   unit that looks less like the leaf than 95% of the items the annotators did
+   not assign to it (the off-topic guard). Ranks and quantiles, not cosines, so
+   any embedder works.
+4. One pass over the whole leaf in score order: a row is kept when its score,
    less a penalty for resembling a row already kept (from any source), still
-   clears its source's theta.
+   clears its source's cut. "Resembling" is measured against the embedder: the
+   hinge starts at the median nearest-neighbour similarity in the item cache.
 
-Writes datasets/public/<risk>.csv plus <risk>.meta.json (seed, constants,
-embedding model, per-source thresholds and counts, source revisions) and
-<risk>.dropped.jsonl (every drop, tagged exact, exact_cross_source,
+Writes datasets/public/<leaf>.csv plus <leaf>.meta.json (seed, constants,
+embedding model, per-source relevance, thresholds and counts, source revisions)
+and <leaf>.dropped.jsonl (every drop, tagged exact, exact_cross_source,
 threshold or redundant, so the constants are reviewable rather than trusted).
 
-Reads one gitignored cache, datasets/cache/embeddings/. On a miss it writes
-what is missing, prints the command that fills it and exits 2.
+Reads one gitignored cache, datasets/cache/embeddings/ (items.npz for queries,
+leaves.npz for anchors). On a miss it appends what is missing to the embed
+input, prints the command that fills it and exits 2.
 '''
 
 from __future__ import annotations
@@ -42,12 +46,11 @@ import numpy as np
 import pandas as pd
 
 from . import readers
-from .annotations import load_annotations, manifest_name
 from .leaves import Leaf, anchor_texts, load_leaves
 from .schema import (
     COLUMNS, ITEM, Row, SchemaError, Source, normalised, validate,
 )
-from .sources import RISKS, for_risk
+from .sources import LEAVES, annotated, for_leaf
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 OUT_DIR = REPO_ROOT / "datasets" / "public"
@@ -60,33 +63,50 @@ EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 DEFAULT_EMBEDDING_MODEL = EMBEDDING_MODEL
 EMBED_COMMAND = (
     "uv run --no-project --with sentence-transformers --with numpy "
-    "python scripts/embed_items.py --risk {risk}"
+    "python scripts/embed_items.py"
 )
 
-# Selection constants. A transformed score at or above THRESHOLD is kept;
-# FLOOR_FRACTION of a source's units are kept even when none reach it. The
-# penalty is a hinge: resemblance to a kept row below PENALTY_FREE costs
+# Selection constants. A source keeps its top P_MAX x relevance share of units
+# per leaf (r = 1 means "every item is this leaf": keep 5%), at least FLOOR_MIN.
+# The redundancy penalty is a hinge: resemblance to a kept row below the
+# embedder's near-duplicate level (`hinge_start`, measured from the cache) costs
 # nothing, above it costs PENALTY per unit of cosine, so a near-copy drops out
-# only when it was within that margin of its threshold anyway.
-THRESHOLD = 0.9
-FLOOR_FRACTION = 0.01
+# only when it was within that margin of its cut anyway.
+P_MAX = 0.05
+FLOOR_MIN = 5
 PENALTY = 1.0
-PENALTY_FREE = 0.8
-# Relevance of a hand-assigned leaf (no annotation): the identity temperature.
-DEFAULT_RELEVANCE = 0.5
-
-
+# Resemblance starts to cost at the median nearest-neighbour similarity in the
+# cache: closer than a typical item is to its own closest item is a near-copy.
+# The 10th percentile (0.70 on MiniLM) dropped more rows than it kept.
+HINGE_QUANTILE = 50
+GUARD_QUANTILE = 95   # percentile of off-topic items' scores a kept unit must beat
 class CacheMiss(Exception):
     '''The embedding cache lacks entries. The message says what to run.'''
 
 
-def _cache_miss(path: Path, records: list[dict], *commands: str) -> CacheMiss:
-    '''Write what the cache lacks to `path` and build the error naming the fix.'''
+def scoring_text(row: Row) -> str:
+    '''What a row is embedded as: its scoring_text when the source declares one,
+    else its query, with the system prompt in front when there is one, so a
+    source whose content sits in the system prompt (persusafety) does not score
+    every row on one constant instruction.'''
+    text = row.scoring_text or row.query
+    return f"{row.system_prompt}\n\n{text}" if row.system_prompt else text
+
+
+def _cache_miss(path: Path, missing: dict[str, str], cache: dict) -> CacheMiss:
+    '''Add what the cache lacks to the embed input at `path` (keeping earlier
+    misses the cache still lacks, so a run over several leaves accumulates them)
+    and build the error naming the fix.'''
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            record = json.loads(line)
+            if record["key"] not in cache:
+                missing.setdefault(record["key"], record["text"])
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
-        for record in records:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    return CacheMiss(f"{len(records)} missing -> {path}\n  run: " + "\n   or: ".join(commands))
+        for key, text in sorted(missing.items()):
+            f.write(json.dumps({"key": key, "text": text}, ensure_ascii=False) + "\n")
+    return CacheMiss(f"{len(missing)} missing -> {path}\n  run: {embed_command()}")
 
 
 def embed_key(text: str) -> str | None:
@@ -100,23 +120,24 @@ def embed_key(text: str) -> str | None:
     return hashlib.blake2b(text.encode(), digest_size=16).hexdigest() if text else None
 
 
-def embedding_cache(risk: str) -> Path:
+def embedding_cache(name: str) -> Path:
+    '''`name` is "items" (every source's queries) or "leaves" (every leaf's anchors).'''
     base = CACHE_DIR / "embeddings"
     if EMBEDDING_MODEL != DEFAULT_EMBEDDING_MODEL:
         base = base / EMBEDDING_MODEL.replace("/", "__")
-    return base / f"{risk}.npz"
+    return base / f"{name}.npz"
 
 
-def embed_command(risk: str) -> str:
-    command = EMBED_COMMAND.format(risk=risk)
+def embed_command() -> str:
+    command = EMBED_COMMAND
     if EMBEDDING_MODEL != DEFAULT_EMBEDDING_MODEL:
         command += f" --model {EMBEDDING_MODEL}"
     return command
 
 
-def load_embeddings(risk: str) -> dict[str, np.ndarray]:
-    '''key -> unit float32 vector from the risk's embedding cache (embedding_cache); {} if absent.'''
-    path = embedding_cache(risk)
+def load_embeddings(name: str) -> dict[str, np.ndarray]:
+    '''key -> unit float32 vector from the named cache (embedding_cache); {} if absent.'''
+    path = embedding_cache(name)
     if not path.exists():
         return {}
     with np.load(path) as data:
@@ -129,58 +150,22 @@ def load_embeddings(risk: str) -> dict[str, np.ndarray]:
     return dict(zip(keys, vectors))
 
 
-def source_leaves(source: Source, annotations: dict[str, dict[str, float]]) -> dict[str, float]:
-    '''{leaf id: relevance} the source is scored against: its hand `leaves` when set, else its annotation.'''
-    if source.leaves:
-        return {leaf: DEFAULT_RELEVANCE for leaf in source.leaves}
-    annotated = annotations.get(manifest_name(source.path))
-    if annotated:
-        return dict(annotated)
-    raise SchemaError(f"{source.name}: no annotation in annotations.json and no `leaves`; "
-                      "it cannot be scored")
-
-
 def require_embeddings(
-    risk: str, pools: list[tuple[Source, list[Row]]], embeddings: dict, leaf_embeddings: dict,
-    leaves_used: dict[str, dict[str, float]] | None = None,
+    pools: list[tuple[Source, list[Row]]], embeddings: dict, leaf: Leaf, leaf_embeddings: dict,
 ) -> None:
-    '''Raise CacheMiss, after writing the embed input, if any query or leaf anchor lacks a vector.'''
+    '''Raise CacheMiss, after writing the embed input, if any query or anchor of `leaf` lacks a vector.'''
     missing = {}
     for source, rows in pools:
         for row in rows:
-            key = embed_key(row.query)
+            key = embed_key(scoring_text(row))
             if key and key not in embeddings:
-                missing[key] = normalised(row.query)
+                missing[key] = normalised(scoring_text(row))
     if missing:
-        raise _cache_miss(
-            CACHE_DIR / f"{risk}.embed_input.jsonl",
-            [{"key": key, "text": text} for key, text in sorted(missing.items())],
-            embed_command(risk),
-        )
-    leaves = load_leaves()
-    if leaves_used is None:
-        annotations = load_annotations()
-        leaves_used = {source.name: source_leaves(source, annotations) for source, _ in pools}
-    anchors = {
-        embed_key(text): normalised(text)
-        for leaf_ids in leaves_used.values() for leaf_id in leaf_ids
-        for text in anchor_texts(leaves[leaf_id])
-    }
+        raise _cache_miss(CACHE_DIR / "items.embed_input.jsonl", missing, embeddings)
+    anchors = {embed_key(text): normalised(text) for text in anchor_texts(leaf)}
     missing_anchors = {key: text for key, text in anchors.items() if key not in leaf_embeddings}
     if missing_anchors:
-        # Every risk shares this input, so a run over several risks accumulates
-        # their misses rather than each overwriting the last.
-        path = CACHE_DIR / "leaves.embed_input.jsonl"
-        if path.exists():
-            for line in path.read_text(encoding="utf-8").splitlines():
-                record = json.loads(line)
-                if record["key"] not in leaf_embeddings:
-                    missing_anchors.setdefault(record["key"], record["text"])
-        raise _cache_miss(
-            path,
-            [{"key": key, "text": text} for key, text in sorted(missing_anchors.items())],
-            embed_command("leaves"),
-        )
+        raise _cache_miss(CACHE_DIR / "leaves.embed_input.jsonl", missing_anchors, leaf_embeddings)
 
 
 # ----- tier 0-1: load, map, exact dedup -----
@@ -260,11 +245,13 @@ def rows_from_frame(source: Source, frame) -> list[Row]:
         system_prompt = str(
             source.resolve(record, source.system_prompt) or ""
         ) if source.system_prompt else ""
+        scoring = str(
+            source.resolve(record, source.scoring_text) or ""
+        ) if source.scoring_text else ""
 
         row = Row(
             sample_id=f"{source.name}:{native_id}",
             source=source.name,
-            risk=source.risk,
             question_type=source.question_type,
             query=str(query),
             criterion=str(source.resolve(record, source.criterion) or ""),
@@ -286,6 +273,7 @@ def rows_from_frame(source: Source, frame) -> list[Row]:
             judge_style=source.judge_style, role=source.role, pool=source.pool,
             summary=source.summary,
             families=source.families_for(system_prompt),
+            scoring_text=scoring,
             metadata={**{key: _plain(record[key]) for key in source.metadata},
                       **({"must_survive": list(must_survive)} if must_survive else {})},
         )
@@ -407,7 +395,7 @@ def _vectors(rows: list[Row], embeddings: dict[str, np.ndarray]) -> np.ndarray:
     dim = len(next(iter(embeddings.values()), ()))
     matrix = np.zeros((len(rows), dim), dtype=np.float64)
     for position, row in enumerate(rows):
-        key = embed_key(row.query)
+        key = embed_key(scoring_text(row))
         if key:
             matrix[position] = embeddings[key]
     return matrix
@@ -427,7 +415,7 @@ def leaf_anchors(leaf: Leaf, leaf_embeddings: dict[str, np.ndarray]) -> tuple[li
     missing = [name for name, key in zip(names, keys) if key not in leaf_embeddings]
     if missing:
         raise CacheMiss(f"leaf {leaf.id!r}: no embedding for anchors {missing}; "
-                        f"run: {embed_command('leaves')}")
+                        f"run: {embed_command()}")
     return names, np.array([leaf_embeddings[key] for key in keys], dtype=np.float64)
 
 
@@ -441,75 +429,86 @@ def relevance_scores(vectors: np.ndarray, matrix: np.ndarray) -> tuple[np.ndarra
     return similarity.max(axis=1), hit
 
 
-def temperature(relevance: float) -> float:
-    if not 0 <= relevance <= 1:
-        raise ValueError(f"relevance must be in [0, 1], got {relevance}")
-    return 0.5 + relevance
-
-
-def smooth(scores: np.ndarray, relevance: float) -> np.ndarray:
-    '''s ** (1 / T): rank-preserving; r > 0.5 lifts scores toward 1 (more cross
-    THRESHOLD), r < 0.5 pushes them down, r = 0.5 is the identity. Negative
-    cosines clip to 0 first.'''
-    return np.round(np.clip(scores, 0, None) ** (1 / temperature(relevance)), 9)
-
-
 def _group_ids(source: Source, rows: list[Row]) -> list[str]:
     '''Each row's group; a row without the group_key field is its own group.'''
     return [str(row.metadata.get(source.group_key, i)) for i, row in enumerate(rows)]
 
 
 def score_rows(
-    source: Source, rows: list[Row], leaf_relevance: dict[str, float], leaves: dict[str, Leaf],
+    source: Source, rows: list[Row], leaf: Leaf,
     embeddings: dict[str, np.ndarray], leaf_embeddings: dict[str, np.ndarray],
 ) -> np.ndarray:
     '''
-    Each row's selection score: over the source's leaves, the best smoothed
-    cosine to that leaf's anchors; for a group_key source, the best arm of the
-    row's group on every arm, so a group is kept or dropped whole. Written to
-    metadata as relevance (the score), relevance_raw, relevance_leaf,
+    Each row's selection score: its max cosine to the leaf's anchors; for a
+    group_key source, the best arm of the row's group on every arm, so a group
+    is kept or dropped whole. Written to metadata as relevance (the score),
     relevance_anchor and, for groups, relevance_own.
     '''
     vectors = _vectors(rows, embeddings)
-    best = np.full(len(rows), -np.inf)
-    raw = np.zeros(len(rows))
-    best_leaf: list[str | None] = [None] * len(rows)
-    best_anchor: list[str | None] = [None] * len(rows)
-    for leaf_id in sorted(leaf_relevance):
-        names, matrix = leaf_anchors(leaves[leaf_id], leaf_embeddings)
-        cosine, hit = relevance_scores(vectors, matrix)
-        smoothed = smooth(cosine, leaf_relevance[leaf_id])
-        better = smoothed > best
-        best[better] = smoothed[better]
-        raw[better] = cosine[better]
-        for i in np.flatnonzero(better):
-            best_leaf[i] = leaf_id
-            best_anchor[i] = names[hit[i]] if hit[i] >= 0 else None
-    unit = best
+    names, matrix = leaf_anchors(leaf, leaf_embeddings)
+    cosine, hit = relevance_scores(vectors, matrix)
+    unit = cosine
     if source.group_key:
         group_best: dict[str, float] = {}
         groups = _group_ids(source, rows)
-        for group, score in zip(groups, best):
+        for group, score in zip(groups, cosine):
             group_best[group] = max(group_best.get(group, -np.inf), float(score))
         unit = np.array([group_best[group] for group in groups])
     for i, row in enumerate(rows):
         # A fresh dict: readers may share one metadata dict across rows.
         row.metadata = {**row.metadata, "relevance": round(float(unit[i]), 6),
-                        "relevance_raw": round(float(raw[i]), 6),
-                        "relevance_leaf": best_leaf[i], "relevance_anchor": best_anchor[i]}
+                        "relevance_anchor": names[hit[i]] if hit[i] >= 0 else None}
         if source.group_key:
-            row.metadata["relevance_own"] = round(float(best[i]), 6)
+            row.metadata["relevance_own"] = round(float(cosine[i]), 6)
     return unit
 
 
-def source_threshold(unit_scores: Sequence[float]) -> tuple[float, bool]:
-    '''theta for one source: THRESHOLD, or the score of its ceil(FLOOR_FRACTION x
-    units)-th best unit when fewer reach THRESHOLD. (theta, floor_used).'''
+def on_topic_guard(
+    leaf: Leaf, pool_keys: set[str], embeddings: dict[str, np.ndarray],
+    leaf_embeddings: dict[str, np.ndarray],
+) -> float | None:
+    '''The score a unit must beat to count as on-topic: the GUARD_QUANTILE-th
+    percentile of the leaf score over every cached item outside the leaf's own
+    pool, i.e. items the annotators assigned to other leaves. Measured per leaf
+    and per embedder, so "chance level" needs no constant in cosine units. None
+    when the cache holds nothing outside the pool.'''
+    keys = sorted(set(embeddings) - pool_keys)
+    if not keys:
+        return None
+    _, anchors = leaf_anchors(leaf, leaf_embeddings)
+    others = np.array([embeddings[key] for key in keys], dtype=np.float64)
+    scores = np.round(others @ anchors.T, 9).max(axis=1)
+    return round(float(np.percentile(scores, GUARD_QUANTILE)), 6)
+
+
+def source_cut(unit_scores: Sequence[float], relevance: float, guard: float | None) -> tuple[float, int, bool]:
+    '''The score a unit of this source must reach: the score at rank
+    max(ceil(P_MAX x relevance x units), FLOOR_MIN), raised to `guard` when the
+    guard is higher. Returns (cut, rank, guard_used).'''
     ranked = sorted(unit_scores, reverse=True)
     if not ranked:
-        return THRESHOLD, False
-    floor = ranked[min(math.ceil(FLOOR_FRACTION * len(ranked)), len(ranked)) - 1]
-    return (THRESHOLD, False) if floor >= THRESHOLD else (float(floor), True)
+        return float("inf"), 0, False
+    rank = min(max(math.ceil(round(P_MAX * relevance * len(ranked), 9)), FLOOR_MIN), len(ranked))
+    cut = ranked[rank - 1]
+    if guard is not None and guard > cut:
+        return float(guard), rank, True
+    return float(cut), rank, False
+
+
+def hinge_start(embeddings: dict[str, np.ndarray], seed: int, sample: int = 2000) -> float:
+    '''Where resemblance starts to cost: the HINGE_QUANTILE-th percentile of
+    nearest-neighbour cosine among `sample` seeded picks from the item cache.
+    Measured per embedder, since "near-duplicate" sits at 0.7 on MiniLM and 0.9
+    on e5-large.'''
+    keys = sorted(embeddings)
+    if len(keys) < 2:
+        return 1.0
+    rng = np.random.default_rng(seed)
+    picks = rng.choice(len(keys), size=min(sample, len(keys)), replace=False)
+    matrix = np.array([embeddings[key] for key in keys], dtype=np.float64)
+    similarity = np.round(matrix[picks] @ matrix.T, 9)
+    similarity[np.arange(len(picks)), picks] = -np.inf
+    return round(float(np.percentile(similarity.max(axis=1), HINGE_QUANTILE)), 6)
 
 
 @dataclass
@@ -538,11 +537,12 @@ def units_for(source: Source, rows: list[Row], scores: np.ndarray, seed: int) ->
 
 def cluster_select(
     units: list[Unit], thetas: dict[str, float], embeddings: dict[str, np.ndarray],
+    penalty_free: float,
 ) -> tuple[list[Row], list[dict]]:
     '''
-    The one pass over a risk. Units are walked best score first (ties by
-    `order`); each is kept when score - PENALTY x max(0, maxsim - PENALTY_FREE)
-    reaches its source's theta, where maxsim is the highest cosine between any
+    The one pass over a leaf. Units are walked best score first (ties by
+    `order`); each is kept when score - PENALTY x max(0, maxsim - penalty_free)
+    reaches its source's cut, where maxsim is the highest cosine between any
     of its rows and any row already kept, from any source. So between two
     near-copies in different benchmarks the higher-scoring one is kept, and
     no benchmark order is involved. Drops are tagged `threshold` (below theta
@@ -567,7 +567,7 @@ def cluster_select(
             arm, kept_index = np.unravel_index(similarity.argmax(), similarity.shape)
             maxsim = float(similarity[arm, kept_index])
             similar_to = kept_rows[kept_index]
-        effective = unit.score - PENALTY * max(0.0, maxsim - PENALTY_FREE)
+        effective = unit.score - PENALTY * max(0.0, maxsim - penalty_free)
         if effective < theta:
             dropped.extend(_drop(unit, "redundant", theta, similar_to, maxsim))
             continue
@@ -623,29 +623,27 @@ def _quantiles(scores: Sequence[float]) -> dict[str, float] | None:
 
 # ----- driver -----
 
-def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
-    sources = for_risk(risk)
+def build_leaf(leaf_id: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
+    sources = for_leaf(leaf_id)
     if not sources:
-        raise SystemExit(f"no sources registered for risk {risk!r}")
+        raise SystemExit(f"no source is scored against leaf {leaf_id!r}")
+    leaf = load_leaves()[leaf_id]
 
     all_dropped: list[dict] = []
     report = {}
-    annotations = load_annotations()
-    leaves = load_leaves()
 
     pools = []
-    for source in sources:
+    for source, relevance in sources:
         rows = load_source(source)
         loaded = len(rows)
         rows, exact_dropped = exact_dedup(rows, source.distinct_on)
         all_dropped.extend(exact_dropped)
-        leaf_relevance = source_leaves(source, annotations)
         report[source.name] = {
             "loaded": loaded,
             "exact_dropped": len(exact_dropped),
             "cross_source_dropped": 0,
-            "leaves": leaf_relevance,
-            "annotated": not source.leaves and manifest_name(source.path) in annotations,
+            "relevance": relevance,
+            "annotated": annotated(source),
             "question_type": source.question_type,
             "path": source.path,
         }
@@ -657,32 +655,36 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
     for source, rows in pools:
         report[source.name]["cross_source_dropped"] = sizes[source.name] - len(rows)
 
-    embeddings = load_embeddings(risk)
+    embeddings = load_embeddings("items")
     leaf_embeddings = load_embeddings("leaves")
-    require_embeddings(risk, pools, embeddings, leaf_embeddings,
-                       {name: stats["leaves"] for name, stats in report.items()})
+    require_embeddings(pools, embeddings, leaf, leaf_embeddings)
 
+    pool_keys = {embed_key(scoring_text(row)) for _, rows in pools for row in rows}
+    guard = on_topic_guard(leaf, pool_keys, embeddings, leaf_embeddings)
+    penalty_free = hinge_start(embeddings, seed)
+    report["_guard"] = guard
+    report["_penalty_free"] = penalty_free
     units: list[Unit] = []
     thetas: dict[str, float] = {}
     for source, rows in pools:
-        scores = score_rows(source, rows, report[source.name]["leaves"], leaves,
-                            embeddings, leaf_embeddings)
+        scores = score_rows(source, rows, leaf, embeddings, leaf_embeddings)
         source_units = units_for(source, rows, scores, seed)
-        theta, floor_used = source_threshold([unit.score for unit in source_units])
-        thetas[source.name] = theta
+        cut, rank, guard_used = source_cut([unit.score for unit in source_units],
+                                           report[source.name]["relevance"], guard)
+        thetas[source.name] = cut
         report[source.name].update({
-            "units": len(source_units), "theta": round(theta, 6), "floor_used": floor_used,
+            "units": len(source_units), "rank": rank, "theta": round(cut, 6),
+            "guard_used": guard_used,
             "score_quantiles": _quantiles([unit.score for unit in source_units]),
         })
         units.extend(source_units)
 
     pool_vectors = _vectors([row for _, rows in pools for row in rows], embeddings)
-    report["_leaves"] = {
-        leaf_id: {"auc": leaf_auc(leaves[leaf_id], pool_vectors, leaf_embeddings, seed)}
-        for leaf_id in sorted({leaf_id for name in thetas for leaf_id in report[name]["leaves"]})
-    }
+    report["_auc"] = leaf_auc(leaf, pool_vectors, leaf_embeddings, seed)
 
-    kept, dropped = cluster_select(units, thetas, embeddings)
+    kept, dropped = cluster_select(units, thetas, embeddings, penalty_free)
+    for row in kept:
+        row.leaf = leaf_id
     all_dropped.extend(dropped)
     counts = defaultdict(lambda: defaultdict(int))
     for record in dropped:
@@ -696,7 +698,7 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
             "redundant_dropped": counts[name]["redundant"],
         })
     # Source registration order, then the build's score order inside a source.
-    order = {source.name: i for i, source in enumerate(sources)}
+    order = {source.name: i for i, (source, _) in enumerate(sources)}
     position = {id(row): i for i, row in enumerate(kept)}
     kept.sort(key=lambda row: (order[row.source], position[id(row)]))
     return kept, report, all_dropped
@@ -722,95 +724,93 @@ def source_revisions() -> dict:
     return revisions
 
 
-def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict], seed: int):
+def write_outputs(leaf_id: str, rows: list[Row], report: dict, dropped: list[dict], seed: int):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     frame = pd.DataFrame([row.to_csv_row() for row in rows], columns=COLUMNS)
-    csv_path = OUT_DIR / f"{risk}.csv"
+    csv_path = OUT_DIR / f"{leaf_id}.csv"
     frame.to_csv(csv_path, index=False)
 
-    leaves = load_leaves()
-    leaf_stats = report.pop("_leaves", {})
-    used = sorted({leaf_id for stats in report.values() for leaf_id in stats.get("leaves", {})})
+    leaf = load_leaves()[leaf_id]
+    auc = report.pop("_auc", None)
+    guard = report.pop("_guard", None)
+    penalty_free = report.pop("_penalty_free", None)
     meta = {
-        "risk": risk,
+        "leaf": leaf_id,
+        "cop_ref": leaf.cop_ref,
+        "label": leaf.label,
         "rows": len(rows),
         "seed": seed,
         "embedding": {
             "model": EMBEDDING_MODEL,
-            "cache": str(embedding_cache(risk).relative_to(REPO_ROOT)),
+            "cache": str(embedding_cache("items").relative_to(REPO_ROOT)),
         },
         "constants": {
-            "threshold": THRESHOLD, "floor_fraction": FLOOR_FRACTION,
-            "penalty": PENALTY, "penalty_free": PENALTY_FREE,
+            "p_max": P_MAX, "floor_min": FLOOR_MIN, "penalty": PENALTY,
+            "hinge_quantile": HINGE_QUANTILE, "guard_quantile": GUARD_QUANTILE,
         },
-        "leaves": {
-            leaf_id: {
-                "cop_ref": leaves[leaf_id].cop_ref,
-                "label": leaves[leaf_id].label,
-                "anchors": len(anchor_texts(leaves[leaf_id])),
-                "anchor_keys": sorted(embed_key(text) for text in anchor_texts(leaves[leaf_id])),
-                "auc": leaf_stats.get(leaf_id, {}).get("auc"),
-            } for leaf_id in used
-        },
+        "guard": guard,
+        "penalty_free": penalty_free,
+        "anchors": len(anchor_texts(leaf)),
+        "anchor_keys": sorted(embed_key(text) for text in anchor_texts(leaf)),
+        "auc": auc,
         "sources": report,
         "revisions": source_revisions(),
     }
-    (OUT_DIR / f"{risk}.meta.json").write_text(json.dumps(meta, indent=2) + "\n")
+    (OUT_DIR / f"{leaf_id}.meta.json").write_text(json.dumps(meta, indent=2) + "\n")
 
-    with open(OUT_DIR / f"{risk}.dropped.jsonl", "w", encoding="utf-8") as f:
+    with open(OUT_DIR / f"{leaf_id}.dropped.jsonl", "w", encoding="utf-8") as f:
         for record in dropped:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
     return csv_path
 
 
-def print_report(risk: str, report: dict, rows: list[Row]):
-    print(f"\n=== {risk} ===")
-    header = (f"  {'source':22s} {'loaded':>7s} {'exact':>6s} {'cross':>6s} {'leaves':>6s} "
-              f"{'theta':>6s} {'floor':>5s} {'kept':>6s} {'thr':>6s} {'red':>6s}")
+def print_report(leaf_id: str, report: dict, rows: list[Row]):
+    print(f"\n=== {leaf_id} ===")
+    header = (f"  {'source':22s} {'loaded':>7s} {'exact':>6s} {'cross':>6s} {'rel':>5s} "
+              f"{'rank':>5s} {'cut':>6s} {'guard':>5s} {'kept':>6s} {'thr':>6s} {'red':>6s}")
     print(header)
     print("  " + "-" * (len(header) - 2))
     total = len(rows) or 1
-    leaves = load_leaves()
-    warned_leaves = set()
+    leaf = load_leaves().get(leaf_id)
+    if leaf is not None and not leaf.exemplars:
+        print(f"  [WARNING] {leaf_id}: no exemplars; scored against its legal text only")
     for name, stats in report.items():
         if name.startswith("_"):
             continue
-        theta = f"{stats['theta']:.3f}" if "theta" in stats else "-"
-        floor = ("yes" if stats.get("floor_used") else "no") if "theta" in stats else "-"
+        cut = f"{stats['theta']:.3f}" if "theta" in stats else "-"
+        guard = ("yes" if stats.get("guard_used") else "no") if "theta" in stats else "-"
+        rank = str(stats["rank"]) if "rank" in stats else "-"
+        relevance = f"{stats['relevance']:.2f}" if "relevance" in stats else "-"
         print(
             f"  {name:22s} {stats['loaded']:7d} {stats['exact_dropped']:6d} "
-            f"{stats['cross_source_dropped']:6d} {len(stats.get('leaves', {})):6d} "
-            f"{theta:>6s} {floor:>5s} {stats['kept']:6d} {stats.get('threshold_dropped', 0):6d} "
+            f"{stats['cross_source_dropped']:6d} {relevance:>5s} {rank:>5s} "
+            f"{cut:>6s} {guard:>5s} {stats['kept']:6d} {stats.get('threshold_dropped', 0):6d} "
             f"{stats.get('redundant_dropped', 0):6d}"
         )
-        if stats.get("floor_used"):
-            print(f"  [WARNING] {name}: floor used; fewer than {100 * FLOOR_FRACTION:g}% of "
-                  f"its units reach {THRESHOLD} (theta {stats['theta']:.3f})")
-        for leaf_id in stats.get("leaves", {}):
-            if leaf_id in leaves and not leaves[leaf_id].exemplars and leaf_id not in warned_leaves:
-                warned_leaves.add(leaf_id)
-                print(f"  [WARNING] {leaf_id}: no exemplars; scored against its legal text only")
+        if stats.get("guard_used"):
+            print(f"  [WARNING] {name}: guard bound; fewer than {stats['rank']} units beat "
+                  f"the off-topic level (cut {stats['theta']:.3f})")
         if "kept" in stats and stats["kept"] < 5:
             print(f"  [WARNING] {name}: only {stats['kept']} rows kept")
         if stats.get("kept") and stats.get("redundant_dropped", 0) > 0.25 * stats["kept"]:
             print(f"  [WARNING] {name}: {stats['redundant_dropped']} rows dropped as redundant "
                   f"against {stats['kept']} kept")
-    print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {'':6s} {'':6s} {'':5s} {total:6d}")
-    aucs = report.get("_leaves", {})
-    if aucs:
-        print(f"  leaf AUC ({EMBEDDING_MODEL}; exemplars vs pool, 0.5 = chance): " + ", ".join(
-            f"{leaf_id} {stats['auc'] if stats['auc'] is not None else '-'}"
-            for leaf_id, stats in aucs.items()))
+    print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {'':5s} {'':5s} {'':6s} {'':5s} {total:6d}")
+    if report.get("_auc") is not None:
+        guard = report.get("_guard")
+        print(f"  AUC {report['_auc']} ({EMBEDDING_MODEL}; exemplars vs pool, 0.5 = chance); "
+              f"guard {guard if guard is None else round(guard, 3)}; hinge starts at "
+              f"{report.get('_penalty_free')}")
 
 
 def main():
     global EMBEDDING_MODEL
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--risk", choices=RISKS, action="append",
-                        help="build one risk (repeatable); default is all registered")
+    parser.add_argument("--leaf", choices=LEAVES, action="append",
+                        help="build one leaf (repeatable); default is every leaf a source serves")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--dry-run", action="store_true",
                         help="print the per-source table without writing")
@@ -820,20 +820,18 @@ def main():
     args = parser.parse_args()
     EMBEDDING_MODEL = args.embedding_model
 
-    risks = args.risk or [risk for risk in RISKS if for_risk(risk)]
-
     pending = []
-    for risk in risks:
+    for leaf in args.leaf or LEAVES:
         try:
-            rows, report, dropped = build_risk(risk, args.seed)
+            rows, report, dropped = build_leaf(leaf, args.seed)
         except CacheMiss as miss:
-            print(f"\n=== {risk}: cache miss ===\n  {miss}")
-            pending.append(risk)
+            print(f"\n=== {leaf}: cache miss ===\n  {miss}")
+            pending.append(leaf)
             continue
-        print_report(risk, report, rows)
+        print_report(leaf, report, rows)
         if args.dry_run:
             continue
-        path = write_outputs(risk, rows, report, dropped, args.seed)
+        path = write_outputs(leaf, rows, report, dropped, args.seed)
         print(f"  wrote {len(rows)} rows -> {path.relative_to(REPO_ROOT)}")
     if pending:
         raise SystemExit(2)

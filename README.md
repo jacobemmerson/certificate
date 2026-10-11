@@ -6,12 +6,12 @@
 
 # AI Safety Benchmarks & Certification
 
-The pipeline and datasets for certifying frontier models against the EU AI Act
-systemic-risk clusters (`cbrn`, `cyber`, `loss_of_control`, `manipulation`, plus a provisional
-`alignment` cluster for leaves that fit none of the four): each cluster is
-a subset of several benchmarks, hardened by frozen surface perturbations (stage 2) and a
-multi-turn deployment scenario (stage 3), judged by a two-model ensemble, and rolled up to
-one headline per risk. How it is built and what the numbers mean:
+The pipeline and datasets for certifying frontier models against the EU AI Act Code of
+Practice taxonomy, one dataset per taxonomy leaf (`datasets/prepare/cluster/leaves.toml`): each
+leaf dataset is a subset of the benchmarks annotated with that leaf, hardened by frozen surface
+perturbations (stage 2) and a multi-turn deployment scenario (stage 3), judged by a two-model
+ensemble, and rolled up to one headline per leaf. Grouping leaves into systemic risks is a
+human mapping still to come. How it is built and what the numbers mean:
 [`pipeline/README.md`](pipeline/README.md). What is in the data:
 [`datasets/BENCHMARKS.md`](datasets/BENCHMARKS.md). Adding a benchmark:
 [CONTRIBUTE.md](CONTRIBUTE.md).
@@ -34,28 +34,27 @@ by vLLM through `uvx` or on Modal, never installed into the project env.
 
 | Script | Runs | Writes |
 |---|---|---|
-| `datasets/prepare/cluster/prepare.py` | once per dataset change; two passes (below) | `datasets/public/<risk>.csv` + `.meta.json` + `.dropped.jsonl`, committed |
-| `generate.py` | once per artifact refresh, attacker model on slurm | `datasets/generated/<risk>/<family>.jsonl` + `.meta.json`, committed |
+| `datasets/prepare/cluster/prepare.py` | once per dataset change; two passes (below) | `datasets/public/<leaf>.csv` + `.meta.json` + `.dropped.jsonl`, committed |
+| `generate.py` | once per artifact refresh, attacker model on slurm or Modal | `datasets/generated/<leaf>/<family>.jsonl` + `.meta.json`, committed |
 | `certify.py` | once per target model; target + judges + classifier only | `models/results/<model_id>.json`, `models/models.json` (rebuilt), `logs/<model_id>/<run_id>/` |
 
 ## Recipes
 
-### Build the cluster datasets (two passes)
+### Build the leaf datasets (two passes)
 
 `prepare.py` exits 2 whenever the embedding cache lacks an item or a leaf anchor and prints
 the exact command that fills it. A CSV is never built on a partial cache. No model is called:
 rows are chosen by similarity to the leaf exemplars in `datasets/prepare/cluster/leaves.toml`.
 
 ```bash
-uv run python3 -m datasets.prepare.cluster.prepare --risk cbrn        # exit 2: embeddings missing
-uv run --no-project --with sentence-transformers --with numpy python scripts/embed_items.py --risk cbrn
-uv run --no-project --with sentence-transformers --with numpy python scripts/embed_items.py --risk leaves
-uv run python3 -m datasets.prepare.cluster.prepare --risk cbrn
+uv run python3 -m datasets.prepare.cluster.prepare        # exit 2: embeddings missing
+uv run --no-project --with sentence-transformers --with numpy python scripts/embed_items.py
+uv run python3 -m datasets.prepare.cluster.prepare        # every leaf a source serves
 ```
 
-Review `datasets/public/cbrn.dropped.jsonl` (`threshold` and `redundant` tiers) and the
-per-source `theta` / `floor_used` in `cbrn.meta.json` before committing.
-`--dry-run` prints the per-source table without writing. Omit `--risk` for all risks. Detail: [`datasets/BENCHMARKS.md § Sampling`](datasets/BENCHMARKS.md#sampling).
+Review `datasets/public/<leaf>.dropped.jsonl` (`threshold` and `redundant` tiers) and the
+per-source `theta` / `floor_used` in `<leaf>.meta.json` before committing.
+`--dry-run` prints the per-source table without writing; `--leaf <id>` builds one leaf. Detail: [`datasets/BENCHMARKS.md § Sampling`](datasets/BENCHMARKS.md#sampling).
 
 ### Generate the artifacts
 
@@ -260,7 +259,7 @@ usage: generate.py [-h] [--attacker ATTACKER] [-M KEY=VALUE]
                    [--max-connections MAX_CONNECTIONS]
                    [--perturb FAMILY [FAMILY ...]] [--no-perturb]
                    [--perturb-k PERTURB_K] [--simulate] [--sim-k SIM_K]
-                   [--reasoning] [--only RISK [RISK ...]] [--missing-only]
+                   [--reasoning] [--only LEAF [LEAF ...]] [--missing-only]
                    [--force] [--limit LIMIT]
 
 Generate the frozen perturbation/simulation artifacts certify.py replays.
@@ -303,9 +302,9 @@ options:
                         without the flag ignore it, but plain API providers
                         (e.g. OpenRouter) may reject the extra body — leave it
                         off for those.
-  --only RISK [RISK ...], -o RISK [RISK ...]
-                        Generate only for these systemic-risk clusters (e.g.
-                        --only cyber manipulation).
+  --only LEAF [LEAF ...], -o LEAF [LEAF ...]
+                        Generate only for these leaf datasets (e.g. --only
+                        cbrn cyber_operational_use).
   --missing-only        Fill gaps in existing artifact files (missing
                         samples/variants, e.g. failed reframings) and merge,
                         instead of skipping files that already exist.
@@ -322,41 +321,50 @@ options:
 <!-- prepare-help -->
 ```
 usage: prepare.py [-h]
-                  [--risk {alignment,cbrn,cyber,loss_of_control,manipulation}]
+                  [--leaf {cbrn,cbrn_biological,collusion,cyber_attack_scaling,cyber_exploit_generation,cyber_operational_use,cyber_vulnerability_discovery,discriminatory_bias,hallucination_misinformation,harmful_deployment,lawlessness,loc_deception,loc_oversight_evasion,loc_self_replication,loc_shutdown_resistance,manipulation_persuasion,manipulation_propensity,misalignment_intent,misalignment_values,power_seeking,unreliability}]
                   [--seed SEED] [--dry-run]
+                  [--embedding-model EMBEDDING_MODEL]
 
-Build the risk-cluster datasets.
+Build one dataset per CoP leaf.
 
-    uv run python3 -m datasets.prepare.cluster.prepare --risk cyber
+    uv run python3 -m datasets.prepare.cluster.prepare --leaf cyber_operational_use
     uv run python3 -m datasets.prepare.cluster.prepare --dry-run
 
-Selection, per risk (datasets/BENCHMARKS.md § Sampling):
+Selection, per leaf (datasets/BENCHMARKS.md § Sampling):
 
-1. Load every source, drop exact repeats inside a source and across sources.
-2. Score every row against the leaves its source serves (annotations.json, or
-   the Source's hand `leaves`): max cosine to the leaf's anchors (legal text
-   and exemplars), then the leaf's relevance r smooths the score like a
-   temperature, s' = s ** (1 / (0.5 + r)). A row's score is its best leaf.
-3. Per source, theta = min(THRESHOLD, the score at rank ceil(FLOOR_FRACTION x
-   units)), so a source always contributes its top slice.
-4. One pass over the whole risk in score order: a row is kept when its score,
+1. Load every source annotated with the leaf (annotations.json, or the
+   Source's hand `leaves`); drop exact repeats inside a source and across them.
+2. Score every row by its max cosine to the leaf's anchors (legal text and
+   exemplars).
+3. Per source, keep its top P_MAX x r share of units (r = the annotators'
+   relevance of the source to the leaf), never fewer than FLOOR_MIN, and never a
+   unit that looks less like the leaf than 95% of the items the annotators did
+   not assign to it (the off-topic guard). Ranks and quantiles, not cosines, so
+   any embedder works.
+4. One pass over the whole leaf in score order: a row is kept when its score,
    less a penalty for resembling a row already kept (from any source), still
-   clears its source's theta.
+   clears its source's cut. "Resembling" is measured against the embedder: the
+   hinge starts at the median nearest-neighbour similarity in the item cache.
 
-Writes datasets/public/<risk>.csv plus <risk>.meta.json (seed, constants,
-embedding model, per-source thresholds and counts, source revisions) and
-<risk>.dropped.jsonl (every drop, tagged exact, exact_cross_source,
+Writes datasets/public/<leaf>.csv plus <leaf>.meta.json (seed, constants,
+embedding model, per-source relevance, thresholds and counts, source revisions)
+and <leaf>.dropped.jsonl (every drop, tagged exact, exact_cross_source,
 threshold or redundant, so the constants are reviewable rather than trusted).
 
-Reads one gitignored cache, datasets/cache/embeddings/. On a miss it writes
-what is missing, prints the command that fills it and exits 2.
+Reads one gitignored cache, datasets/cache/embeddings/ (items.npz for queries,
+leaves.npz for anchors). On a miss it appends what is missing to the embed
+input, prints the command that fills it and exits 2.
 
 options:
   -h, --help            show this help message and exit
-  --risk {alignment,cbrn,cyber,loss_of_control,manipulation}
-                        build one risk (repeatable); default is all registered
+  --leaf {cbrn,cbrn_biological,collusion,cyber_attack_scaling,cyber_exploit_generation,cyber_operational_use,cyber_vulnerability_discovery,discriminatory_bias,hallucination_misinformation,harmful_deployment,lawlessness,loc_deception,loc_oversight_evasion,loc_self_replication,loc_shutdown_resistance,manipulation_persuasion,manipulation_propensity,misalignment_intent,misalignment_values,power_seeking,unreliability}
+                        build one leaf (repeatable); default is every leaf a
+                        source serves
   --seed SEED
   --dry-run             print the per-source table without writing
+  --embedding-model EMBEDDING_MODEL
+                        sentence-transformers model whose cache to read (a
+                        comparison; the default is the committed one)
 ```
 <!-- /prepare-help -->
 

@@ -878,7 +878,7 @@ def mentalmanip_rows(df: pd.DataFrame) -> pd.DataFrame:
 # leaf: provisional, annotators to confirm
 SOURCES = [
     Source(
-        name="social_harm", risk="manipulation", question_type=GRADED,
+        name="social_harm", question_type=GRADED,
         elicitation_family=COMPLIANCE, families=NO_FRAMING,
         path="raw/socialharmbench/socialharmbench.csv",
         reader="csv",
@@ -893,7 +893,7 @@ SOURCES = [
         judge_style="classifier",
     ),
     Source(
-        name="historical_revisionism", risk="manipulation", question_type=GRADED,
+        name="historical_revisionism", question_type=GRADED,
         elicitation_family=COMPLIANCE, families=NO_FRAMING,
         path="raw/historical_misinfo/data/*_prompt*.csv",
         reader="csv",
@@ -918,7 +918,7 @@ SOURCES = [
     # rights frameworks, and keeping them apart gives each its own share and its
     # own line in the grouped() breakdown.
     Source(
-        name="human_rights_udhr", risk="manipulation", question_type=GRADED,
+        name="human_rights_udhr", question_type=GRADED,
         elicitation_family=JUDGMENT,
         path="raw/udhr_rights_limitations/data/experiments/synthetic/udhr/scenarios/en.csv",
         reader="csv",
@@ -949,7 +949,7 @@ SOURCES = [
         pool="human_rights", summary="neutral_arm_mean",
     ),
     Source(
-        name="human_rights_echr", risk="manipulation", question_type=GRADED,
+        name="human_rights_echr", question_type=GRADED,
         elicitation_family=JUDGMENT,
         path="raw/udhr_rights_limitations/data/experiments/synthetic/echr/scenarios/en.csv",
         reader="csv",
@@ -975,7 +975,7 @@ SOURCES = [
         pool="human_rights", summary="neutral_arm_mean",
     ),
     Source(
-        name="authoritarian_values", risk="manipulation", question_type=LIKERT,
+        name="authoritarian_values", question_type=LIKERT,
         elicitation_family=OPINION,
         item_text="statement", prompt_template="prompt_template",
         path="raw/democratic_authoritarian_bias/data/phase1_questions.json",
@@ -994,7 +994,7 @@ SOURCES = [
     # gap only while the two groups stay evenly represented; selection no
     # longer balances strata, so check `classification` counts after a build.
     Source(
-        name="leader_favorability", risk="manipulation", question_type=LIKERT,
+        name="leader_favorability", question_type=LIKERT,
         elicitation_family=OPINION,
         item_text="question", prompt_template="prompt_template",
         path="raw/democratic_authoritarian_bias/data/leaders.json",
@@ -1015,7 +1015,7 @@ SOURCES = [
     # The nationality list lives inside the upstream probe script rather than a
     # data file, so it is read out with ast to stay in sync with the source.
     Source(
-        name="role_model_bias", risk="manipulation", question_type=EXTRACTION,
+        name="role_model_bias", question_type=EXTRACTION,
         elicitation_family=GENERIC,
         path="raw/democratic_authoritarian_bias/role_model_probe/main.py",
         reader="pylist", record_path="NATIONALITIES_KEYS",
@@ -1029,7 +1029,7 @@ SOURCES = [
         summary="role_model_lean",
     ),
     Source(
-        name="darkbench", risk="manipulation", question_type=GRADED,
+        name="darkbench", question_type=GRADED,
         elicitation_family=COMPLIANCE, families=NO_FRAMING,
         path="raw/darkbench/darkbench.jsonl",
         reader="jsonl",
@@ -1044,7 +1044,7 @@ SOURCES = [
         transform=darkbench_rows,
     ),
     Source(
-        name="persusafety", risk="manipulation", question_type=DETECTION,
+        name="persusafety", question_type=DETECTION,
         # Relevance scoring reads the query; persusafety's content is in system_prompt,
         # so score system+query before assigning a leaf (manipulation_propensity).
         detector=ACCEPT_REJECT_TOKEN,
@@ -1069,7 +1069,7 @@ SOURCES = [
         must_survive=["[ACCEPT]", "[REJECT]"],
     ),
     Source(
-        name="sycophancy_mimicry", risk="manipulation", question_type=DETECTION,
+        name="sycophancy_mimicry", question_type=DETECTION,
         detector=ATTRIBUTION_MIMICRY,
         elicitation_family=GENERIC,
         path="raw/sycophancy_sharma/mimicry.jsonl",
@@ -1086,7 +1086,7 @@ SOURCES = [
         must_survive=lambda r: [r["incorrect_attribution"]],
     ),
     Source(
-        name="ape", risk="manipulation", question_type=GRADED,
+        name="ape", question_type=GRADED,
         elicitation_family=COMPLIANCE, families=NO_FRAMING,
         path="raw/ape/src/topics/*.jsonl",
         reader="jsonl", filename_field="topic_file",
@@ -1099,7 +1099,7 @@ SOURCES = [
         metadata=["topic_file", "subject"],
         ),
     Source(
-        name="mentalmanip", risk="manipulation", question_type=MCQ,
+        name="mentalmanip", question_type=MCQ,
         elicitation_family=GENERIC,
         path="raw/mentalmanip/mentalmanip_con.csv",
         reader="csv",

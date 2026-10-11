@@ -586,19 +586,23 @@ no `subset` column: the adapter supplies it from the config's directory name.
 > **Scope: `datasets/raw/` only.** Nothing here reads `datasets/generated/`; those
 > artifacts are near-duplicates of their base item by construction.
 
-Every registered source contributes to its cluster. There is no budget: how much a source
-contributes follows from how many of its items resemble the examples of the legal-group
-leaves it serves. `datasets/prepare/cluster/prepare.py::build_risk`, in order:
+The dataset unit is a CoP leaf, not a systemic risk: `datasets/public/<leaf>.csv` holds the
+rows of every benchmark annotated with that leaf, chosen by their similarity to the leaf's
+legal text and exemplars. Grouping leaves into systemic risks is a human mapping that does not
+exist yet, so nothing here names a risk. There is no budget: how much a benchmark contributes
+to a leaf follows from how many of its items resemble that leaf's examples. A benchmark
+annotated with four leaves is sampled four times, once per leaf, and different rows survive
+in each. `datasets/prepare/cluster/prepare.py::build_leaf`, in order:
 
 | Step | What it does | Cost |
 |---|---|---|
 | 0 | `transform`, the source's own structural collapse (PreservingHistoricalTruth 5,478 → 498 case ids; llm-human-rights 1,440 multilingual rows → 144 English) | free |
 | 1 | `exact_dedup`: normalise (lowercase, `[a-z0-9]+` tokens) and drop repeats inside a source; `distinct_on` fields mean different items at any text | free; `dropped.jsonl` (`tier: exact`) |
 | 1b | `cross_source_dedup` on the prompt *as delivered* (user + system text), after each source's whole pool so a source never collides with itself; earlier source wins | free (`tier: exact_cross_source`) |
-| 2 | **score**: for each leaf the source serves, max cosine of the query embedding to the leaf's anchors (legal text and exemplars), smoothed by the (source, leaf) relevance; a row's score is its best leaf | one `V @ A.T` per (source, leaf) |
-| 3 | **threshold** per source: `theta = min(0.9, score at rank ceil(1% of units))` | free |
-| 4 | **one pass per risk** in score order with a redundancy penalty against everything already kept | one `v @ K.T` per unit |
-| 5 | emit `public/<risk>.csv`, `<risk>.meta.json`, `<risk>.dropped.jsonl` | |
+| 2 | **score**: max cosine of the embedded scoring text to the leaf's anchors (legal text and exemplars) | one `V @ A.T` per source |
+| 3 | **cut** per source: the score at rank `max(ceil(P_MAX x r x units), FLOOR_MIN)`, raised to the leaf's off-topic guard when that is higher | one `O @ A.T` per leaf |
+| 4 | **one pass per leaf** in score order with a redundancy penalty against everything already kept | one `v @ K.T` per unit |
+| 5 | emit `public/<leaf>.csv`, `<leaf>.meta.json`, `<leaf>.dropped.jsonl` | |
 
 ### Leaves and relevance
 
@@ -607,46 +611,53 @@ leaves it serves. `datasets/prepare/cluster/prepare.py::build_risk`, in order:
   no benchmark named) and `exemplars`. Anchors are the legal text plus the exemplars.
 - **Which leaves a source serves** comes from `annotations.json` (the Label Studio export)
   through `annotations.py`: tasks join `datasets/raw/manifest.toml` by `id`, a `Source` joins
-  the manifest by the first directory of its `path`. Labels are the union over annotators.
-  `Source.leaves` is the hand fallback and override: the CBRN cluster uses it because the
-  label config offered no CBRN choice, `cysecbench` because it was not annotated.
-- **Relevance r** of a (source, leaf) is the mean confidence of the annotators who chose the
-  leaf times the share of the task's annotators who chose it (one of two at 0.8 → 0.4; both at
-  0.9 and 0.7 → 0.8). Hand leaves score `DEFAULT_RELEVANCE` = 0.5.
-- **Temperature.** `s' = s ** (1 / (0.5 + r))`, rank-preserving within a (source, leaf):
-  r = 0.5 is the identity, r → 1 lifts scores toward 1 so more cross 0.9 (a representative
-  benchmark), r → 0 pushes them down so only the closest survive (a proxy). Negative cosines
-  clip to 0.
-- **Threshold and floor.** A source keeps every unit at or above 0.9; when fewer than 1% of its
-  units reach it, theta drops to the score of its ceil(1%)-th unit, so no source is emptied by
-  the constant (`floor_used` in meta). On MiniLM raw cosines sit at 0.2 to 0.6, so the floor
-  decides for every source today and cluster sizes follow pool sizes; the constants live in
-  `prepare.py` (`THRESHOLD`, `FLOOR_FRACTION`).
+  the manifest by the first directory of its `path`. An annotation without a `confidence`
+  field is the adjudicated gold set: when a task has one, its labels are the benchmark's
+  leaves; otherwise the leaves are the union over annotators. `Source.leaves` is the hand
+  fallback and override: the CBRN benchmarks use it because the label config offered no CBRN
+  choice, `cysecbench` because it was not annotated.
+- **Relevance r** of a (source, leaf) is the mean confidence of the confidence-bearing
+  annotators who chose the leaf times the share of them who chose it (one of two at 0.8 → 0.4;
+  both at 0.9 and 0.7 → 0.8). A gold leaf none of them chose, and a hand leaf, score
+  `DEFAULT_RELEVANCE` = 0.5.
+- **How much a benchmark contributes** is a share of its units, `P_MAX` (5%) x r, never fewer
+  than `FLOOR_MIN` = 5: the annotators' relevance is read literally as "this much of the
+  benchmark is this leaf". A rank rule, so it does not change with the embedder.
+- **Off-topic guard.** No unit is kept that scores below the 95th percentile
+  (`GUARD_QUANTILE`) of the leaf score over every cached item outside the leaf's own pool,
+  i.e. items the annotators assigned to other leaves. Measured per leaf and per embedder
+  (0.24 to 0.40 on MiniLM, 0.80 to 0.83 on e5-large-v2); `guard` in meta, `guard_used` per source when it raised the cut. A
+  benchmark that does not resemble a leaf therefore contributes nothing to it, whatever its
+  annotation (confaide, leader_favorability and role_model_bias land in no leaf today).
 - **Units.** A `group_key` source is scored and kept by whole groups: the group's score is its
   best arm, written to every arm as `relevance` (`relevance_own` keeps the arm's own).
-- **Query only.** Scoring embeds the user query. Sources whose content sits in the system
-  prompt score on a constant text: `persusafety`'s fixed greeting makes every row a near-copy
-  of the first kept one, so the penalty drops all but one.
+- **What is embedded** (`prepare.py::scoring_text`): the row's query, with its system prompt
+  in front when it has one (`persusafety`'s content is the system prompt; its query is a
+  constant instruction), or the text a `Source` declares as `scoring_text=` when the query is
+  a poor proxy (`cyberseceval_mitre`'s JSON wrapper). The prompt sent to the model is unchanged;
+  this only decides similarity.
 
 ### The redundancy penalty
 
 Near-duplicate dedup is gone; similar queries are not necessarily bad. Instead the one pass
-walks every unit of the risk best score first (ties by `blake2b(f"{seed}:{sample_id}")`) and
+walks every unit of the leaf best score first (ties by `blake2b(f"{seed}:{sample_id}")`) and
 keeps a unit when
 
-    score - PENALTY * max(0, maxsim - PENALTY_FREE) >= theta_source
+    score - PENALTY * max(0, maxsim - hinge_start) >= cut_source
 
 with `maxsim` the highest cosine between any of its rows and any row already kept, from any
-source. `PENALTY_FREE` = 0.8 makes moderate similarity free; `PENALTY` = 1.0 means a 0.9-similar
-row loses 0.1, so it drops only if it was within 0.1 of its threshold anyway. Between two
+source. `hinge_start` is measured from the item cache per embedder: the median nearest-neighbour
+similarity (`HINGE_QUANTILE` = 50; 0.92 on MiniLM, 0.96 on e5-large-v2, `penalty_free` in meta), so only rows
+closer than a typical item is to its own closest item cost anything; `PENALTY` = 1.0 means a
+0.97-similar row loses 0.05, so it drops only if it was within that of its cut anyway. Between two
 near-copies in different benchmarks the higher-scoring one is kept and no benchmark order is
 involved. Drops are tagged `threshold` (below theta on its own) or `redundant` (`kept` names
-the row it resembled, `similarity` the cosine). The floor is applied to the same effective
-score, so a source whose floor rows are all near-copies of kept rows can land under 1%.
+the row it resembled, `similarity` the cosine). The cut is applied to the same effective
+score, so a templated source (bbq) loses most of its share to the penalty.
 
 Everything is deterministic: no RNG, no draw. The same inputs and caches build byte-identical
-CSVs (`tests/test_clusters.py::TestBuildIsReproducible` runs a synthetic risk under two
-`PYTHONHASHSEED`s). Any change here re-draws the clusters and invalidates their stage-2/3
+CSVs (`tests/test_clusters.py::TestBuildIsReproducible` runs a synthetic leaf under two
+`PYTHONHASHSEED`s). Any change here re-draws the leaf datasets and invalidates their stage-2/3
 artifacts: land it **before** paying to regenerate them.
 
 ## Why embeddings
@@ -655,23 +666,24 @@ Token-set Jaccard fails on long text both ways: on PreservingHistoricalTruth's r
 prompts (median 117 tokens) the top pair at 0.598 was boilerplate between two *different*
 events, and ECHR's true near-duplicates (median 104 tokens) reached only 0.41.
 
-**Embeddings.** `sentence-transformers/all-MiniLM-L6-v2` (384-d, CPU), computed
+**Embeddings.** `sentence-transformers/all-MiniLM-L6-v2` (384-d, CPU; kept on 2026-10-11 after a
+three-way comparison with Qwen3-Embedding-0.6B and e5-large-v2 put them level on exemplar-vs-pool
+AUC and MiniLM's wider cosine range gave the off-topic guard the most separation), computed
 by `scripts/embed_items.py` in a throwaway env so torch never enters `uv.lock`.
-Cache: `datasets/cache/embeddings/<risk>.npz` (`keys`, float16 `vectors`,
-`model`; another model's cache is discarded), keyed by blake2b-16 of
-`normalised(query)`, gitignored; `embeddings/leaves.npz` holds the anchors. `prepare.py`
-only reads it; on a miss it writes `datasets/cache/<risk>.embed_input.jsonl` (or
-`leaves.embed_input.jsonl`, accumulated across risks), prints the command and exits 2, so no
+Cache: `datasets/cache/embeddings/items.npz` for every source's queries and
+`embeddings/leaves.npz` for the anchors (`keys`, float16 `vectors`, `model`; another model's
+cache is discarded), keyed by blake2b-16 of `normalised(query)`, gitignored. `prepare.py` only
+reads them; on a miss it adds to `datasets/cache/items.embed_input.jsonl` (or
+`leaves.embed_input.jsonl`), accumulated across leaves, prints the command and exits 2, so no
 CSV is built on a partial cache.
 
 **The two-pass build.**
 
 ```bash
-uv run python3 -m datasets.prepare.cluster.prepare --risk cbrn   # exit 2: embeddings missing
-uv run --no-project --with sentence-transformers --with numpy python scripts/embed_items.py --risk cbrn
-uv run --no-project --with sentence-transformers --with numpy python scripts/embed_items.py --risk leaves
-uv run python3 -m datasets.prepare.cluster.prepare --risk cbrn
-git add datasets/public/cbrn.*   # after reviewing dropped.jsonl + meta
+uv run python3 -m datasets.prepare.cluster.prepare   # exit 2: embeddings missing
+uv run --no-project --with sentence-transformers --with numpy python scripts/embed_items.py
+uv run python3 -m datasets.prepare.cluster.prepare   # or --leaf <id> for one leaf
+git add datasets/public/   # after reviewing dropped.jsonl + meta
 ```
 
 ## What sampling does not do
@@ -684,13 +696,14 @@ model. No stratification: category balance is whatever the scores produce; check
 
 ## Provenance
 
-`<risk>.meta.json` records the seed; `constants` (`threshold`, `floor_fraction`, `penalty`,
-`penalty_free`); the `embedding` block (`model`, `cache`); `leaves` used (`cop_ref`, `label`,
-`anchors`, `anchor_keys`); per source `loaded`, `exact_dropped`, `cross_source_dropped`,
-`leaves` (`{id: r}`), `annotated`, `units`, `theta`, `floor_used`, `score_quantiles`, `kept`,
-`threshold_dropped`, `redundant_dropped`; and `revisions`. Row metadata carries `relevance`
-(the smoothed score), `relevance_raw`, `relevance_leaf` and `relevance_anchor`.
-`<risk>.dropped.jsonl` holds every drop, tagged `tier` = `exact`, `exact_cross_source`,
+`<leaf>.meta.json` records the `leaf`, its `cop_ref` and `label`, the seed; `constants`
+(`p_max`, `floor_min`, `penalty`, `hinge_quantile`, `guard_quantile`); the measured `guard`
+and `penalty_free`; the `embedding` block (`model`, `cache`); `anchors`, `anchor_keys` and
+`auc` (exemplars vs pool); per source `loaded`, `exact_dropped`, `cross_source_dropped`,
+`relevance`, `annotated`, `units`, `rank`, `theta` (the cut), `guard_used`, `score_quantiles`,
+`kept`, `threshold_dropped`, `redundant_dropped`; and `revisions`. Row metadata carries
+`relevance` (the cosine) and `relevance_anchor`; the `leaf` column names the dataset.
+`<leaf>.dropped.jsonl` holds every drop, tagged `tier` = `exact`, `exact_cross_source`,
 `threshold` or `redundant`, so a constant is reviewable rather than trusted.
 
 # Housekeeping

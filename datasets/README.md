@@ -4,7 +4,7 @@
 |---|---|
 | `raw/` | Raw source benchmarks as delivered, one directory per `manifest.toml` name (`raw/<name>/`). Never loaded by the pipeline directly. Most are sparse, pinned fetches by `scripts/fetch_raw.py` (each holds a `fetch.json`); `wmdp`, `sosbench`, `darkbench` and `socialharmbench` are committed. |
 | `prepare/` | `prepare/cluster/` — builds the per-risk cluster datasets from `raw/` into `public/`. Run once before evaluating. |
-| `public/` | The processed CSVs the stage-1 evals actually load (via `pipeline/stage1_evaluation/evals/common.py::csv_samples`). One row per item. Holds one dataset per risk cluster (`cbrn.csv`, `cyber.csv`, `loss_of_control.csv`, `manipulation.csv`; `alignment` is a provisional fifth cluster, built once its sources are prepared, for benchmarks whose taxonomy leaves fit none of the four risks) with their `.meta.json` provenance siblings. Use a `private/` sibling for non-redistributable data. |
+| `public/` | The processed CSVs the stage-1 evals actually load (via `pipeline/stage1_evaluation/evals/common.py::csv_samples`). One row per item. Holds one dataset per CoP leaf that at least one benchmark serves (`<leaf>.csv`, ids from `prepare/cluster/leaves.toml`) with their `.meta.json` provenance siblings. Use a `private/` sibling for non-redistributable data. |
 | `generated/` | The frozen stage-2/3 artifacts (perturbed variants + scenario reframings) that `certify.py` replays against every model, produced once by `generate.py`. Committed like `public/`. See [`generated/README.md`](generated/README.md). |
 
 `datasets/raw/sycophancy_sharma/mimicry.jsonl` comes from the HuggingFace dataset
@@ -20,35 +20,36 @@ A gated HuggingFace dataset needs its terms accepted on the Hub and `HF_TOKEN`
 exported first. A failed fetch is reported and the rest continue; the script
 exits non-zero listing the failures.
 
-## Risk clusters
+## Leaf datasets
 
-A cluster is one dataset per EU AI Act systemic risk, unioning samples from
-several benchmarks under a single schema, so stage 1 dispatches on
-`question_type` and never needs to know which benchmark a row came from. Design
+A leaf dataset unions, under a single schema, samples from every benchmark the
+annotators assigned to one Code of Practice leaf, so stage 1 dispatches on
+`question_type` and never needs to know which benchmark a row came from. Which
+leaves make up a systemic risk is a human mapping that does not exist yet. Design
 and rationale: [BENCHMARKS.md](BENCHMARKS.md). How rows are chosen
 (embeddings, leaf exemplars, threshold and redundancy penalty): [BENCHMARKS.md § Sampling](BENCHMARKS.md#sampling).
 
 ```bash
 uv run python3 -m datasets.prepare.cluster.prepare --dry-run   # per-source table, writes nothing
-uv run python3 -m datasets.prepare.cluster.prepare             # all registered risks
-uv run python3 -m datasets.prepare.cluster.prepare --risk cyber
+uv run python3 -m datasets.prepare.cluster.prepare             # every leaf a source serves
+uv run python3 -m datasets.prepare.cluster.prepare --leaf cyber_operational_use
 ```
 
 Every source is read from `raw/` directly — there is no intermediate flattening
 step, and no source-specific loader between the pipeline and its data.
 
-Each build writes `public/<risk>.csv`, a `<risk>.meta.json` (seed, selection constants,
-embedding model, the leaves used, per-source leaves and relevance, theta, floor_used, kept
-and drop counts, source revisions) and `<risk>.dropped.jsonl` (every row dropped by exact
+Each build writes `public/<leaf>.csv`, a `<leaf>.meta.json` (seed, selection constants,
+the measured guard and hinge start, embedding model, the leaf's anchors, per-source
+relevance, rank, cut, kept and drop counts, source revisions) and `<leaf>.dropped.jsonl` (every row dropped by exact
 dedup, the threshold or the redundancy penalty, each tagged `exact`, `exact_cross_source`,
 `threshold` or `redundant`, so the constants stay reviewable).
 
-### Adding a benchmark to a cluster
+### Adding a benchmark
 
 Full guide: **[CONTRIBUTE.md](../CONTRIBUTE.md)**. In short:
 
 1. **Add the data**: add or update the `[[benchmark]]` row in `datasets/raw/manifest.toml` (status `prompt`/`partial`, `files` = exactly what the adapter reads), run `uv run python3 scripts/fetch_raw.py --only <name>`, and point `Source.path` at `raw/<name>/...`. Once the `Source` reads it, set `status = "registered"` and add `path = "raw/<name>"` so the fresh-clone bootstrap fetches it (see `CONTRIBUTE.md`).
-2. **Add one `Source(...)`** to `datasets/prepare/cluster/sources/<risk>.py`. Beyond
+2. **Add one `Source(...)`** to a `datasets/prepare/cluster/sources/*.py` module. Beyond
    the column mapping, declare what the pipeline cannot infer:
    - `judge_style="classifier"` only if the original judge emits a bare label.
    - `role="diagnostic"` if the benchmark measures something other than the
@@ -60,6 +61,8 @@ Full guide: **[CONTRIBUTE.md](../CONTRIBUTE.md)**. In short:
      from `question_type`; `detection` rows get `reconsideration` and `scenario` only).
    - `leaves=` only if the benchmark has no task in `annotations.json`; otherwise the
      annotators' labels decide which leaves it is scored against.
+   - `scoring_text=` a column holding the text to embed for leaf similarity when the
+     query is a poor proxy (a JSON wrapper); the prompt sent is unchanged.
 3. **Add a polarity exemplar** to `POLARITY_EXEMPLARS` in `tests/test_clusters.py`.
 4. **Verify against the original** and record it in `BENCHMARKS.md`.
 5. **Only if the shape needs it**, write a `transform=`.

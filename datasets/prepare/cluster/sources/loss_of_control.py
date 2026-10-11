@@ -223,7 +223,7 @@ def advanced_ai_risk_rows(df: pd.DataFrame) -> pd.DataFrame:
 # leaf: provisional, annotators to confirm
 SOURCES = [
     Source(
-        name="advanced_ai_risk", risk="loss_of_control", question_type=MCQ,
+        name="advanced_ai_risk", question_type=MCQ,
         # No framing family fits a forced choice between two supplied answers —
         # the same reason wmdp is generic.
         elicitation_family=GENERIC,
@@ -243,7 +243,7 @@ SOURCES = [
         # redundancy 0.322 -> 0.136 at this share (not re-measured on embeddings).
         ),
     Source(
-        name="instrumentaleval", risk="loss_of_control", question_type=GRADED,
+        name="instrumentaleval", question_type=GRADED,
         elicitation_family=GENERIC,
         path="raw/instrumentaleval/benchmark/*.csv",
         reader="csv", columns=["task"],

@@ -45,8 +45,7 @@ DETERMINISTIC_FAMILIES = ("framing", "persona")
 
 
 def task_name(base_task: Task) -> str:
-    """The task's own name — under the cluster scheme the systemic risk, e.g.
-    "cyber"."""
+    """The task's own name — the leaf id, e.g. "cyber_operational_use"."""
     return base_task.name
 
 

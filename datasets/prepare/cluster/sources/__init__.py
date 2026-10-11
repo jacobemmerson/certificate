@@ -1,31 +1,51 @@
 '''
 The source registry.
 
-One module per systemic risk, each holding its Source entries and any transforms
-they need side by side, so adding a benchmark is a single-file edit. A module
-with a non-empty `SOURCES` list is a risk: its name is the risk name, and RISKS
-is the sorted set of those names. A scaffold with no sources is not a risk yet. See datasets/README.md for the steps.
+Every benchmark is a Source in one of the modules here; the module split is
+only for reading convenience and means nothing to the pipeline. A benchmark is
+scored against the CoP leaves its annotators assigned it (annotations.json),
+or its hand `leaves` when it has no annotation. The datasets are built per
+leaf: LEAVES is every leaf at least one benchmark serves, and that leaf id is
+the dataset name (datasets/public/<leaf>.csv). Grouping leaves into systemic
+risks is a human decision taken later, outside this registry.
 '''
 
 import importlib
 import pkgutil
 
-from ..schema import Source
+from ..annotations import DEFAULT_RELEVANCE, load_annotations, manifest_name
+from ..schema import SchemaError, Source
 
-_MODULES = {
-    info.name: module
-    for info in pkgutil.iter_modules(__path__)
-    if getattr(module := importlib.import_module(f"{__name__}.{info.name}"), "SOURCES", None)
+SOURCES: list[Source] = [
+    source
+    for info in sorted(pkgutil.iter_modules(__path__), key=lambda info: info.name)
+    for source in getattr(importlib.import_module(f"{__name__}.{info.name}"), "SOURCES", [])
+]
+
+
+def source_leaves(source: Source, annotations: dict[str, dict[str, float]]) -> dict[str, float]:
+    '''{leaf id: relevance} the source is scored against: its hand `leaves` when set, else its annotation.'''
+    if source.leaves:
+        return {leaf: DEFAULT_RELEVANCE for leaf in source.leaves}
+    annotated = annotations.get(manifest_name(source.path))
+    if annotated:
+        return dict(annotated)
+    raise SchemaError(f"{source.name}: no annotation in annotations.json and no `leaves`; "
+                      "it cannot be scored")
+
+
+_ANNOTATIONS = load_annotations()
+LEAF_RELEVANCE: dict[str, dict[str, float]] = {
+    source.name: source_leaves(source, _ANNOTATIONS) for source in SOURCES
 }
-
-RISKS: list[str] = sorted(_MODULES)
-
-# Risks that feed the model-level aggregate; a module opts out with SYSTEMIC = False.
-HEADLINE_RISKS: list[str] = [risk for risk in RISKS if getattr(_MODULES[risk], "SYSTEMIC", True)]
+LEAVES: list[str] = sorted({leaf for leaves in LEAF_RELEVANCE.values() for leaf in leaves})
 
 
-SOURCES: list[Source] = [source for risk in RISKS for source in _MODULES[risk].SOURCES]
+def annotated(source: Source) -> bool:
+    return not source.leaves and manifest_name(source.path) in _ANNOTATIONS
 
 
-def for_risk(risk: str) -> list[Source]:
-    return [source for source in SOURCES if source.risk == risk]
+def for_leaf(leaf: str) -> list[tuple[Source, float]]:
+    '''(source, relevance) for every source scored against `leaf`, in registration order.'''
+    return [(source, LEAF_RELEVANCE[source.name][leaf])
+            for source in SOURCES if leaf in LEAF_RELEVANCE[source.name]]

@@ -1,22 +1,22 @@
 '''
 author: @tae
 
-Risk-cluster task — one parameterised @task over the EU AI Act systemic risks,
-each evaluating a filtered union of several benchmarks. There is one risk per
-`datasets/prepare/cluster/sources/<risk>.py`; see RISKS.
+Leaf task — one parameterised @task over the CoP taxonomy leaves, each
+evaluating a filtered union of the benchmarks annotated with that leaf; see
+LEAVES in `datasets/prepare/cluster/sources/`.
 
 The datasets are built by `datasets/prepare/cluster/` into
-`datasets/public/<risk>.csv`, one canonical schema across every source. This
+`datasets/public/<leaf>.csv`, one canonical schema across every source. This
 module does no per-benchmark work: it lifts the schema's columns into sample
 metadata and hands scoring to `scorers/cluster.py`, which dispatches on the
 sample's own `question_type`. Adding a benchmark is a registry entry in
-`datasets/prepare/cluster/sources/<risk>.py` — nothing here changes.
+`datasets/prepare/cluster/sources/` — nothing here changes.
 
 Data preparation (run once before evaluating):
   uv run python3 -m datasets.prepare.cluster.prepare
 
-Run one cluster:
-  inspect eval pipeline/stage1_evaluation/evals/clusters.py@cluster -T risk=cyber --model openai/gpt-4o
+Run one leaf:
+  inspect eval pipeline/stage1_evaluation/evals/clusters.py@cluster -T leaf=cyber_operational_use --model openai/gpt-4o
 '''
 
 import json
@@ -31,7 +31,7 @@ from pipeline.stage1_evaluation.screen import attribution_screen
 from pipeline.stage1_evaluation.scorers.cluster import cluster_scorer
 from inspect_ai.solver import chain, generate
 
-from datasets.prepare.cluster.sources import RISKS
+from datasets.prepare.cluster.sources import LEAVES
 
 # Columns the prepare step JSON-encodes on the way out.
 _JSON_COLUMNS = (
@@ -69,7 +69,7 @@ def _to_sample(row: dict) -> Sample:
             # native fields first so the canonical schema always wins a clash
             **native,
             "source": row["source"],
-            "risk": row["risk"],
+            "leaf": row["leaf"],
             "question_type": row["question_type"],
             "criterion": row["criterion"],
             "rubric": row.get("rubric", ""),
@@ -97,29 +97,29 @@ def _to_sample(row: dict) -> Sample:
     )
 
 
-def cluster_dataset(risk: str):
-    return csv_samples(f"{risk}.csv", to_sample=_to_sample)
+def cluster_dataset(leaf: str):
+    return csv_samples(f"{leaf}.csv", to_sample=_to_sample)
 
 
-def available(risk: str) -> bool:
-    '''Whether this risk's cluster dataset has been built yet.'''
-    return (DATASETS_DIR / f"{risk}.csv").exists()
+def available(leaf: str) -> bool:
+    '''Whether this leaf's dataset has been built yet.'''
+    return (DATASETS_DIR / f"{leaf}.csv").exists()
 
 
-def _cluster_task(risk: str, grader: str | list[str]) -> Task:
+def _cluster_task(leaf: str, grader: str | list[str]) -> Task:
     return Task(
-        dataset=cluster_dataset(risk),
+        dataset=cluster_dataset(leaf),
         # A source whose benchmark screens on a prerequisite gets that screen
         # first; every other row passes straight through (screen.py).
         solver=chain(attribution_screen(), generate()),
         scorer=cluster_scorer(model=grader),
-        name=risk,
+        name=leaf,
     )
 
 
 @task
-def cluster(risk: str, grader: str | list[str] = "openai/gpt-4o") -> Task:
-    '''One systemic-risk cluster; `risk` is any entry of RISKS.'''
-    if risk not in RISKS:
-        raise ValueError(f"unknown risk {risk!r}; expected one of {RISKS}")
-    return _cluster_task(risk, grader)
+def cluster(leaf: str, grader: str | list[str] = "openai/gpt-4o") -> Task:
+    '''One leaf dataset; `leaf` is any entry of LEAVES.'''
+    if leaf not in LEAVES:
+        raise ValueError(f"unknown leaf {leaf!r}; expected one of {LEAVES}")
+    return _cluster_task(leaf, grader)

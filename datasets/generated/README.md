@@ -11,7 +11,7 @@ against. Why each family exists and how it is scored:
 ## Layout
 
 ```
-datasets/generated/<risk>/          # cbrn | cyber | loss_of_control | manipulation
+datasets/generated/<leaf>/          # one directory per leaf dataset (datasets/public/<leaf>.csv)
   paraphrase.jsonl    register.jsonl    past_tense.jsonl    multilingual.jsonl   # attacker rewrites
   framing.jsonl       persona.jsonl                                              # deterministic, no model
   scenario.jsonl                                                                 # stage 3 branching trees
@@ -20,9 +20,9 @@ datasets/generated/<risk>/          # cbrn | cyber | loss_of_control | manipulat
 
 There is no `reconsideration.jsonl`: that family challenges the target's own answer, so it
 runs live. A family file holds rows only for the ids whose `families` column (in
-`datasets/public/<risk>.csv`) lists that family, so a risk may lack some files (e.g. no
-`framing.jsonl` for `loss_of_control`). `pipeline/artifacts.py::family_ids` is the one
-definition of that set. Directories are named by risk, not by `@task`.
+`datasets/public/<leaf>.csv`) lists that family, so a leaf may lack some files (e.g. no
+`framing.jsonl` where every row is an mcq). `pipeline/artifacts.py::family_ids` is the one
+definition of that set. Directories are named by leaf, not by `@task`.
 
 ## Row schemas (one JSON object per line)
 
@@ -67,7 +67,7 @@ and asker. The replay solver walks the tree with the branch classifier
 
 ## Provenance and freshness
 
-`<family>.meta.json`: `task` (the risk), `family`, `generator_model`, `prompt_version`, `k`,
+`<family>.meta.json`: `task` (the leaf), `family`, `generator_model`, `prompt_version`, `k`,
 `created_at`, `git_commit`, `num_samples`, `num_variants`, `incomplete_ids`,
 `incomplete_reasons`, `reasoning`, `partial` (true if generated with `--limit`).
 

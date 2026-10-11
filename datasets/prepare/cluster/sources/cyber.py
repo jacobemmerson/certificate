@@ -13,6 +13,7 @@ number that conceals both halves.
 
 import ast
 import json
+import re
 
 import pandas as pd
 
@@ -235,11 +236,22 @@ def mitre_rows(df: pd.DataFrame) -> pd.DataFrame:
     `mutated_prompt` is otherwise used verbatim, JSON wrapper and all. That whole
     string is what upstream sends as `test_case_prompt`, so trimming it to the
     inner text would be a different prompt from the one the published numbers
-    were produced with.
+    were produced with. Only leaf-similarity scoring sees the inner text
+    (`scoring_text`), so the wrapper does not drown the item.
     '''
     mapping = df["ttp_id_name_mapping"]
     prompts = df["mutated_prompt"]
+
+    # The wrapper is `{"prompt": "<text>"}` but rarely valid JSON (raw newlines,
+    # unterminated strings), so it is peeled textually rather than parsed.
+    def inner(prompt: str) -> str:
+        opened = re.match(r'\s*\{\s*"prompt"\s*:\s*"?', prompt)
+        if not opened:
+            return prompt
+        return re.sub(r'"?\s*\}?\s*$', "", prompt[opened.end():])
+
     return df.assign(
+        scoring_text=prompts.apply(inner),
         ttp_id=mapping.apply(lambda m: (m or {}).get("TTP_ID", "")),
         ttp_name=mapping.apply(lambda m: (m or {}).get("TTP_Name", "")),
         item_text=prompts.apply(
@@ -296,7 +308,7 @@ def redcode_rows(df: pd.DataFrame) -> pd.DataFrame:
 
 SOURCES = [
     Source(
-        name="cysecbench", risk="cyber", question_type=GRADED,
+        name="cysecbench", question_type=GRADED,
         elicitation_family=COMPLIANCE,
         leaves=("cyber_operational_use",),  # not in annotations.json
         path="raw/cysecbench/Dataset/Full dataset/cysecbench.csv",
@@ -310,13 +322,13 @@ SOURCES = [
         # redundancy 0.293 -> 0.094 at this share (not re-measured on embeddings).
         ),
     Source(
-        name="cyberseceval_mitre", risk="cyber", question_type=GRADED,
+        name="cyberseceval_mitre", question_type=GRADED,
         elicitation_family=COMPLIANCE,
         path="raw/cyberseceval_3/CybersecurityBenchmarks/datasets/mitre/"
              "mitre_benchmark_100_per_category_with_augmentation.json",
         reader="json",
         transform=mitre_rows,
-        query="mutated_prompt",
+        query="mutated_prompt", scoring_text="scoring_text",
         item_text="item_text", prompt_template="prompt_template",
         criterion=lambda r: MITRE_CRITERION.format(
             category=r["mitre_category"], ttp_id=r["ttp_id"], ttp_name=r["ttp_name"]
@@ -330,7 +342,7 @@ SOURCES = [
         # description, so much of the measured distance was wrapper, not item.
         ),
     Source(
-        name="agentharm", risk="cyber", question_type=GRADED,
+        name="agentharm", question_type=GRADED,
         elicitation_family=COMPLIANCE,
         path="raw/agentharm/benchmark/harmful_behaviors_*.json",
         reader="json", record_path="behaviors", filename_field="split",
@@ -345,7 +357,7 @@ SOURCES = [
         distinct_on=["detailed_prompt", "hint_included"],
     ),
     Source(
-        name="cyber_false_refusal", risk="cyber", question_type=DETECTION,
+        name="cyber_false_refusal", question_type=DETECTION,
         detector=REFUSAL_REGEX,
         elicitation_family=GENERIC,
         path="raw/cyberseceval_3/CybersecurityBenchmarks/datasets/mitre_frr/"
@@ -363,7 +375,7 @@ SOURCES = [
         role="diagnostic",
     ),
     Source(
-        name="injecagent", risk="cyber", question_type=DETECTION,
+        name="injecagent", question_type=DETECTION,
         detector=REACT_ATTACKER_TOOL_CALL,
         elicitation_family=GENERIC,
         path="raw/injecagent/data/test_cases_*_base.json",
@@ -383,7 +395,7 @@ SOURCES = [
         role="diagnostic",
     ),
     Source(
-        name="redcode_gen", risk="cyber", question_type=GRADED,
+        name="redcode_gen", question_type=GRADED,
         elicitation_family=COMPLIANCE,
         path="raw/redcode/dataset/RedCode-Gen/**/*.py",
         reader="text", dirname_field="family", filename_field="file",
