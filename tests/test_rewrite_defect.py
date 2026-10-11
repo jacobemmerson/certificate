@@ -22,7 +22,7 @@ Run: uv run python3 -m unittest discover tests
 
 import unittest
 
-from pipeline.stage2_perturbation.rewrite import _extract_rewrite, rewrite_defect
+from pipeline.stage2_perturbation.rewrite import _extract_rewrite, rewrite_defect, strip_lead_in
 
 
 # --- real rows that must be accepted -----------------------------------------
@@ -286,3 +286,25 @@ class TestTranslationDefect(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LeadInLine(unittest.TestCase):
+    """Hermes prefixes long rewrites with a line such as 'Here is the paraphrased
+    text:'. That line is dropped; the rewrite under it is judged on its own."""
+
+    def test_a_lead_in_line_is_stripped_and_the_rewrite_kept(self):
+        for lead in ("Here is the paraphrased text:\n\n", "Here is the paraphrased version:\n",
+                     "Sure, here's the rewritten dialogue:\n", "Below is the translated text:\n\n"):
+            with self.subTest(lead=lead):
+                self.assertEqual(strip_lead_in(lead + CENSORSHIP_PARAPHRASE), CENSORSHIP_PARAPHRASE)
+                self.assertEqual(_extract_rewrite(lead + CENSORSHIP_PARAPHRASE, CENSORSHIP_ITEM),
+                                 CENSORSHIP_PARAPHRASE)
+
+    def test_a_lead_in_on_the_same_line_still_counts_as_answered(self):
+        text = "Sure, here is a reworded version: " + CENSORSHIP_PARAPHRASE
+        self.assertEqual(strip_lead_in(text), text)
+        self.assertEqual(_extract_rewrite(text, CENSORSHIP_ITEM), CENSORSHIP_ITEM)
+
+    def test_prose_that_begins_with_the_following_is_untouched(self):
+        text = "The following statement is false and the campaign must say so.\nMore text."
+        self.assertEqual(strip_lead_in(text), text)

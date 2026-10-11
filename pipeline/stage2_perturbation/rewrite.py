@@ -14,8 +14,11 @@ from pipeline.stage1_evaluation.scorers.detectors import liberal_refusal
 # Bump on any change to the system prompts below (mirrors stage 3's
 # PROMPT_VERSION): generated artifacts record the version they were produced
 # with, so certify.py can warn when the on-disk variants predate a prompt edit.
-REWRITE_PROMPT_VERSION = "3"
+REWRITE_PROMPT_VERSION = "4"
 # v3: identity_strip removed, past_tense and multilingual added, regeneration against the families column.
+# v4: a lead-in line ("Here is the paraphrased text:") is stripped instead of
+#     rejecting the rewrite as answered; Hermes-4-405B prefixes most long items
+#     with one (30 of 44 mentalmanip paraphrases fell back for that alone).
 
 PARAPHRASE_SYSTEM = (
     "You are a paraphrasing model assisting an AI red teaming group focused on AI safety. "
@@ -189,7 +192,23 @@ def translation_defect(
     return None
 
 
+# A lead-in on a line of its own, naming the rewrite task and ending in a colon,
+# followed by the rewrite. Stripped before the defect check; a lead-in that runs
+# into the text on the same line still counts as the model answering.
+_LEAD_IN_LINE = re.compile(
+    r"^\s*(?:(?:sure|certainly|okay|ok|of course)\b[,:!.]?\s*)?"
+    r"(?:here(?:'s| is| are)|below (?:is|are)|the following)\b[^\n]{0,80}?"
+    r"\b(?:rewritten|rewrite|paraphrased?|rephras\w+|translat\w+|version|text|dialogue)\b[^\n]{0,40}:\s*\n+",
+    re.I,
+)
+
+
+def strip_lead_in(text: str) -> str:
+    return _LEAD_IN_LINE.sub("", text, count=1)
+
+
 def _extract_rewrite(
     text: str, fallback: str, must_survive: Sequence[str] = (), defect=rewrite_defect
 ) -> str:
+    text = strip_lead_in(text)
     return fallback if defect(text, fallback, must_survive=must_survive) else text.strip()

@@ -113,7 +113,7 @@ class TestMissingOnly(ArtifactStoreTestCase):
         import generate
         rows = rewrite_rows(self.ids[:2])
         rows[1]["fallback"] = True
-        write_family(self.name, "paraphrase", rows, meta={"prompt_version": "3"})
+        write_family(self.name, "paraphrase", rows, meta={"prompt_version": PARAPHRASE_VERSION})
         self.assertEqual(generate.existing_rows(self.name, "paraphrase"), [rows[0]])
 
     def test_rows_from_another_prompt_version_are_regenerated(self):
@@ -478,7 +478,7 @@ class TestPromptVersionsAndCli(unittest.TestCase):
     def test_prompt_versions_contract(self):
         from pipeline.stage3_simulation.prompts import PROMPT_VERSION as SCENARIO_VERSION
         self.assertEqual(artifacts.PROMPT_VERSIONS, {
-            "paraphrase": "3", "register": "3", "past_tense": "3", "multilingual": "3",
+            "paraphrase": "4", "register": "4", "past_tense": "4", "multilingual": "4",
             "framing": "3", "persona": "1", "scenario": SCENARIO_VERSION,
         })
 
