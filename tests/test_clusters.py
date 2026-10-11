@@ -976,6 +976,7 @@ class TestMeta(unittest.TestCase):
         self.assertEqual(meta["leaves"], {"x": {
             "cop_ref": "App 1.3(1)", "label": "x label", "anchors": 4,
             "anchor_keys": sorted(prepare.embed_key(t) for t in ("law", "a", "b", "c")),
+            "auc": None,
         }})
         self.assertEqual(meta["sources"], report)
         self.assertEqual((meta["rows"], meta["seed"]), (1, 0))

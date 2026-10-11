@@ -54,7 +54,10 @@ OUT_DIR = REPO_ROOT / "datasets" / "public"
 CACHE_DIR = REPO_ROOT / "datasets" / "cache"
 
 # Kept equal to scripts/embed_items.py::MODEL (tests/test_clusters.py checks).
+# --embedding-model overrides it for a comparison; the cache then lives under
+# embeddings/<model slug>/ (scripts/embed_items.py::cache_path).
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+DEFAULT_EMBEDDING_MODEL = EMBEDDING_MODEL
 EMBED_COMMAND = (
     "uv run --no-project --with sentence-transformers --with numpy "
     "python scripts/embed_items.py --risk {risk}"
@@ -97,9 +100,23 @@ def embed_key(text: str) -> str | None:
     return hashlib.blake2b(text.encode(), digest_size=16).hexdigest() if text else None
 
 
+def embedding_cache(risk: str) -> Path:
+    base = CACHE_DIR / "embeddings"
+    if EMBEDDING_MODEL != DEFAULT_EMBEDDING_MODEL:
+        base = base / EMBEDDING_MODEL.replace("/", "__")
+    return base / f"{risk}.npz"
+
+
+def embed_command(risk: str) -> str:
+    command = EMBED_COMMAND.format(risk=risk)
+    if EMBEDDING_MODEL != DEFAULT_EMBEDDING_MODEL:
+        command += f" --model {EMBEDDING_MODEL}"
+    return command
+
+
 def load_embeddings(risk: str) -> dict[str, np.ndarray]:
-    '''key -> unit float32 vector from datasets/cache/embeddings/<risk>.npz; {} if absent.'''
-    path = CACHE_DIR / "embeddings" / f"{risk}.npz"
+    '''key -> unit float32 vector from the risk's embedding cache (embedding_cache); {} if absent.'''
+    path = embedding_cache(risk)
     if not path.exists():
         return {}
     with np.load(path) as data:
@@ -138,7 +155,7 @@ def require_embeddings(
         raise _cache_miss(
             CACHE_DIR / f"{risk}.embed_input.jsonl",
             [{"key": key, "text": text} for key, text in sorted(missing.items())],
-            EMBED_COMMAND.format(risk=risk),
+            embed_command(risk),
         )
     leaves = load_leaves()
     if leaves_used is None:
@@ -162,7 +179,7 @@ def require_embeddings(
         raise _cache_miss(
             path,
             [{"key": key, "text": text} for key, text in sorted(missing_anchors.items())],
-            EMBED_COMMAND.format(risk="leaves"),
+            embed_command("leaves"),
         )
 
 
@@ -410,7 +427,7 @@ def leaf_anchors(leaf: Leaf, leaf_embeddings: dict[str, np.ndarray]) -> tuple[li
     missing = [name for name, key in zip(names, keys) if key not in leaf_embeddings]
     if missing:
         raise CacheMiss(f"leaf {leaf.id!r}: no embedding for anchors {missing}; "
-                        f"run: {EMBED_COMMAND.format(risk='leaves')}")
+                        f"run: {embed_command('leaves')}")
     return names, np.array([leaf_embeddings[key] for key in keys], dtype=np.float64)
 
 
@@ -572,6 +589,31 @@ def _drop(unit: Unit, tier: str, theta: float, similar_to: Row | None = None,
     return records
 
 
+def leaf_auc(
+    leaf: Leaf, pool: np.ndarray, leaf_embeddings: dict[str, np.ndarray], seed: int,
+    negatives: int = 200,
+) -> float | None:
+    '''
+    How well this embedder separates the leaf's own exemplars from the pool:
+    the AUC of each exemplar's leave-one-out max cosine to the other anchors
+    against the max cosine of `negatives` pool rows (a seeded, evenly spaced
+    pick) to all anchors. None below two exemplars. 0.5 is chance.
+    '''
+    if len(leaf.exemplars) < 2 or not len(pool):
+        return None
+    _, anchors = leaf_anchors(leaf, leaf_embeddings)
+    exemplars = anchors[1:]
+    similarity = np.round(exemplars @ anchors.T, 9)
+    np.fill_diagonal(similarity[:, 1:], -np.inf)
+    positives = similarity.max(axis=1)
+    rng = np.random.default_rng(seed)
+    picks = rng.choice(len(pool), size=min(negatives, len(pool)), replace=False)
+    negative_scores = np.round(pool[picks] @ anchors.T, 9).max(axis=1)
+    wins = (positives[:, None] > negative_scores[None, :]).sum() + 0.5 * (
+        positives[:, None] == negative_scores[None, :]).sum()
+    return round(float(wins / (len(positives) * len(negative_scores))), 3)
+
+
 def _quantiles(scores: Sequence[float]) -> dict[str, float] | None:
     if not len(scores):
         return None
@@ -634,6 +676,12 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
         })
         units.extend(source_units)
 
+    pool_vectors = _vectors([row for _, rows in pools for row in rows], embeddings)
+    report["_leaves"] = {
+        leaf_id: {"auc": leaf_auc(leaves[leaf_id], pool_vectors, leaf_embeddings, seed)}
+        for leaf_id in sorted({leaf_id for name in thetas for leaf_id in report[name]["leaves"]})
+    }
+
     kept, dropped = cluster_select(units, thetas, embeddings)
     all_dropped.extend(dropped)
     counts = defaultdict(lambda: defaultdict(int))
@@ -641,7 +689,7 @@ def build_risk(risk: str, seed: int) -> tuple[list[Row], dict, list[dict]]:
         counts[record["dropped"].split(":", 1)[0]][record["tier"]] += 1
     for row in kept:
         counts[row.source]["kept"] += 1
-    for name in report:
+    for name in (name for name in report if not name.startswith("_")):
         report[name].update({
             "kept": counts[name]["kept"],
             "threshold_dropped": counts[name]["threshold"],
@@ -682,6 +730,7 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
     frame.to_csv(csv_path, index=False)
 
     leaves = load_leaves()
+    leaf_stats = report.pop("_leaves", {})
     used = sorted({leaf_id for stats in report.values() for leaf_id in stats.get("leaves", {})})
     meta = {
         "risk": risk,
@@ -689,7 +738,7 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
         "seed": seed,
         "embedding": {
             "model": EMBEDDING_MODEL,
-            "cache": f"datasets/cache/embeddings/{risk}.npz",
+            "cache": str(embedding_cache(risk).relative_to(REPO_ROOT)),
         },
         "constants": {
             "threshold": THRESHOLD, "floor_fraction": FLOOR_FRACTION,
@@ -701,6 +750,7 @@ def write_outputs(risk: str, rows: list[Row], report: dict, dropped: list[dict],
                 "label": leaves[leaf_id].label,
                 "anchors": len(anchor_texts(leaves[leaf_id])),
                 "anchor_keys": sorted(embed_key(text) for text in anchor_texts(leaves[leaf_id])),
+                "auc": leaf_stats.get(leaf_id, {}).get("auc"),
             } for leaf_id in used
         },
         "sources": report,
@@ -725,6 +775,8 @@ def print_report(risk: str, report: dict, rows: list[Row]):
     leaves = load_leaves()
     warned_leaves = set()
     for name, stats in report.items():
+        if name.startswith("_"):
+            continue
         theta = f"{stats['theta']:.3f}" if "theta" in stats else "-"
         floor = ("yes" if stats.get("floor_used") else "no") if "theta" in stats else "-"
         print(
@@ -746,9 +798,15 @@ def print_report(risk: str, report: dict, rows: list[Row]):
             print(f"  [WARNING] {name}: {stats['redundant_dropped']} rows dropped as redundant "
                   f"against {stats['kept']} kept")
     print(f"  {'TOTAL':22s} {'':7s} {'':6s} {'':6s} {'':6s} {'':6s} {'':5s} {total:6d}")
+    aucs = report.get("_leaves", {})
+    if aucs:
+        print(f"  leaf AUC ({EMBEDDING_MODEL}; exemplars vs pool, 0.5 = chance): " + ", ".join(
+            f"{leaf_id} {stats['auc'] if stats['auc'] is not None else '-'}"
+            for leaf_id, stats in aucs.items()))
 
 
 def main():
+    global EMBEDDING_MODEL
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--risk", choices=RISKS, action="append",
@@ -756,7 +814,11 @@ def main():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--dry-run", action="store_true",
                         help="print the per-source table without writing")
+    parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL,
+                        help="sentence-transformers model whose cache to read (a comparison; "
+                             "the default is the committed one)")
     args = parser.parse_args()
+    EMBEDDING_MODEL = args.embedding_model
 
     risks = args.risk or [risk for risk in RISKS if for_risk(risk)]
 
