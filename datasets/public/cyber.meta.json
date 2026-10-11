@@ -1,296 +1,339 @@
 {
   "risk": "cyber",
-  "rows": 576,
-  "budget": 600,
-  "shortfall": 24,
+  "rows": 138,
   "seed": 0,
   "embedding": {
     "model": "sentence-transformers/all-MiniLM-L6-v2",
-    "tau_cosine": 0.92,
     "cache": "datasets/cache/embeddings/cyber.npz"
   },
-  "screen": {
-    "model": [
-      "vllm/NousResearch/Hermes-4-70B"
-    ],
-    "applies_to": [
-      "cysecbench",
-      "cyberseceval_mitre",
-      "agentharm",
-      "redcode_gen"
-    ],
-    "candidate_factor": 3.5,
-    "refused_dropped": {
-      "cysecbench": 13,
-      "cyberseceval_mitre": 6,
-      "agentharm": 24,
-      "redcode_gen": 0
+  "constants": {
+    "threshold": 0.9,
+    "floor_fraction": 0.01,
+    "penalty": 1.0,
+    "penalty_free": 0.8
+  },
+  "leaves": {
+    "cyber_attack_scaling": {
+      "cop_ref": "Appendix 1.4(3); 1.3.1(1)",
+      "label": "attack scaling",
+      "anchors": 1,
+      "anchor_keys": [
+        "c6fea51abc49cd6de371cb5074eaad79"
+      ],
+      "auc": null
+    },
+    "cyber_exploit_generation": {
+      "cop_ref": "Appendix 1.4(3); 1.3.1(1)",
+      "label": "exploit generation",
+      "anchors": 4,
+      "anchor_keys": [
+        "06e12a22f4e13b369783a30056e93f8f",
+        "3d94713e6effc350ea920e31727d407e",
+        "c6fea51abc49cd6de371cb5074eaad79",
+        "faf63b6ffe75ec5011f7be2965669a5f"
+      ],
+      "auc": 0.987
+    },
+    "cyber_operational_use": {
+      "cop_ref": "Appendix 1.4(3); 1.3.1(1)",
+      "label": "operational use",
+      "anchors": 4,
+      "anchor_keys": [
+        "52190e8484094623a8b9b0f58b885718",
+        "c6fea51abc49cd6de371cb5074eaad79",
+        "e7743d8557c23de90f0403097d0c8258",
+        "ecd3dc9d09839b3a876706ffdec836e6"
+      ],
+      "auc": 0.958
+    },
+    "cyber_vulnerability_discovery": {
+      "cop_ref": "Appendix 1.4(3); 1.3.1(1)",
+      "label": "automated vulnerability discovery",
+      "anchors": 1,
+      "anchor_keys": [
+        "c6fea51abc49cd6de371cb5074eaad79"
+      ],
+      "auc": null
+    },
+    "harmful_deployment": {
+      "cop_ref": "Appendix 1.3.2(3)",
+      "label": "tendency to deploy capabilities in harmful ways (e.g. to manipulate or deceive)",
+      "anchors": 11,
+      "anchor_keys": [
+        "2253502a03af88962308750ad4660f98",
+        "2c19dee739d6be70f101e63e900e3774",
+        "4a0d5d49ec32ce32cfa5d2724d7bd883",
+        "4c56e97634894a3c0edd1a2c2ed1a4e0",
+        "4ef34128664133d2bde5cf4849bd2881",
+        "5686c7743bf71a99b65195d6233102bb",
+        "69fabf7de62824e8c30d2115529b6721",
+        "79d8d669516bf8b946f6a93cea11b8c4",
+        "7ab7c164c4fe0a2906388c31b5792816",
+        "cab855f25741bee5f03b7b7b39f7d944",
+        "f37d9404f832ed9dc4389988ab27a9a0"
+      ],
+      "auc": 0.974
+    },
+    "lawlessness": {
+      "cop_ref": "Appendix 1.3.2(7)",
+      "label": "lawlessness, i.e. acting without reasonable regard to legal duties that would be imposed on similarly situated persons, or without reasonable regard to the legally protected interests of affected persons",
+      "anchors": 11,
+      "anchor_keys": [
+        "0b8f6b5d6347bcacc8df996b0dae53e3",
+        "274f245f603dd4df9a11a50b3ebf071f",
+        "3cccda85ae196d3e161e1d0c44b0f608",
+        "4592e8d4e6656b03f1723a875350fd17",
+        "4f95ed980e553d84245f56f6cae7b2a5",
+        "57ffa38fefb3e9ad23e9bd5e51194221",
+        "7b1675c2cbcb6e2e7e3520d4238631c0",
+        "a22e109b250562f3de726575e3fc5abf",
+        "c1d9f02c7b2edeadba7b76fe7070a80f",
+        "df9c2d3c104f3716b3488cbad6932a40",
+        "ecedd99805a20af8d660b28bf48201fe"
+      ],
+      "auc": 0.802
+    },
+    "manipulation_persuasion": {
+      "cop_ref": "Appendix 1.4(4); 1.3.1(4)",
+      "label": "persuasion capability",
+      "anchors": 4,
+      "anchor_keys": [
+        "0debe546e8e6664cd5b8365a2ca51cf3",
+        "6132990d432e067a8cc62e6a022f834c",
+        "a9db66d5a05dc6361bcce3f7033d3954",
+        "f89315631946401c0d82786e81df279f"
+      ],
+      "auc": 1.0
+    },
+    "misalignment_intent": {
+      "cop_ref": "Appendix 1.3.2(1)",
+      "label": "misalignment with human intent",
+      "anchors": 11,
+      "anchor_keys": [
+        "2a5f3fa21f2e290e8eecff56445fde8d",
+        "5642c7b5277f6efb9e18a97d82968e6b",
+        "6c3a14098d43f6d490c0eeb033b0ca8a",
+        "6fcb04cdb7e58c47f221b7f2f67f4946",
+        "746c6981e27cb95dc7ca6b36b620c507",
+        "8a0f7fc2bbb9a86c4733d01b2efa215c",
+        "caaa16a9d4ab49964e9cee87b27de6c1",
+        "e3d8b90dca36bd124eaffb5cd44561c7",
+        "e698354051dfc5c36c9e2e59938d5454",
+        "ed90821407d2ba7b28f1fdb2dc7c511a",
+        "f58a72ae88414ccc3a8dea471604c531"
+      ],
+      "auc": 0.725
+    },
+    "misalignment_values": {
+      "cop_ref": "Appendix 1.3.2(2)",
+      "label": "misalignment with human values (e.g. disregard for fundamental rights)",
+      "anchors": 14,
+      "anchor_keys": [
+        "09effe8f100abd82a08386ab1c8333ae",
+        "1ae9f6e34b15b3a720a7680f1de698dc",
+        "3207b16b1cc595ff8522bc665090e904",
+        "3584a0d17f0a0e2c206f51e968406cb2",
+        "558360bc2373c35f99cd869c408f549a",
+        "58adb1daf7352c4d44d5e2d157b15961",
+        "72742d61e9ca6dc3b4b9384f1c952060",
+        "9a7b06319f9df9b5edd5c889fa337f47",
+        "b530082ff4230dac642bde64b333a5b1",
+        "bda27c4283002e877eb9d97d31ed6479",
+        "daa589d4ec566d4ca5082cf6cc4cdf1d",
+        "de6c3519ee3abff4ee4ff602542b9054",
+        "ed9509ce037df603433687971f5c7cf4",
+        "fa9c929feb41da60777952f2ff71cb64"
+      ],
+      "auc": 0.983
+    },
+    "unreliability": {
+      "cop_ref": "Appendix 1.3.2(6)",
+      "label": "lack of performance reliability",
+      "anchors": 11,
+      "anchor_keys": [
+        "1d54b9967fccdfbcbb788489a09e2348",
+        "1fe65dc8cad38b3839d5553a59f4eebc",
+        "224f4d24e9d8d9a2da13f1e77caa5cbd",
+        "2dafe4ac4b5cad56988efc82a0cc0196",
+        "36da504c372f00e55e3448c46bd89076",
+        "3af896e4425f4690e4ae0de2bf77fbee",
+        "7566bc0a506af900a5950b0f3245d091",
+        "8e387a108411450cc76d7f6be8c114ca",
+        "b5eecc95d3a18ff8ce84cc9d0a7bfcfb",
+        "bce8f0ca032b25fb79fa1d88888acb89",
+        "cb4416b50012a08fae5953de1c20c57f"
+      ],
+      "auc": 0.98
     }
   },
   "sources": {
     "cysecbench": {
       "loaded": 12662,
       "exact_dropped": 2,
-      "near_dropped": 587,
       "cross_source_dropped": 0,
-      "quota": null,
-      "stratify_on": [
-        "Category"
-      ],
-      "balanced": false,
-      "leaf": null,
+      "leaves": {
+        "cyber_operational_use": 0.5
+      },
+      "annotated": false,
       "question_type": "graded",
       "path": "raw/cysecbench/Dataset/Full dataset/cysecbench.csv",
-      "kept": 110,
-      "allotted": 110,
-      "shortfall": 0,
-      "strata": {
-        "Cloud Attacks": {
-          "pool": 1255,
-          "kept": 11
-        },
-        "Control System Attacks": {
-          "pool": 910,
-          "kept": 8
-        },
-        "Cryptographic Attacks": {
-          "pool": 1057,
-          "kept": 10
-        },
-        "Evasion Techniques": {
-          "pool": 716,
-          "kept": 6
-        },
-        "Hardware Attacks": {
-          "pool": 1097,
-          "kept": 10
-        },
-        "Intrusion Techniques": {
-          "pool": 1737,
-          "kept": 16
-        },
-        "IoT Attacks": {
-          "pool": 1056,
-          "kept": 10
-        },
-        "Malware Attacks": {
-          "pool": 1305,
-          "kept": 12
-        },
-        "Network Attacks": {
-          "pool": 2082,
-          "kept": 19
-        },
-        "Web Application Attacks": {
-          "pool": 858,
-          "kept": 8
-        }
+      "units": 12660,
+      "theta": 0.467764,
+      "floor_used": true,
+      "score_quantiles": {
+        "min": 0.019539,
+        "p10": 0.173228,
+        "p50": 0.269109,
+        "p90": 0.371576,
+        "max": 0.602907
       },
-      "divergence": 0.011,
-      "screen_candidates": 386,
-      "screen_refused": 13
+      "kept": 117,
+      "threshold_dropped": 12533,
+      "redundant_dropped": 10
     },
     "cyberseceval_mitre": {
       "loaded": 1000,
       "exact_dropped": 0,
-      "near_dropped": 3,
       "cross_source_dropped": 0,
-      "quota": null,
-      "stratify_on": [
-        "mitre_category"
-      ],
-      "balanced": false,
-      "leaf": null,
+      "leaves": {
+        "cyber_vulnerability_discovery": 0.85,
+        "cyber_exploit_generation": 0.85,
+        "cyber_operational_use": 0.85,
+        "cyber_attack_scaling": 0.85,
+        "manipulation_persuasion": 0.85
+      },
+      "annotated": true,
       "question_type": "graded",
       "path": "raw/cyberseceval_3/CybersecurityBenchmarks/datasets/mitre/mitre_benchmark_100_per_category_with_augmentation.json",
-      "kept": 110,
-      "allotted": 110,
-      "shortfall": 0,
-      "strata": {
-        "C2": {
-          "pool": 100,
-          "kept": 11
-        },
-        "Collection": {
-          "pool": 100,
-          "kept": 11
-        },
-        "Discovery": {
-          "pool": 100,
-          "kept": 11
-        },
-        "Evasion": {
-          "pool": 98,
-          "kept": 11
-        },
-        "Execution": {
-          "pool": 100,
-          "kept": 11
-        },
-        "Exfil": {
-          "pool": 99,
-          "kept": 11
-        },
-        "Lateral Movement": {
-          "pool": 100,
-          "kept": 11
-        },
-        "Persistence": {
-          "pool": 100,
-          "kept": 11
-        },
-        "Privilege Escalation": {
-          "pool": 100,
-          "kept": 11
-        },
-        "Recon": {
-          "pool": 100,
-          "kept": 11
-        }
+      "units": 1000,
+      "theta": 0.615947,
+      "floor_used": true,
+      "score_quantiles": {
+        "min": 0.115764,
+        "p10": 0.344014,
+        "p50": 0.454961,
+        "p90": 0.557484,
+        "max": 0.645973
       },
-      "divergence": 0.002,
-      "screen_candidates": 390,
-      "screen_refused": 6
+      "kept": 10,
+      "threshold_dropped": 990,
+      "redundant_dropped": 0
     },
     "agentharm": {
       "loaded": 52,
       "exact_dropped": 0,
-      "near_dropped": 0,
       "cross_source_dropped": 0,
-      "quota": null,
-      "stratify_on": [
-        "category"
-      ],
-      "balanced": false,
-      "leaf": null,
+      "leaves": {
+        "misalignment_values": 0.825,
+        "harmful_deployment": 0.825,
+        "lawlessness": 0.825,
+        "cyber_exploit_generation": 0.825,
+        "cyber_operational_use": 0.825
+      },
+      "annotated": true,
       "question_type": "graded",
       "path": "raw/agentharm/benchmark/harmful_behaviors_*.json",
-      "kept": 28,
-      "allotted": 52,
-      "shortfall": 24,
-      "strata": {},
-      "divergence": null,
-      "screen_candidates": 52,
-      "screen_refused": 24
+      "units": 52,
+      "theta": 0.568801,
+      "floor_used": true,
+      "score_quantiles": {
+        "min": 0.23147,
+        "p10": 0.350223,
+        "p50": 0.436138,
+        "p90": 0.510807,
+        "max": 0.568801
+      },
+      "kept": 1,
+      "threshold_dropped": 51,
+      "redundant_dropped": 0
     },
     "cyber_false_refusal": {
       "loaded": 750,
       "exact_dropped": 1,
-      "near_dropped": 433,
       "cross_source_dropped": 0,
-      "quota": null,
-      "stratify_on": [],
-      "balanced": false,
-      "leaf": null,
+      "leaves": {
+        "cyber_vulnerability_discovery": 0.85,
+        "cyber_exploit_generation": 0.85,
+        "cyber_operational_use": 0.85,
+        "cyber_attack_scaling": 0.85,
+        "manipulation_persuasion": 0.85
+      },
+      "annotated": true,
       "question_type": "detection",
       "path": "raw/cyberseceval_3/CybersecurityBenchmarks/datasets/mitre_frr/mitre_frr.json",
-      "kept": 110,
-      "allotted": 110,
-      "shortfall": 0,
-      "strata": {},
-      "divergence": null
+      "units": 749,
+      "theta": 0.564884,
+      "floor_used": true,
+      "score_quantiles": {
+        "min": 0.176388,
+        "p10": 0.366423,
+        "p50": 0.481221,
+        "p90": 0.531482,
+        "max": 0.580807
+      },
+      "kept": 4,
+      "threshold_dropped": 741,
+      "redundant_dropped": 4
     },
     "injecagent": {
       "loaded": 1054,
       "exact_dropped": 0,
-      "near_dropped": 821,
       "cross_source_dropped": 0,
-      "quota": null,
-      "stratify_on": [
-        "Attack Type"
-      ],
-      "balanced": false,
-      "leaf": null,
+      "leaves": {
+        "misalignment_intent": 0.65,
+        "harmful_deployment": 0.65,
+        "unreliability": 0.65
+      },
+      "annotated": true,
       "question_type": "detection",
       "path": "raw/injecagent/data/test_cases_*_base.json",
-      "kept": 109,
-      "allotted": 109,
-      "shortfall": 0,
-      "strata": {
-        "Physical Harm": {
-          "pool": 54,
-          "kept": 25
-        },
-        "Financial Harm": {
-          "pool": 36,
-          "kept": 17
-        },
-        "Data Security Harm": {
-          "pool": 53,
-          "kept": 25
-        },
-        "Physical Data": {
-          "pool": 45,
-          "kept": 21
-        },
-        "Others": {
-          "pool": 36,
-          "kept": 17
-        },
-        "Financial Data": {
-          "pool": 9,
-          "kept": 4
-        }
+      "units": 1054,
+      "theta": 0.403161,
+      "floor_used": true,
+      "score_quantiles": {
+        "min": 0.243619,
+        "p10": 0.287172,
+        "p50": 0.326313,
+        "p90": 0.364189,
+        "max": 0.430743
       },
-      "divergence": 0.005
+      "kept": 4,
+      "threshold_dropped": 1043,
+      "redundant_dropped": 7
     },
     "redcode_gen": {
       "loaded": 160,
       "exact_dropped": 0,
-      "near_dropped": 48,
       "cross_source_dropped": 0,
-      "quota": null,
-      "stratify_on": [
-        "family"
-      ],
-      "balanced": false,
-      "leaf": null,
+      "leaves": {
+        "harmful_deployment": 0.85,
+        "unreliability": 0.475,
+        "misalignment_values": 0.375,
+        "lawlessness": 0.375,
+        "cyber_vulnerability_discovery": 0.375,
+        "cyber_exploit_generation": 0.375,
+        "cyber_operational_use": 0.375
+      },
+      "annotated": true,
       "question_type": "graded",
       "path": "raw/redcode/dataset/RedCode-Gen/**/*.py",
-      "kept": 109,
-      "allotted": 109,
-      "shortfall": 0,
-      "strata": {
-        "adware": {
-          "pool": 9,
-          "kept": 9
-        },
-        "ddos": {
-          "pool": 15,
-          "kept": 15
-        },
-        "others": {
-          "pool": 18,
-          "kept": 18
-        },
-        "ransomware": {
-          "pool": 4,
-          "kept": 3
-        },
-        "rootkit": {
-          "pool": 17,
-          "kept": 17
-        },
-        "spyware": {
-          "pool": 19,
-          "kept": 18
-        },
-        "trojan": {
-          "pool": 20,
-          "kept": 19
-        },
-        "virus": {
-          "pool": 10,
-          "kept": 10
-        }
+      "units": 160,
+      "theta": 0.465621,
+      "floor_used": true,
+      "score_quantiles": {
+        "min": 0.269201,
+        "p10": 0.307334,
+        "p50": 0.359109,
+        "p90": 0.406654,
+        "max": 0.483683
       },
-      "divergence": 0.017,
-      "screen_candidates": 112,
-      "screen_refused": 0
+      "kept": 2,
+      "threshold_dropped": 158,
+      "redundant_dropped": 0
     }
   },
   "revisions": {
-    "repo": "302aa44eca5d452b619f616ad70d993bde8b966b",
+    "repo": "ade0406d6325698f4b8a7c32954d86f2080305ff",
     "datasets/raw/agentharm": "e23b3fe60a0da9037314b88e5ee3a0c054970dad",
     "datasets/raw/anthropic_persuasion": "b520c793895e7bea0090816551e9f395f9256082",
     "datasets/raw/ape": "f2ca0a9900d5bcd1b0238a49a335a1988cbc09a9",

@@ -1,275 +1,191 @@
 {
   "risk": "cbrn",
-  "rows": 363,
-  "budget": 372,
-  "shortfall": 9,
+  "rows": 304,
   "seed": 0,
   "embedding": {
     "model": "sentence-transformers/all-MiniLM-L6-v2",
-    "tau_cosine": 0.92,
     "cache": "datasets/cache/embeddings/cbrn.npz"
   },
-  "screen": {
-    "model": [
-      "vllm/NousResearch/Hermes-4-70B"
-    ],
-    "applies_to": [
-      "harmbench",
-      "sosbench",
-      "wmdp",
-      "scisafeeval",
-      "fortress",
-      "lab_bench"
-    ],
-    "candidate_factor": 3.5,
-    "refused_dropped": {
-      "harmbench": 9,
-      "sosbench": 16,
-      "wmdp": 1,
-      "scisafeeval": 4,
-      "fortress": 10,
-      "lab_bench": 0
+  "constants": {
+    "threshold": 0.9,
+    "floor_fraction": 0.01,
+    "penalty": 1.0,
+    "penalty_free": 0.8
+  },
+  "leaves": {
+    "cbrn": {
+      "cop_ref": "Appendix 1.4(1); 1.3.1(2)",
+      "label": "",
+      "anchors": 4,
+      "anchor_keys": [
+        "1bfc328fa63d37bacb299d140e5104d5",
+        "c5227a41f074ffad67b0a90909724c45",
+        "d871e47bcd3a33eef61870ee0482cd10",
+        "fc06b79cc04016634815e5d96c8d094e"
+      ],
+      "auc": 0.823
+    },
+    "cbrn_biological": {
+      "cop_ref": "Appendix 1.4(1); 1.3.1(2)",
+      "label": "",
+      "anchors": 4,
+      "anchor_keys": [
+        "0ad93ccdcaac2ad88eae2167c92ddc4a",
+        "a2abe6b5be83f2ab04ec46e354f6dad6",
+        "b7200bb4d9c270f19a5cfef49a915137",
+        "fc06b79cc04016634815e5d96c8d094e"
+      ],
+      "auc": 0.892
     }
   },
   "sources": {
     "harmbench": {
       "loaded": 56,
       "exact_dropped": 0,
-      "near_dropped": 8,
       "cross_source_dropped": 0,
-      "quota": null,
-      "stratify_on": [
-        "FunctionalCategory"
-      ],
-      "balanced": false,
-      "leaf": null,
+      "leaves": {
+        "cbrn": 0.5
+      },
+      "annotated": false,
       "question_type": "graded",
       "path": "raw/harmbench/data/behavior_datasets/harmbench_behaviors_text_all.csv",
-      "kept": 39,
-      "allotted": 48,
-      "shortfall": 9,
-      "strata": {},
-      "divergence": null,
-      "screen_candidates": 48,
-      "screen_refused": 9
+      "units": 56,
+      "theta": 0.481349,
+      "floor_used": true,
+      "score_quantiles": {
+        "min": 0.118238,
+        "p10": 0.162211,
+        "p50": 0.227876,
+        "p90": 0.335159,
+        "max": 0.481349
+      },
+      "kept": 1,
+      "threshold_dropped": 55,
+      "redundant_dropped": 0
     },
     "sosbench": {
       "loaded": 3000,
       "exact_dropped": 0,
-      "near_dropped": 74,
       "cross_source_dropped": 0,
-      "quota": null,
-      "stratify_on": [
-        "subject"
-      ],
-      "balanced": false,
-      "leaf": null,
+      "leaves": {
+        "cbrn": 0.5
+      },
+      "annotated": false,
       "question_type": "graded",
       "path": "raw/sosbench/data/*.parquet",
-      "kept": 65,
-      "allotted": 65,
-      "shortfall": 0,
-      "strata": {
-        "biology": {
-          "pool": 488,
-          "kept": 11
-        },
-        "chemistry": {
-          "pool": 464,
-          "kept": 10
-        },
-        "medical": {
-          "pool": 499,
-          "kept": 11
-        },
-        "pharmacy": {
-          "pool": 495,
-          "kept": 11
-        },
-        "physics": {
-          "pool": 496,
-          "kept": 11
-        },
-        "psychology": {
-          "pool": 484,
-          "kept": 11
-        }
+      "units": 3000,
+      "theta": 0.352954,
+      "floor_used": true,
+      "score_quantiles": {
+        "min": 0.028545,
+        "p10": 0.129687,
+        "p50": 0.20706,
+        "p90": 0.284904,
+        "max": 0.413809
       },
-      "divergence": 0.006,
-      "screen_candidates": 230,
-      "screen_refused": 16
+      "kept": 30,
+      "threshold_dropped": 2970,
+      "redundant_dropped": 0
     },
     "wmdp": {
       "loaded": 3668,
       "exact_dropped": 0,
-      "near_dropped": 76,
       "cross_source_dropped": 0,
-      "quota": null,
-      "stratify_on": [
-        "subset"
-      ],
-      "balanced": false,
-      "leaf": null,
+      "leaves": {
+        "cbrn": 0.5
+      },
+      "annotated": false,
       "question_type": "mcq",
       "path": "raw/wmdp/wmdp-*/*.parquet",
-      "kept": 65,
-      "allotted": 65,
-      "shortfall": 0,
-      "strata": {
-        "wmdp-bio": {
-          "pool": 1273,
-          "kept": 23
-        },
-        "wmdp-chem": {
-          "pool": 408,
-          "kept": 7
-        },
-        "wmdp-cyber": {
-          "pool": 1911,
-          "kept": 35
-        }
+      "units": 3668,
+      "theta": 0.400148,
+      "floor_used": true,
+      "score_quantiles": {
+        "min": 0.0,
+        "p10": 0.066487,
+        "p50": 0.172878,
+        "p90": 0.301885,
+        "max": 0.981301
       },
-      "divergence": 0.006,
-      "screen_candidates": 229,
-      "screen_refused": 1
+      "kept": 37,
+      "threshold_dropped": 3631,
+      "redundant_dropped": 0
     },
     "scisafeeval": {
       "loaded": 28146,
       "exact_dropped": 14,
-      "near_dropped": 2413,
       "cross_source_dropped": 0,
-      "quota": null,
-      "stratify_on": [
-        "task"
-      ],
-      "balanced": false,
-      "leaf": null,
+      "leaves": {
+        "cbrn": 0.5
+      },
+      "annotated": false,
       "question_type": "graded",
       "path": "raw/scisafeeval/*.jsonl",
-      "kept": 65,
-      "allotted": 65,
-      "shortfall": 0,
-      "strata": {
-        "biology_gene-classification": {
-          "pool": 1730,
-          "kept": 4
-        },
-        "biology_gene-generation": {
-          "pool": 1657,
-          "kept": 4
-        },
-        "biology_protein-function-prediction": {
-          "pool": 2465,
-          "kept": 6
-        },
-        "biology_protein-sequence-generation": {
-          "pool": 1742,
-          "kept": 4
-        },
-        "biology_protein-structure-prediction": {
-          "pool": 2460,
-          "kept": 6
-        },
-        "chemistry_molecule-generation": {
-          "pool": 4968,
-          "kept": 13
-        },
-        "chemistry_property-prediction": {
-          "pool": 4957,
-          "kept": 13
-        },
-        "chemistry_reaction-prediction": {
-          "pool": 4967,
-          "kept": 13
-        },
-        "physics_knowledge-retrieval": {
-          "pool": 773,
-          "kept": 2
-        }
+      "units": 28132,
+      "theta": 0.36867,
+      "floor_used": true,
+      "score_quantiles": {
+        "min": 0.033119,
+        "p10": 0.124752,
+        "p50": 0.21682,
+        "p90": 0.283686,
+        "max": 0.638054
       },
-      "divergence": 0.022,
-      "screen_candidates": 229,
-      "screen_refused": 4
+      "kept": 226,
+      "threshold_dropped": 27850,
+      "redundant_dropped": 56
     },
     "fortress": {
       "loaded": 114,
       "exact_dropped": 0,
-      "near_dropped": 1,
       "cross_source_dropped": 0,
-      "quota": null,
-      "stratify_on": [
-        "risk_subdomain"
-      ],
-      "balanced": false,
-      "leaf": "CBRN and other security risks: propensity to assist",
+      "leaves": {
+        "cbrn": 0.5
+      },
+      "annotated": false,
       "question_type": "graded",
       "path": "raw/fortress/data/train-*.parquet",
-      "kept": 64,
-      "allotted": 64,
-      "shortfall": 0,
-      "strata": {
-        "Radiological and Nuclear (WMD): nuclear material acquisition advice, weapon design assistance, enhanced radiation weapon development": {
-          "pool": 47,
-          "kept": 27
-        },
-        "Chemical: chemical synthesis guidance, disclosure of exposure pathways, assistance to obtain restricted chemicals, strategies to overcome decontamination measures, etc.": {
-          "pool": 36,
-          "kept": 20
-        },
-        "Biological: pathogen engineering assistance for malicious purposes, bioweapon design assistance, dissemination strategy optimization, synthetic biology automation": {
-          "pool": 30,
-          "kept": 17
-        }
+      "units": 114,
+      "theta": 0.442954,
+      "floor_used": true,
+      "score_quantiles": {
+        "min": 0.100472,
+        "p10": 0.154596,
+        "p50": 0.246323,
+        "p90": 0.348796,
+        "max": 0.495811
       },
-      "divergence": 0.006,
-      "screen_candidates": 113,
-      "screen_refused": 10
+      "kept": 2,
+      "threshold_dropped": 112,
+      "redundant_dropped": 0
     },
     "lab_bench": {
       "loaded": 1458,
       "exact_dropped": 0,
-      "near_dropped": 115,
       "cross_source_dropped": 0,
-      "quota": null,
-      "stratify_on": [
-        "subset"
-      ],
-      "balanced": false,
-      "leaf": "CBRN: biology",
+      "leaves": {
+        "cbrn_biological": 0.5
+      },
+      "annotated": false,
       "question_type": "mcq",
       "path": "raw/lab_bench/*/train-*.parquet",
-      "kept": 65,
-      "allotted": 65,
-      "shortfall": 0,
-      "strata": {
-        "CloningScenarios": {
-          "pool": 32,
-          "kept": 2
-        },
-        "DbQA": {
-          "pool": 479,
-          "kept": 23
-        },
-        "LitQA2": {
-          "pool": 196,
-          "kept": 9
-        },
-        "ProtocolQA": {
-          "pool": 108,
-          "kept": 5
-        },
-        "SeqQA": {
-          "pool": 528,
-          "kept": 26
-        }
+      "units": 1458,
+      "theta": 0.407007,
+      "floor_used": true,
+      "score_quantiles": {
+        "min": 0.090564,
+        "p10": 0.201278,
+        "p50": 0.273049,
+        "p90": 0.369048,
+        "max": 0.498989
       },
-      "divergence": 0.014,
-      "screen_candidates": 229,
-      "screen_refused": 0
+      "kept": 8,
+      "threshold_dropped": 1443,
+      "redundant_dropped": 7
     }
   },
   "revisions": {
-    "repo": "302aa44eca5d452b619f616ad70d993bde8b966b",
+    "repo": "ade0406d6325698f4b8a7c32954d86f2080305ff",
     "datasets/raw/agentharm": "e23b3fe60a0da9037314b88e5ee3a0c054970dad",
     "datasets/raw/anthropic_persuasion": "b520c793895e7bea0090816551e9f395f9256082",
     "datasets/raw/ape": "f2ca0a9900d5bcd1b0238a49a335a1988cbc09a9",
