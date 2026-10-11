@@ -18,6 +18,8 @@ from .leaves import Leaf, leaf_by_label, load_leaves
 from .manifest import MANIFEST_PATH, REPO_ROOT, load_manifest
 
 ANNOTATIONS_PATH = REPO_ROOT / "annotations.json"
+# Relevance of a leaf with no confidence behind it (hand-assigned, or gold-only).
+DEFAULT_RELEVANCE = 0.5
 
 
 def manifest_name(source_path: str) -> str:
@@ -29,23 +31,42 @@ def manifest_name(source_path: str) -> str:
 
 
 def task_relevance(task: dict, by_label: dict[str, Leaf]) -> dict[str, float]:
-    '''{leaf id: relevance} for one task, over its non-cancelled annotations.'''
+    '''
+    {leaf id: relevance} for one task. An annotation with no confidence field is
+    an adjudicated gold label set: when one exists its leaves are the task's
+    leaves. Relevance always comes from the confidence-bearing annotators: the
+    mean confidence of those who chose the leaf x the share who chose it, or
+    DEFAULT_RELEVANCE for a gold leaf none of them chose.
+    '''
     annotations = [a for a in task["annotations"] if not a.get("was_cancelled")]
-    if not annotations:
-        return {}
-    chosen: dict[str, list[float]] = {}
+    scored: list[dict] = []
+    gold: list[dict] = []
     for annotation in annotations:
         fields = {r["from_name"]: r["value"] for r in annotation["result"]}
+        (scored if "confidence" in fields else gold).append(fields)
+    chosen: dict[str, list[float]] = {}
+    for fields in scored:
         confidence = float(fields["confidence"]["number"])
-        for label in fields.get("risk_categories", {}).get("choices", []):
-            if label not in by_label:
-                raise ValueError(f"task {task['id']} ({task['data'].get('benchmark')}): "
-                                 f"label {label!r} matches no leaf in leaves.toml")
-            chosen.setdefault(by_label[label].id, []).append(confidence)
-    return {
-        leaf_id: round(sum(confidences) / len(confidences) * len(confidences) / len(annotations), 6)
+        for leaf_id in _leaf_ids(task, fields, by_label):
+            chosen.setdefault(leaf_id, []).append(confidence)
+    relevance = {
+        leaf_id: round(sum(confidences) / len(confidences) * len(confidences) / len(scored), 6)
         for leaf_id, confidences in chosen.items()
     }
+    if not gold:
+        return relevance
+    return {leaf_id: relevance.get(leaf_id, DEFAULT_RELEVANCE)
+            for fields in gold for leaf_id in _leaf_ids(task, fields, by_label)}
+
+
+def _leaf_ids(task: dict, fields: dict, by_label: dict[str, Leaf]) -> list[str]:
+    ids = []
+    for label in fields.get("risk_categories", {}).get("choices", []):
+        if label not in by_label:
+            raise ValueError(f"task {task['id']} ({task['data'].get('benchmark')}): "
+                             f"label {label!r} matches no leaf in leaves.toml")
+        ids.append(by_label[label].id)
+    return ids
 
 
 def load_annotations(

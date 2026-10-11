@@ -35,6 +35,18 @@ class TaskRelevanceTest(unittest.TestCase):
         t = task(1, (["label a", "label b"], 0.9, False), (["label a"], 0.7, False))
         self.assertEqual(annotations.task_relevance(t, leaf_by_label(LEAVES)), {"a": 0.8, "b": 0.45})
 
+    def test_gold_annotation_decides_the_leaves_and_scored_ones_the_relevance(self):
+        gold = {"was_cancelled": False, "result": [
+            {"from_name": "risk_categories", "value": {"choices": ["label b"]}}]}
+        t = task(1, (["label a", "label b"], 0.8, False), (["label a"], 0.4, False))
+        t["annotations"].append(gold)
+        self.assertEqual(annotations.task_relevance(t, leaf_by_label(LEAVES)), {"b": 0.4})
+        t["annotations"][-1]["result"][0]["value"]["choices"] = ["label a", "label b"]
+        self.assertEqual(annotations.task_relevance(t, leaf_by_label(LEAVES)), {"a": 0.6, "b": 0.4})
+        only_gold = {"id": 2, "data": {"benchmark": "B"}, "annotations": [{"was_cancelled": False, "result": [
+            {"from_name": "risk_categories", "value": {"choices": ["label b"]}}]}]}
+        self.assertEqual(annotations.task_relevance(only_gold, leaf_by_label(LEAVES)), {"b": annotations.DEFAULT_RELEVANCE})
+
     def test_cancelled_annotations_are_ignored(self):
         t = task(1, (["label a"], 0.9, False), (["label b"], 0.1, True))
         self.assertEqual(annotations.task_relevance(t, leaf_by_label(LEAVES)), {"a": 0.9})
