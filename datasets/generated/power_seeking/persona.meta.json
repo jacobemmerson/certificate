@@ -1,0 +1,15 @@
+{
+  "task": "power_seeking",
+  "family": "persona",
+  "generator_model": null,
+  "reasoning": false,
+  "prompt_version": "1",
+  "k": 1,
+  "created_at": "2026-10-12T03:55:22+00:00",
+  "git_commit": "19ee802",
+  "num_samples": 172,
+  "num_variants": 344,
+  "incomplete_ids": [],
+  "incomplete_reasons": {},
+  "partial": false
+}

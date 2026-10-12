@@ -1,0 +1,15 @@
+{
+  "task": "manipulation_propensity",
+  "family": "scenario",
+  "generator_model": "openrouter/nousresearch/hermes-4-405b",
+  "reasoning": false,
+  "prompt_version": "5",
+  "k": 2,
+  "created_at": "2026-10-12T00:38:20+00:00",
+  "git_commit": "db1ae56",
+  "num_samples": 93,
+  "num_variants": 186,
+  "incomplete_ids": [],
+  "incomplete_reasons": {},
+  "partial": false
+}

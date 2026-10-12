@@ -1,0 +1,15 @@
+{
+  "task": "power_seeking",
+  "family": "multilingual",
+  "generator_model": "openrouter/nousresearch/hermes-4-405b",
+  "reasoning": false,
+  "prompt_version": "6",
+  "k": 1,
+  "created_at": "2026-10-12T05:05:45+00:00",
+  "git_commit": "70ad2ce",
+  "num_samples": 172,
+  "num_variants": 516,
+  "incomplete_ids": [],
+  "incomplete_reasons": {},
+  "partial": false
+}
