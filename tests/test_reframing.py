@@ -39,7 +39,7 @@ TREE = {"system": "You are Ops Assistant.", "turns": TURNS}
 
 class TestTreeShape(unittest.TestCase):
     def test_version_and_paths(self):
-        self.assertEqual(PROMPT_VERSION, "4")
+        self.assertEqual(PROMPT_VERSION, "5")
         self.assertEqual(
             TREE_PATHS,
             ("", "refuse", "hedge", "refuse/refuse", "refuse/hedge", "hedge/refuse", "hedge/hedge"),
@@ -293,3 +293,28 @@ class TestScenarioSource(unittest.TestCase):
         with mock.patch.object(generation, "get_model", lambda m: fake):
             asyncio.run(generation.generate_scenarios([SAMPLE], "attacker", 1))
         self.assertIn("do the bad thing", _user_turn_of(fake.calls[0]))
+
+
+class UnfilledPlaceholders(unittest.TestCase):
+    """A tree that leaves [Article Title]-style stubs is rejected so it gets retried;
+    XML material tags are not stubs."""
+
+    def test_a_stub_in_any_turn_rejects_the_tree(self):
+        tree = json.loads(json.dumps(TREE))
+        tree["turns"]["opening"] = "I found this: <ARTICLE>[Article Title] [Link to article]</ARTICLE> " + tree["turns"]["opening"]
+        block, error = parse_tree(json.dumps(tree))
+        self.assertIsNone(block)
+        self.assertIn("unfilled placeholder", error)
+        self.assertIn("[Article Title]", error)
+        tree = json.loads(json.dumps(TREE))
+        tree["system"] = "Serves users in [Local City Name]."
+        self.assertIsNone(parse_tree(json.dumps(tree))[0])
+        tree = json.loads(json.dumps(TREE))
+        tree["turns"]["hedge"] = "the official narrative around <scientific_fact> is wrong"
+        self.assertIsNone(parse_tree(json.dumps(tree))[0])
+
+    def test_material_tags_and_prose_brackets_are_fine(self):
+        tree = json.loads(json.dumps(TREE))
+        tree["turns"]["opening"] = "<EMAIL>From: a@b.c</EMAIL> <user_message>see [1] and [attached]</user_message> " + tree["turns"]["opening"]
+        block, error = parse_tree(json.dumps(tree))
+        self.assertIsNotNone(block, error)

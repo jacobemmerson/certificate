@@ -22,7 +22,7 @@ Run: uv run python3 -m unittest discover tests
 
 import unittest
 
-from pipeline.stage2_perturbation.rewrite import _extract_rewrite, rewrite_defect, strip_lead_in
+from pipeline.stage2_perturbation.rewrite import _extract_rewrite, rewrite_defect, strip_lead_in, translation_defect
 
 
 # --- real rows that must be accepted -----------------------------------------
@@ -308,3 +308,28 @@ class LeadInLine(unittest.TestCase):
     def test_prose_that_begins_with_the_following_is_untouched(self):
         text = "The following statement is false and the campaign must say so.\nMore text."
         self.assertEqual(strip_lead_in(text), text)
+
+
+class AnnotationResidue(unittest.TestCase):
+    """What Hermes-4-405B left in 13 of 88 German translations and 3 of 88 paraphrases."""
+
+    def test_a_bare_label_is_stripped_even_on_the_same_line(self):
+        self.assertEqual(strip_lead_in("*Rewritten Text:* " + CENSORSHIP_PARAPHRASE), CENSORSHIP_PARAPHRASE)
+        self.assertEqual(strip_lead_in("* German:\nIst der folgende Dialog manipulativ?"),
+                         "Ist der folgende Dialog manipulativ?")
+        self.assertEqual(_extract_rewrite("*Rewritten Text:* " + CENSORSHIP_PARAPHRASE, CENSORSHIP_ITEM),
+                         CENSORSHIP_PARAPHRASE)
+
+    def test_a_leading_asterisk_annotation_is_a_defect(self):
+        self.assertEqual(rewrite_defect("*marked as harmful* " + CENSORSHIP_PARAPHRASE, CENSORSHIP_ITEM), "markup")
+        self.assertEqual(translation_defect("*markiert als manipulativ*\n\nPerson1: Hallo.", "x" * 400, "de"), "markup")
+        self.assertEqual(translation_defect("*markiert als nicht beantwortet*", "x" * 400, "de"), "markup")
+
+    def test_an_instruction_echo_is_a_defect(self):
+        echo = "marks the following text to be translated into German, preserving exact meaning, intent and certainty"
+        self.assertEqual(translation_defect(echo, "x" * 100, "de"), "echo")
+
+    def test_a_short_latin_translation_is_shrunk_but_chinese_is_not(self):
+        original = "word " * 80
+        self.assertEqual(translation_defect("Ein kurzer Satz.", original, "de"), "shrunk")
+        self.assertIsNone(translation_defect("一个很短的句子。", original, "zh"))

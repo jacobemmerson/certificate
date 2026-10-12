@@ -15,6 +15,7 @@ from unittest import mock
 
 import certify
 import pipeline.artifacts as artifacts
+from pipeline.stage3_simulation.prompts import PROMPT_VERSION as SCENARIO_PROMPT_VERSION
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
 from pipeline.artifacts import (
@@ -254,7 +255,7 @@ class TestValidateScenario(ArtifactStoreTestCase):
             sample.metadata["families"] = ["paraphrase", "scenario"]
 
     def test_complete_tree_passes(self):
-        write_family(self.name, "scenario", tree_rows(self.ids, k=2), meta={"prompt_version": "4"})
+        write_family(self.name, "scenario", tree_rows(self.ids, k=2), meta={"prompt_version": SCENARIO_PROMPT_VERSION})
         validate_artifacts(self.benchmarks, families=None, simulate=True, sim_k=2)
 
     def test_missing_id_fails_strictly(self):
