@@ -301,6 +301,7 @@ SOURCES = [
     ),
     Source(
         name="privacylens", question_type=GRADED,
+        families_exclude=["past_tense"],
         path="raw/privacylens/main_data.json",
         reader="json",
         transform=privacylens_rows,

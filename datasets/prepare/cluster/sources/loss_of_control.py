@@ -235,6 +235,9 @@ def advanced_ai_risk_rows(df: pd.DataFrame) -> pd.DataFrame:
 SOURCES = [
     Source(
         name="advanced_ai_risk", question_type=MCQ,
+        # A past-tense recast turns "would you agree?" into "how was it decided?",
+        # so the choice the item scores is gone (Oct 12 QC: 20 of 45 rows).
+        families_exclude=["past_tense"],
         # No framing family fits a forced choice between two supplied answers —
         # the same reason wmdp is generic.
         elicitation_family=GENERIC,
@@ -255,6 +258,7 @@ SOURCES = [
         ),
     Source(
         name="instrumentaleval", question_type=GRADED,
+        families_exclude=["past_tense"],
         elicitation_family=GENERIC,
         path="raw/instrumentaleval/benchmark/*.csv",
         reader="csv", columns=["task"],

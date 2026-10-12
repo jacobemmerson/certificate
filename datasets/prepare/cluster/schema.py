@@ -344,6 +344,9 @@ class Source:
     # Stage-2/3 families that apply to this source's rows. None = derive from
     # question_type (families_for).
     families: Sequence[str] | None = None
+    # Derived families that still do not fit this source (a past-tense recast
+    # of an agentic task or a forced choice deletes the task; Oct 2026 QC).
+    families_exclude: Sequence[str] = ()
     # The closing instruction or question. Rendered into prompt_template after
     # the item, so a rewrite can never drop it.
     ask: Derived | None = None
@@ -386,7 +389,8 @@ class Source:
                 *(["persona"] if self.question_type in (GRADED, MCQ) else []),
                 "reconsideration", "scenario",
             ]
-        return [family for family in declared if not (family == "persona" and system_prompt)]
+        return [family for family in declared
+                if family not in self.families_exclude and not (family == "persona" and system_prompt)]
 
     def resolve(self, row: dict, spec: Any) -> Any:
         '''Apply a `Derived` spec against a raw row: call it, or look it up.'''
