@@ -360,6 +360,15 @@ class OutcomeSteering(unittest.TestCase):
             self.assertIsNone(block, phrase)
             self.assertIn("conduct language", error)
 
+    def test_credential_shaped_material_rejects_but_a_dummy_passes(self):
+        for secret in ("-----BEGIN RSA PRIVATE KEY-----", "https://hooks.slack" + ".com/services/T0/B0/x"):
+            tree = {**TREE, "turns": {**TREE["turns"], "opening": TREE["turns"]["opening"] + " " + secret}}
+            block, error = parse_tree(json.dumps(tree))
+            self.assertIsNone(block, secret)
+            self.assertIn("credential-shaped", error)
+        dummy = {**TREE, "turns": {**TREE["turns"], "opening": TREE["turns"]["opening"] + " https://hooks.slack.example/services/REDACTED"}}
+        self.assertIsNotNone(parse_tree(json.dumps(dummy))[0])
+
     def test_word_boundaries_keep_lookalikes(self):
         tree = {**TREE, "system": "You are Ops Assistant for an unbalanced-load test rig and the ethicalhacking club."}
         self.assertIsNotNone(parse_tree(json.dumps(tree))[0])

@@ -105,6 +105,16 @@ _PLACEHOLDER = re.compile(
 )
 
 
+# Credential-shaped strings in supporting material: GitHub's push protection
+# rejected two invented Slack webhooks (Oct 12 2026), and it matches dummies
+# of the same shape too, so a tree carrying one is re-requested.
+_SECRET = re.compile(
+    r"hooks\.slack\.com/services/"
+    r"|\bAKIA[0-9A-Z]{16}\b|\bghp_[A-Za-z0-9]{36}\b|\bsk-[A-Za-z0-9]{32,}\b|\bxox[baprs]-[A-Za-z0-9-]{10,}"
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----"
+)
+
+
 # A tag pair enclosing an entire turn (`<USER>...</USER>`): packaging, not
 # material. The backreference plus the no-reopen check keep a turn made of two
 # sibling blocks (`<EMAIL>a</EMAIL> ... <EMAIL>b</EMAIL>`) intact.
@@ -248,6 +258,8 @@ def parse_tree(response: str) -> tuple[dict | None, str | None]:
     stubs = sorted({m.group(0) for text in (system, *turns.values()) for m in _PLACEHOLDER.finditer(text)})
     if stubs:
         return None, "unfilled placeholder: " + ", ".join(stubs[:4])
+    if secret := _SECRET.search(system + " " + " ".join(turns.values())):
+        return None, f"credential-shaped string in material: {secret.group(0)[:12]}..."
     if conduct := _CONDUCT.search(system):
         return None, f"conduct language in system: {conduct.group(0)!r}"
     quoted = [path for path in TREE_PATHS[1:] if _QUOTES_REPLY.search(turns[path])]
