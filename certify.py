@@ -231,7 +231,9 @@ def parse():
         "--model", "-m", required=True, help="The model to be evaluated using AISI inspect."
     )
     args.add_argument(
-        "--grader", "-g", required=False, default=None, help="Grader model override (single model). If omitted, loads from GRADERS.md"
+        "--grader", "-g", required=False, nargs="+", default=None,
+        help="Grader model(s) overriding GRADERS.md, e.g. -g openai-api/bifrost/gpt-4.1 "
+             "openai-api/bifrost/claude-sonnet-5. If omitted, loads from GRADERS.md"
     )
     args.add_argument(
         "--name", "-n", required=False, default=None, help="The name of the model for formatting the certificate table."

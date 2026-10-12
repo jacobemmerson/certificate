@@ -96,6 +96,35 @@ uv run python3 certify.py -m openrouter/<slug> --only cbrn --limit 3 --simulate
 Before any eval starts `certify.py` validates artifacts, prints the estimated target /
 judge / classifier call counts per task, and pings every grader and the classifier.
 
+### Running through the AI gateway
+
+The Bifrost gateway serves GPT, Claude, Grok etc. behind one OpenAI-compatible endpoint.
+Inspect's stock `openai-api` provider reaches it with no code: a model id
+`openai-api/bifrost/<model>` reads `BIFROST_BASE_URL` and `BIFROST_API_KEY` and sends the
+plain `<model>` name. Every model role takes a full model id, so prefix each one.
+
+```bash
+export BIFROST_BASE_URL=https://bifrost.is.localnet/openai
+export BIFROST_API_KEY=sk-bf-...
+export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt   # gateway cert is signed by an internal CA
+
+# certify: target, judges and the stage-3 classifier all through the gateway
+uv run python3 certify.py -m openai-api/bifrost/gpt-4.1 --name "GPT-4.1" --provider OpenAI --region US \
+    -g openai-api/bifrost/gpt-4.1 openai-api/bifrost/claude-sonnet-5 \
+    --sim-classifier openai-api/bifrost/gpt-4.1 --simulate
+
+# generate (only if the artifacts need regenerating; certify replays the committed ones)
+uv run python3 generate.py -a openai-api/bifrost/gpt-4.1 --only cbrn --missing-only
+```
+
+`SSL_CERT_FILE` works because httpx reads it when building its SSL context;
+`tests/test_gateway.py` fails if an upgrade stops honouring it. Caveats:
+
+- Judges other than `GRADERS.md` make the certificate incomparable with runs graded by
+  the standard panel. Drop `-g` to keep it (that panel needs `OPENROUTER_API_KEY`).
+- Commercial attackers refuse more rewrites than Hermes, so expect more `fallback` rows.
+- `--max-price` and `--cheapest` are OpenRouter-only and refuse a gateway target.
+
 ## Where results land
 
 `models/results/<model_id>.json` is the source of truth, written atomically;
