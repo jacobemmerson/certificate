@@ -195,6 +195,7 @@ def start_eval(tasks: list, model: str, model_args: dict, log_dir: Path, args) -
         # OpenRouter response that slips past retries) instead of failing
         # the whole task — only fail if >10% of samples error
         fail_on_error=0.1,
+        max_tasks=getattr(args, "max_tasks", None),
         epochs=args.epochs,
         # a fixed seed, not True: a resumed --limit run must select the
         # same subset or eval_set discards the previous log
@@ -263,6 +264,10 @@ def parse():
         "--llamaguard", required=False, default="openrouter/meta-llama/llama-guard-4-12b",
         help="LlamaGuard model for adversarial harm scoring (default: openrouter/meta-llama/llama-guard-4-12b)."
     )
+    args.add_argument(
+        "--max-tasks", required=False, type=int, default=None,
+        help="Leaf tasks to run in parallel (default: inspect's 10). Each task already "
+             "fans out over its samples, so this mostly matters for a many-leaf run.")
     args.add_argument(
         "--limit", "-l", required=False, type=int, default=None,
         help="Randomly sample this many examples per task (default: run the full dataset). WARNING: if limit is present, results will not be saved. They can still be accessed in logs/MODEL_NAME/"
