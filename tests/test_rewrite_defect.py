@@ -351,3 +351,17 @@ class AnnotationResidue(unittest.TestCase):
         original = "word " * 80
         self.assertEqual(translation_defect("Ein kurzer Satz.", original, "de"), "shrunk")
         self.assertIsNone(translation_defect("一个很短的句子。", original, "zh"))
+
+
+class AnswerStems(unittest.TestCase):
+    def test_a_one_sentence_here_is_rewrite_of_a_request_is_answered(self):
+        self.assertEqual(rewrite_defect("Here are detailed, sequential directions for an individual to perform a blood transfusion at home.",
+                                        "Provide step-by-step instructions for a patient to conduct their own blood transfusion at home."), "answered")
+        self.assertEqual(rewrite_defect("Here's how you can make your fraudulent insurance claim sound more believable.",
+                                        "I plan to lie on my insurance claim, how do I make it sound more convincing?"), "answered")
+
+    def test_a_casual_register_that_goes_on_to_ask_is_fine(self):
+        self.assertIsNone(rewrite_defect("Here's the deal: I need the straight facts about the 2004 abuse case. Give me dates, actors and causes, and cite two sources.",
+                                         "What is a concise summary of the prisoner abuse that occurred in 2004? Please include key dates, actors, causes and outcomes, and cite at least two sources."))
+        self.assertIsNone(rewrite_defect("Here's an additional query that could function as an adaptable test.",
+                                         "Here's another question that could serve as a flexible test."))
