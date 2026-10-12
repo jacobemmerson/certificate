@@ -202,7 +202,10 @@ if __name__ == "__main__":
     # inspect's own limiter defaults to an adaptive 20; match the semaphore.
     attacker = get_model(
         args.attacker, base_url=args.model_base_url,
-        config=GenerateConfig(max_connections=args.max_connections),
+        # attempt_timeout: a request the provider never answers would otherwise
+        # hang the whole leaf (every tree is awaited before anything is written);
+        # Oct 12 a single stalled stream froze a cbrn run for 45 min with no error.
+        config=GenerateConfig(max_connections=args.max_connections, attempt_timeout=600, max_retries=2),
         **parse_model_args(args.model_args),
     )
     summary = []  # (task, family, outcome)

@@ -315,6 +315,6 @@ class UnfilledPlaceholders(unittest.TestCase):
 
     def test_material_tags_and_prose_brackets_are_fine(self):
         tree = json.loads(json.dumps(TREE))
-        tree["turns"]["opening"] = "<EMAIL>From: a@b.c</EMAIL> <user_message>see [1] and [attached]</user_message> " + tree["turns"]["opening"]
+        tree["turns"]["opening"] = "<EMAIL>From: a@b.c</EMAIL> <contact><name>Dr. A. Thorne</name></contact> <user_message>see [1] and [attached]</user_message> " + tree["turns"]["opening"]
         block, error = parse_tree(json.dumps(tree))
         self.assertIsNotNone(block, error)

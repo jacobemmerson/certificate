@@ -87,11 +87,12 @@ Follow-up rules (each follow-up 50-200 words, in the same voice as the opening):
 Return ONLY the JSON object, no prose around it."""
 
 # A stub the model left for the reader to fill: `[Title Case Words]`, `[Link to ...]`,
-# `<snake_case>`. XML-style material tags (`<EMAIL>`, `<user_message>`) are legitimate
-# and are excluded by requiring a space or a slot-like name inside the brackets.
+# `<specific_thing>`. XML-style material tags (`<EMAIL>`, `<user_message>`, and
+# `<name>...</name>` inside structured material) are legitimate, so a bare angle
+# tag counts only with a slot-like prefix; `<name>` alone rejected 135 cbrn trees.
 _PLACEHOLDER = re.compile(
     r"\[(?:[A-Z][a-z]+(?: [A-Za-z]+){1,5}|(?:Link|Insert|Specific|Name|Date)\b[^\]]{0,40})\]"
-    r"|<(?:specific_[a-z_]+|insert_[a-z_]+|scientific_fact|topic|name|placeholder)>"
+    r"|<(?:specific_[a-z_]+|insert_[a-z_]+|scientific_fact|placeholder)>"
 )
 
 
