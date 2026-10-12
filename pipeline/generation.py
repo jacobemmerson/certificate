@@ -150,7 +150,9 @@ async def generate_rewrites(
             defect = functools.partial(translation_defect, lang=lang)
         else:
             prompt = FAMILY_SYSTEM_PROMPTS[family].format(text=original_text)
-            defect = rewrite_defect
+            # past_tense is a near-copy by design (a context already in the past changes
+            # one verb), so the near-copy rule applies to the other rewrite families only.
+            defect = functools.partial(rewrite_defect, near_copy_ok=family == "past_tense")
         async with semaphore:
             completion = await _attacker_call(model, prompt, f"{family} {sample.id} {lang or f'v{variant}'}")
         new_text = _extract_rewrite(

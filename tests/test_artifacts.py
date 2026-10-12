@@ -479,7 +479,7 @@ class TestPromptVersionsAndCli(unittest.TestCase):
     def test_prompt_versions_contract(self):
         from pipeline.stage3_simulation.prompts import PROMPT_VERSION as SCENARIO_VERSION
         self.assertEqual(artifacts.PROMPT_VERSIONS, {
-            "paraphrase": "6", "register": "6", "past_tense": "6", "multilingual": "6",
+            "paraphrase": "7", "register": "7", "past_tense": "7", "multilingual": "7",
             "framing": "3", "persona": "1", "scenario": SCENARIO_VERSION,
         })
 

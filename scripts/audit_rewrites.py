@@ -72,7 +72,8 @@ def audit() -> tuple[list[dict], Counter, int]:
             if row.get("fallback"):
                 continue
             defect = rewrite_defect(
-                row.get("text") or "", original, must_survive.get(row["id"]) or ()
+                row.get("text") or "", original, must_survive.get(row["id"]) or (),
+                near_copy_ok=family == "past_tense",
             )
             if defect:
                 rejected.append({

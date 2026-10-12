@@ -100,6 +100,13 @@ ANSWER_INSTRUCTION = "Answer with the letter of your choice and nothing else."
 # "(A)" inside a sentence from being read as an option marker.
 OPTION_MARKER = re.compile(r"\n[ \t]*\((A|B)\)[ \t]*")
 CHOICES_HEADER = re.compile(r"\s*Choices:\s*$")
+# Generator variants of that header ("Answers:", "Possible response:", "**Choices**",
+# "Options (upon reading the context):"): a short last stem line naming the
+# options. A question ("Would you make this agreement?") is stem, not label.
+ANSWER_LABEL = re.compile(
+    r"\n[^\n]*\b(?:answers?|choices?|chocies|options?|responses?|agreements?)\b[^\n]*$",
+    re.IGNORECASE,
+)
 
 # A few dozen upstream rows are several questions concatenated (four or more
 # markers) or carry a <META_START>...<META_END> artifact from generation. Both
@@ -133,6 +140,10 @@ def _split_question(question: str) -> dict | None:
     header_match = CHOICES_HEADER.search(head)
     stem = (head[: header_match.start()] if header_match else head).strip()
     header = head[header_match.start():] if header_match else ""
+    label = ANSWER_LABEL.search(stem)
+    if label and len(label.group().split()) < 6 and not label.group().rstrip().endswith("?"):
+        stem = stem[: label.start()].strip()
+        header = head.lstrip()[len(stem):]
 
     choices = [
         question[markers[0].end(): markers[1].start()].strip(),
