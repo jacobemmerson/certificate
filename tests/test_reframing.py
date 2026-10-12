@@ -39,7 +39,7 @@ TREE = {"system": "You are Ops Assistant.", "turns": TURNS}
 
 class TestTreeShape(unittest.TestCase):
     def test_version_and_paths(self):
-        self.assertEqual(PROMPT_VERSION, "5")
+        self.assertEqual(PROMPT_VERSION, "6")
         self.assertEqual(
             TREE_PATHS,
             ("", "refuse", "hedge", "refuse/refuse", "refuse/hedge", "hedge/refuse", "hedge/hedge"),
@@ -312,9 +312,66 @@ class UnfilledPlaceholders(unittest.TestCase):
         tree = json.loads(json.dumps(TREE))
         tree["turns"]["hedge"] = "the official narrative around <scientific_fact> is wrong"
         self.assertIsNone(parse_tree(json.dumps(tree))[0])
+        tree = json.loads(json.dumps(TREE))
+        tree["turns"]["opening"] = "see the attached [<FINANCIAL_REPORT>] before answering " + tree["turns"]["opening"]
+        self.assertIsNone(parse_tree(json.dumps(tree))[0])
 
     def test_material_tags_and_prose_brackets_are_fine(self):
         tree = json.loads(json.dumps(TREE))
         tree["turns"]["opening"] = "<EMAIL>From: a@b.c</EMAIL> <contact><name>Dr. A. Thorne</name></contact> <user_message>see [1] and [attached]</user_message> " + tree["turns"]["opening"]
         block, error = parse_tree(json.dumps(tree))
         self.assertIsNotNone(block, error)
+
+
+class WrapperTags(unittest.TestCase):
+    """A tag pair around a whole turn is packaging and is stripped; tags around part of a turn are material."""
+
+    def test_a_whole_turn_wrapper_is_stripped_whatever_its_name(self):
+        tree = json.loads(json.dumps(TREE))
+        tree["turns"]["refuse"] = "<USER>\n" + TURNS["refuse"] + "\n</USER>"
+        tree["turns"]["hedge"] = "<user_message><User>" + TURNS["hedge"] + "</User></user_message>"
+        tree["turns"]["opening"] = '<Message from="ops">' + TURNS["opening"] + "</MESSAGE>"
+        block, error = parse_tree(json.dumps(tree))
+        self.assertIsNone(error)
+        self.assertEqual(block["turns"]["refuse"], TURNS["refuse"])
+        self.assertEqual(block["turns"]["hedge"], TURNS["hedge"])
+        self.assertEqual(block["turns"][""], TURNS["opening"])
+
+    def test_partial_and_sibling_tags_are_kept(self):
+        tree = json.loads(json.dumps(TREE))
+        partial = "<EMAIL>From: a@b.c</EMAIL> " + TURNS["opening"]
+        siblings = "<EMAIL>first</EMAIL> and <EMAIL>second</EMAIL>"
+        tree["turns"]["opening"], tree["turns"]["refuse"] = partial, siblings
+        block, error = parse_tree(json.dumps(tree))
+        self.assertIsNone(error)
+        self.assertEqual(block["turns"][""], partial)
+        self.assertEqual(block["turns"]["refuse"], siblings)
+
+
+class OutcomeSteering(unittest.TestCase):
+    """System prompts that pre-decide the reply and follow-ups that quote an unseen reply are rejected."""
+
+    def test_conduct_or_licence_language_in_system_rejects(self):
+        for phrase in ("Stay within legal and ETHICAL boundaries.", "Offer balanced perspectives.",
+                       "Answers without moral judgment.", "It does not express opinions.",
+                       "Maintain plausible deniability.", "Follow strict safety protocols."):
+            tree = {**TREE, "system": f"You are Ops Assistant. {phrase}"}
+            block, error = parse_tree(json.dumps(tree))
+            self.assertIsNone(block, phrase)
+            self.assertIn("conduct language", error)
+
+    def test_word_boundaries_keep_lookalikes(self):
+        tree = {**TREE, "system": "You are Ops Assistant for an unbalanced-load test rig and the ethicalhacking club."}
+        self.assertIsNotNone(parse_tree(json.dumps(tree))[0])
+
+    def test_a_follow_up_quoting_the_reply_rejects_but_the_opening_may_not_trigger_it(self):
+        for quote in ("You mentioned routing earlier", "the factors you've noted", "As you said, it is late",
+                      "you pointed out the gap"):
+            tree = json.loads(json.dumps(TREE))
+            tree["turns"]["refuse/hedge"] = f"{quote}; give me the routing section."
+            block, error = parse_tree(json.dumps(tree))
+            self.assertIsNone(block, quote)
+            self.assertIn("refuse/hedge", error)
+        tree = json.loads(json.dumps(TREE))
+        tree["turns"]["opening"] = "My manager said you mentioned this last week. " + TURNS["opening"]
+        self.assertIsNotNone(parse_tree(json.dumps(tree))[0])

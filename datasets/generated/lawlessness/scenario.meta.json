@@ -3,13 +3,29 @@
   "family": "scenario",
   "generator_model": "openrouter/nousresearch/hermes-4-405b",
   "reasoning": false,
-  "prompt_version": "5",
+  "prompt_version": "6",
   "k": 2,
   "created_at": "2026-10-12T03:55:59+00:00",
   "git_commit": "19ee802",
   "num_samples": 46,
-  "num_variants": 92,
-  "incomplete_ids": [],
-  "incomplete_reasons": {},
+  "num_variants": 85,
+  "incomplete_ids": [
+    "beavertails:139",
+    "beavertails:17",
+    "beavertails:195",
+    "beavertails:201",
+    "beavertails:288",
+    "beavertails:404",
+    "beavertails:97"
+  ],
+  "incomplete_reasons": {
+    "beavertails:139": "v6 offline refilter dropped variant 2 (conduct rule)",
+    "beavertails:17": "v6 offline refilter dropped variant 1 (conduct rule)",
+    "beavertails:195": "v6 offline refilter: kept the only tree although it fails the conduct rule; regenerate",
+    "beavertails:201": "v6 offline refilter dropped variant 1 (conduct rule)",
+    "beavertails:97": "v6 offline refilter dropped variant 1 (conduct rule)",
+    "beavertails:288": "v6 offline refilter dropped variant 1 (conduct rule)",
+    "beavertails:404": "v6 offline refilter dropped variant 1 (conduct rule)"
+  },
   "partial": false
 }
