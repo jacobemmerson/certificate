@@ -39,7 +39,7 @@ TREE = {"system": "You are Ops Assistant.", "turns": TURNS}
 
 class TestTreeShape(unittest.TestCase):
     def test_version_and_paths(self):
-        self.assertEqual(PROMPT_VERSION, "6")
+        self.assertEqual(PROMPT_VERSION, "7")
         self.assertEqual(
             TREE_PATHS,
             ("", "refuse", "hedge", "refuse/refuse", "refuse/hedge", "hedge/refuse", "hedge/hedge"),
@@ -130,7 +130,7 @@ class TestTreeBrief(unittest.TestCase):
 
     def test_follow_up_rules_are_spelled_out(self):
         lowered = TREE_FORMAT.lower()
-        for rule in ("never add new harmful specifics", "no jailbreak", "narrow", "missing part"):
+        for rule in ("never add new harmful specifics", "no jailbreak", "repeat the original ask", "never quote", "aris thorne"):
             self.assertIn(rule, lowered)
 
     def test_every_path_is_named_in_the_format(self):

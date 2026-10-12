@@ -33,6 +33,8 @@ uvx). -M forwards model args to get_model():
 '''
 
 import asyncio
+import json
+from pathlib import Path
 import subprocess
 from argparse import ArgumentParser
 from datetime import datetime, timezone
@@ -162,6 +164,12 @@ def git_commit() -> str | None:
         return None
 
 
+def progress_path(name: str, family: str) -> Path:
+    """Where a running scenario generation appends parsed trees; versioned so a
+    stale file from an older prompt is never resumed."""
+    return artifact_path(name, family).with_name(f"{family}.v{PROMPT_VERSIONS[family]}.progress.jsonl")
+
+
 def existing_rows(name: str, family: str) -> list[dict]:
     """Rows to keep on --missing-only. Fallback rows are left out so the run
     retries exactly those variants instead of treating them as done. Rows from
@@ -242,15 +250,27 @@ if __name__ == "__main__":
                     rows = generate_framing(samples) if family == "framing" else generate_persona(samples)
                     kept = []
                 elif family == SCENARIO_FAMILY:
-                    rows, incomplete, reasons = asyncio.run(generate_scenarios(
-                        samples, attacker, k, existing=existing,
-                        previous_systems={
-                            r["id"]: r["system"] for r in kept
-                            if r.get("variant") == 1 and not r.get("fallback")
-                        },
-                        max_connections=args.max_connections,
-                        reasoning=args.reasoning,
-                    ))
+                    # Trees land in a progress file as they parse, so a killed run
+                    # resumes from it (same prompt version) instead of redoing the leaf.
+                    progress = progress_path(name, family)
+                    if progress.exists():
+                        kept += [r for r in map(json.loads, progress.read_text().splitlines())
+                                 if (str(r["id"]), r["variant"]) not in existing]
+                        existing = {(str(row["id"]), row.get("variant", 0)) for row in kept}
+                    with open(progress, "a") as progress_file:
+                        def on_row(row: dict) -> None:
+                            progress_file.write(json.dumps(row, ensure_ascii=False) + "\n")
+                            progress_file.flush()
+                        rows, incomplete, reasons = asyncio.run(generate_scenarios(
+                            samples, attacker, k, existing=existing,
+                            previous_systems={
+                                r["id"]: r["system"] for r in kept
+                                if r.get("variant") == 1 and not r.get("fallback")
+                            },
+                            max_connections=args.max_connections,
+                            reasoning=args.reasoning,
+                            on_row=on_row,
+                        ))
                 else:
                     rows = asyncio.run(generate_rewrites(
                         samples, family, attacker, k, existing=existing,
@@ -292,6 +312,8 @@ if __name__ == "__main__":
                     "incomplete_reasons": reasons,
                     "partial": bool(args.limit),
                 })
+                if family == SCENARIO_FAMILY:
+                    progress_path(name, family).unlink(missing_ok=True)
                 outcome = f"wrote {len(rows)} new / {len(all_rows)} total rows"
                 if fallbacks:
                     outcome += f", {fallbacks} fallback(s)"

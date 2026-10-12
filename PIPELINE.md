@@ -63,7 +63,11 @@ the target, the judges (`GRADERS.md`) and the stage-3 branch classifier.
 
 ## Stage B: artifact generation (`generate.py`, `pipeline/generation.py`)
 
-- The attacker is Hermes-4-70B, served by vLLM either on slurm
+- The attacker for the rewrite families is Hermes-4-405B on OpenRouter (`-a
+  openrouter/nousresearch/hermes-4-405b`); scenario trees since Oct 12 2026 come from Grok 4.3
+  with reasoning off (`-a openrouter/x-ai/grok-4.3 -M reasoning_enabled=false`), which follows
+  the tree format with no parse retries and is several times faster. Hermes-4-70B can instead
+  be served by vLLM either on slurm
   (`scripts/generate_hermes_slurm.sh`) or on Modal (`scripts/hermes_modal.py` behind a
   `modal.forward` tunnel, driven by `scripts/generate_hermes_modal.sh`). vLLM is never in
   `uv.lock`.

@@ -74,7 +74,13 @@ and asker. The replay solver walks the tree with the branch classifier
 `prompt_version` is compared with `pipeline/artifacts.py::PROMPT_VERSIONS`: rewrite families
 (`paraphrase`, `register`, `past_tense`, `multilingual`) `REWRITE_PROMPT_VERSION` = "3",
 `framing` `FRAMING_VERSION` = "3", `persona` `PERSONA_VERSION` = "1", `scenario`
-`SCENARIO_PROMPT_VERSION` = "4". Bump the constant on any template or prompt edit.
+`SCENARIO_PROMPT_VERSION` = "7". Bump the constant on any template or prompt edit.
+
+Scenario trees are appended to `<leaf>/scenario.v<version>.progress.jsonl` as they parse
+(gitignored); a killed run picks that file up on its next `--force` or `--missing-only` pass
+and the file is removed once the leaf's artifact is written. `past_tense` does not apply to
+agentic tasks or forced choices (`Source.families_exclude`), so a leaf made only of those
+sources has no `past_tense.jsonl`.
 
 Two checks, with different strictness:
 
@@ -95,6 +101,8 @@ Two checks, with different strictness:
 sbatch scripts/generate_hermes_slurm.sh                       # everything: screen, rewrites, scenario trees
 uv run python3 generate.py --only cyber --perturb paraphrase multilingual
 uv run python3 generate.py --only cyber --simulate --sim-k 2
+# Oct 12 2026 scenario regeneration: 7 row-balanced `--only` groups in parallel, each
+#   -a openrouter/x-ai/grok-4.3 -M reasoning_enabled=false --no-perturb --simulate --sim-k 2 --force --max-connections 40
 uv run python3 generate.py --missing-only                     # fill gaps (and retry fallbacks), keep the rest
 uv run python3 generate.py --force                            # from scratch
 ```

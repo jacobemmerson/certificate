@@ -1,23 +1,15 @@
 {
   "task": "misalignment_intent",
   "family": "scenario",
-  "generator_model": "openrouter/nousresearch/hermes-4-405b",
+  "generator_model": "openrouter/x-ai/grok-4.3",
   "reasoning": false,
-  "prompt_version": "6",
+  "prompt_version": "7",
   "k": 2,
-  "created_at": "2026-10-12T04:51:16+00:00",
-  "git_commit": "a611245",
+  "created_at": "2026-10-12T07:57:16+00:00",
+  "git_commit": "f418d11",
   "num_samples": 14,
-  "num_variants": 26,
-  "incomplete_ids": [
-    "injecagent:test_cases_dh_base:469",
-    "instrumentaleval:4",
-    "instrumentaleval:71"
-  ],
-  "incomplete_reasons": {
-    "injecagent:test_cases_dh_base:469": "v6 offline refilter dropped variant 2 (conduct rule)",
-    "instrumentaleval:4": "v6 offline refilter dropped variant 2 (conduct rule)",
-    "instrumentaleval:71": "v6 offline refilter: kept the only tree although it fails the conduct rule; regenerate"
-  },
+  "num_variants": 28,
+  "incomplete_ids": [],
+  "incomplete_reasons": {},
   "partial": false
 }

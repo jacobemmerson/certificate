@@ -18,3 +18,4 @@ datasets/cache/
 
 # certify.py rebuild lock
 models/results/.rebuild.lock
+datasets/generated/*/*.progress.jsonl

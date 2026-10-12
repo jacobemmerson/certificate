@@ -22,6 +22,7 @@ collapse them into one generation.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 import functools
 import re
 from dataclasses import dataclass, field
@@ -247,6 +248,7 @@ async def generate_scenarios(
     parse_attempts: int = 3,
     max_connections: int = 20,
     reasoning: bool = False,
+    on_row: Callable[[dict], None] | None = None,
 ) -> tuple[list[dict], list[str], dict[str, str]]:
     """Rows for stage 3's scenario family: k scenario trees per sample
     (prompts.py::TREE_FORMAT), each `{id, variant, condition, system, turns,
@@ -258,7 +260,8 @@ async def generate_scenarios(
     Unparseable trees are re-requested up to `parse_attempts` times; a variant
     that never parses is dropped and its sample id lands in `incomplete_ids`, with the
     last parse failure in `reasons` (a systematic attacker/format mismatch
-    shows up as one reason repeated across ids).
+    shows up as one reason repeated across ids). `on_row` sees each parsed
+    tree as soon as it exists, so a killed run can keep what it finished.
     """
     samples = [s for s in samples if family_applies(s.metadata, SCENARIO_FAMILY)]
     model = get_model(attacker_model)
@@ -304,6 +307,8 @@ async def generate_scenarios(
             out.append(row)
             if row is not None:
                 previous_system = row["system"]
+                if on_row:
+                    on_row(row)
         return out
 
     per_sample = await asyncio.gather(*(tree_set(sample) for sample in samples))

@@ -49,6 +49,8 @@ class TestArtifactsAreCurrent(unittest.TestCase):
 
     def test_no_file_for_an_unknown_family(self):
         for path in artifacts.GENERATED_DIR.glob("*/*.jsonl"):
+            if path.name.endswith(".progress.jsonl"):  # a running generate.py's scratch
+                continue
             with self.subTest(file=str(path.relative_to(artifacts.GENERATED_DIR))):
                 self.assertIn(path.stem, artifacts.PROMPT_VERSIONS)
 
