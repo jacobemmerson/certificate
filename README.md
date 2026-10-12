@@ -103,26 +103,43 @@ Inspect's stock `openai-api` provider reaches it with no code: a model id
 `openai-api/bifrost/<model>` reads `BIFROST_BASE_URL` and `BIFROST_API_KEY` and sends the
 plain `<model>` name. Every model role takes a full model id, so prefix each one.
 
-```bash
-export BIFROST_BASE_URL=https://bifrost.is.localnet/openai
-export BIFROST_API_KEY=sk-bf-...
-export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt   # gateway cert is signed by an internal CA
+Setup for someone with gateway access, from a fresh clone:
 
-# certify: target, judges and the stage-3 classifier all through the gateway
-uv run python3 certify.py -m openai-api/bifrost/gpt-4.1 --name "GPT-4.1" --provider OpenAI --region US \
-    -g openai-api/bifrost/gpt-4.1 openai-api/bifrost/claude-sonnet-5 \
-    --sim-classifier openai-api/bifrost/gpt-4.1 --simulate
+1. Install: `uv sync` (needs `uv`; the lockfile pins inspect-ai 0.3.246).
+2. Put the credentials in `.env` at the repo root (inspect loads it; nothing else reads it):
+   ```
+   BIFROST_BASE_URL=https://bifrost.is.localnet/openai
+   BIFROST_API_KEY=sk-bf-...
+   SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt   # Debian/Ubuntu; RedHat: /etc/pki/tls/certs/ca-bundle.crt
+   ```
+   `SSL_CERT_FILE` makes Python trust the internal CA that signs the gateway certificate.
+   If the CA is not in the system bundle, point it at the CA file instead.
+3. Check the connection with one leaf, 2 items, every model role through the gateway:
+   ```bash
+   uv run python3 certify.py -m openai-api/bifrost/gpt-4.1 --name "GPT-4.1" --provider OpenAI --region US \
+       -g openai-api/bifrost/gpt-4.1 openai-api/bifrost/claude-sonnet-5 \
+       --sim-classifier openai-api/bifrost/gpt-4.1 --simulate --only loc_deception --limit 2
+   ```
+   A wrong model name fails at the preflight model check; a certificate problem fails
+   with an SSL error on the first request. `--limit` runs never write `models/results`.
+4. Full run: the same command without `--only` and `--limit`, plus `--max-tasks 21` so the
+   leaves run in parallel (`--max-connections` per leaf defaults to 20; raise it if the
+   gateway allows). Expect a few hours and the token totals printed in the preflight table.
+5. Results land in `models/results/<model_id>.json`; `logs/<model_id>/<run_id>/` holds the
+   inspect logs (`inspect view`). A killed run resumes finished leaves with the same `--run-id`.
 
-# generate (only if the artifacts need regenerating; certify replays the committed ones)
-uv run python3 generate.py -a openai-api/bifrost/gpt-4.1 --only cbrn --missing-only
-```
+Regenerating artifacts through the gateway is the same prefix on `generate.py` (`-a
+openai-api/bifrost/<model>`), only needed when the prompts or datasets change: certify
+replays the committed artifacts.
 
-`SSL_CERT_FILE` works because httpx reads it when building its SSL context;
-`tests/test_gateway.py` fails if an upgrade stops honouring it. Caveats:
+Caveats:
 
 - Judges other than `GRADERS.md` make the certificate incomparable with runs graded by
-  the standard panel. Drop `-g` to keep it (that panel needs `OPENROUTER_API_KEY`).
-- Commercial attackers refuse more rewrites than Hermes, so expect more `fallback` rows.
+  the standard panel. Drop `-g` to keep it (that panel needs `OPENROUTER_API_KEY`); the
+  stage-3 classifier likewise defaults to an OpenRouter model, so pass `--sim-classifier`.
+- The gateway's model names and content filters are unverified from this side: the stub
+  test (`tests/test_gateway.py`) covers the request shape and the CA variable only.
+- A commercial attacker refuses more rewrites than Hermes, so expect more `fallback` rows.
 - `--max-price` and `--cheapest` are OpenRouter-only and refuse a gateway target.
 
 ## Where results land
@@ -137,7 +154,7 @@ the full tree, `status.<risk>` completion and token usage. Logs are in
 
 <!-- certify-help -->
 ```
-usage: certify.py [-h] --model MODEL [--grader GRADER] [--name NAME]
+usage: certify.py [-h] --model MODEL [--grader GRADER [GRADER ...]] [--name NAME]
                   [--provider PROVIDER] [--region REGION]
                   [--specialty SPECIALTY] [--epochs EPOCHS] [--rerun]
                   [--run-id RUN_ID] [--llamaguard LLAMAGUARD] [--limit LIMIT]
@@ -154,8 +171,8 @@ options:
   -h, --help            show this help message and exit
   --model MODEL, -m MODEL
                         The model to be evaluated using AISI inspect.
-  --grader GRADER, -g GRADER
-                        Grader model override (single model). If omitted,
+  --grader GRADER [GRADER ...], -g GRADER [GRADER ...]
+                        Grader model(s) overriding GRADERS.md. If omitted,
                         loads from GRADERS.md
   --name NAME, -n NAME  The name of the model for formatting the certificate
                         table.
