@@ -1,8 +1,8 @@
 # Perturbation family pilot: regeneration runbook and decisions
 
 Purpose: regenerate the stage-2/3 artifacts at prompt v3 (rewrites) and v4 (scenario trees),
-then record the per-family keep/kill decision of spec §2.3
-(`docs/superpowers/specs/2026-10-05-pipeline-refactor-design.md`).
+then record the per-family keep/kill decision of the Oct 2026 refactor spec (§2.3;
+see git history, the spec file was removed once every workstream merged).
 Regeneration needs Hermes-4-70B on slurm and is run by the operator, not by agents.
 
 ## Preconditions
@@ -21,7 +21,7 @@ Never open `datasets/public/{cbrn,cyber}.csv`, `datasets/generated/{cbrn,cyber}/
 1. Deterministic families, locally. The attacker is never called but the default one is
    still constructed, so this may need `OPENROUTER_API_KEY`:
    `uv run python generate.py --perturb framing persona --force`
-   (Verified together with everything else in step 6; the artifact test is an expectedFailure until then.)
+   (Verified together with everything else in step 6.)
 2. Slurm smoke run. Reason: on Jul 16 an overnight run wrote 100% fallbacks because vLLM's
    optional deps were missing, and `--missing-only` then skipped those files as complete.
    In `scripts/generate_hermes_slurm.sh`, replace the flags after `--max-connections 32` with
@@ -62,9 +62,7 @@ Never open `datasets/public/{cbrn,cyber}.csv`, `datasets/generated/{cbrn,cyber}/
      (anything with completions goes to Gemini, never a Claude agent): same-ask >= 90% per family
    - `cat datasets/generated/*/multilingual.meta.json`: `num_variants == 3 x num_samples`,
      `prompt_version "3"`, `partial false`
-6. Remove the two `@unittest.expectedFailure` markers in `tests/test_artifacts_current.py`
-   (an unexpected success fails the suite until they are gone), then
-   `uv run python3 -m unittest tests.test_artifacts_current` and
+6. Run `uv run python3 -m unittest tests.test_artifacts_current` and
    `uv run python3 -m unittest discover tests` must be OK.
 7. Commit the artifacts: `chore(artifacts): regenerate at prompt v3/v4`.
 

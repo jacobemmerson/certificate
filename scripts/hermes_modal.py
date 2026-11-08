@@ -1,7 +1,6 @@
 """Serve the Hermes-4-70B attacker on Modal as an OpenAI-compatible vLLM endpoint.
 
-Modal only hosts the model. screen_answerability.py and generate.py run from
-this checkout and reach it via --model-base-url; scripts/generate_hermes_modal.sh
+Modal only hosts the model. generate.py runs from this checkout and reach it via --model-base-url; scripts/generate_hermes_modal.sh
 does the whole job. modal is a project dependency; vllm, as on slurm, stays out of
 uv.lock (see the venv-drift note in pyproject.toml).
 
