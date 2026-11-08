@@ -16,7 +16,7 @@ ALL_PERTURB_FAMILIES = {*REWRITE_FAMILIES, "framing", "persona", "reconsideratio
 # target's own control completion, so it cannot exist before the eval runs.
 PREGENERATED_FAMILIES = ALL_PERTURB_FAMILIES - {"reconsideration"}
 
-def init_benchmarks(grader, llamaguard_model: str | None = None):
+def init_benchmarks(grader):
     '''
     One entry per leaf dataset, keyed by leaf id.
 
@@ -24,11 +24,6 @@ def init_benchmarks(grader, llamaguard_model: str | None = None):
     schema (datasets/public/<leaf>.csv), so each entry holds a single task
     rather than a list of per-benchmark ones. Leaves whose dataset has not been
     built are skipped.
-
-    `llamaguard_model` is accepted but unused: cluster tasks do not attach
-    LlamaGuard. In a mixed cluster it would score likert and mcq rows where it
-    means nothing, and each row's own `criterion` is strictly more specific
-    than its generic taxonomy. See datasets/BENCHMARKS.md.
     '''
     return {
         leaf: {"tasks": [cluster(leaf, grader=grader)], "name": leaf}
