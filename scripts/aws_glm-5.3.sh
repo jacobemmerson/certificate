@@ -15,5 +15,4 @@ uv run certify.py \
 	--name "GLM 5.3" \
 	--provider "Z.ai" \
 	--region "China" \
-	--specialty "Agentic coding and reasoning" \
 	--simulate --max-tasks 21 "$@"

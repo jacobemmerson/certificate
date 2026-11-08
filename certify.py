@@ -27,15 +27,6 @@ from inspect_ai import eval_set
 from inspect_ai.log import read_eval_log
 
 
-def display_mode() -> str:
-    '''
-    Inspect's default is the Textual TUI, whose worker cancels the whole eval if
-    the terminal goes away or resizes under it (a disconnected/idle SSH pty, a
-    SIGWINCH) — which silently kills unattended overnight batches with a
-    CancelledError, not a model error. Force a non-interactive display whenever
-    stdout is not a real terminal, honouring an explicit INSPECT_DISPLAY override.
-    '''
-    return os.environ.get("INSPECT_DISPLAY") or ("full" if sys.stdout.isatty() else "log")
 from pipeline.artifacts import REPEAT_FAMILIES, family_ids, load_family, task_name, validate_artifacts
 from pipeline.registry import init_benchmarks, apply_stages, require_families_column, ALL_PERTURB_FAMILIES
 from pipeline.stage3_simulation.classify import DEFAULT_CLASSIFIER
@@ -48,6 +39,17 @@ from pipeline.utils.graders import (
     load_graders, load_models_with_check, validate_graders, validate_target,
     model_result_path, rebuild_models_json, write_json_atomic,
 )
+
+def display_mode() -> str:
+    '''
+    Inspect's default is the Textual TUI, whose worker cancels the whole eval if
+    the terminal goes away or resizes under it (a disconnected/idle SSH pty, a
+    SIGWINCH) — which silently kills unattended overnight batches with a
+    CancelledError, not a model error. Force a non-interactive display whenever
+    stdout is not a real terminal, honouring an explicit INSPECT_DISPLAY override.
+    '''
+    return os.environ.get("INSPECT_DISPLAY") or ("full" if sys.stdout.isatty() else "log")
+
 
 # OpenRouter's provider routing accepts a price ceiling per token class, in USD
 # per million tokens: https://openrouter.ai/docs/guides/routing/provider-selection
@@ -112,7 +114,7 @@ def estimate_calls(benchmarks, families, k: int, sim_k: int | None, graders, lim
     '''
     Upper-bound target / judge / classifier call counts per risk, from the
     stored artifact rows — printed before any canary call so a 60k-call run is
-    a decision, not a surprise. See docs/superpowers/plans/2026-10-05-ws-e-scale.md Task 6.
+    a decision, not a surprise.
     '''
     n_graders = len(graders) if isinstance(graders, list) else 1
     estimate = {}
@@ -224,155 +226,112 @@ def start_eval(tasks: list, model: str, model_args: dict, log_dir: Path, args) -
     return reused
 
 
-def parse():
-    
-    args = ArgumentParser()
-    args.add_argument(
-        "--model", "-m", required=True, help="The model to be evaluated using AISI inspect."
+def parse(argv: list[str] | None = None):
+    args = ArgumentParser(
+        description="Certify one target model: stage 1 (control) on every leaf dataset, stage 2 "
+                    "(surface perturbations, replayed from datasets/generated/) by default, stage 3 "
+                    "(scenario trees) under --simulate. Writes models/results/<model_id>.json unless --limit is set."
     )
-    args.add_argument(
-        "--grader", "-g", required=False, nargs="+", default=None,
-        help="Grader model(s) overriding GRADERS.md, e.g. -g openai-api/bifrost/gpt-4.1 "
-             "openai-api/bifrost/claude-sonnet-5. If omitted, loads from GRADERS.md"
+
+    target = args.add_argument_group("target and identity")
+    target.add_argument(
+        "--model", "-m", required=True,
+        help="Inspect model id of the target, e.g. openrouter/<slug> or openai-api/bifrost/<model>."
     )
-    args.add_argument(
-        "--name", "-n", required=False, default=None, help="The name of the model for formatting the certificate table."
+    target.add_argument("--name", "-n", default=None, help="Display name for the certificate table.")
+    target.add_argument("--provider", "-p", default=None, help="Company behind the model.")
+    target.add_argument("--region", "-r", default=None, help="Region the model is developed in (US, EU, China).")
+    target.add_argument(
+        "--grader", "-g", nargs="+", default=None, metavar="MODEL",
+        help="Judge model(s) overriding GRADERS.md, e.g. -g openai-api/bifrost/gpt-4.1 "
+             "openai-api/bifrost/claude-sonnet-5."
     )
-    args.add_argument(
-        "--provider", "-p", required=False, default=None, help="The provider of the model for formatting the certificate table."
-    )
-    args.add_argument(
-        "--region", "-r", required=False, default=None, help="The region of the world where the model is developed and data is sourced."
-    )
-    args.add_argument(
-        "--specialty", "-s", required=False, default=None, help="What the model has been tuned or designated to do (i.e. coding, math, etc)."
-    )
-    args.add_argument(
-        "--epochs", "-e", required=False, type=int, default=1, help="The number of turns to generate a response per sample and average over."
-    )
-    args.add_argument(
-        "--rerun", required=False, action='store_true',
-        help="Rerun every requested risk even if it already has results, and move the run's "
-             "log directory (logs/MODEL/RUN_ID) aside under a timestamp first, so the resume "
-             "logic cannot pick up its old logs."
-    )
-    args.add_argument(
-        "--run-id", required=False, default="current",
-        help="Name of the log directory under logs/MODEL/ this run writes to and resumes from "
-             "(default: current). A finished task in it is skipped and an unfinished one "
-             "re-runs only its missing samples; a --limit run uses RUN_ID-limitN."
-    )
-    args.add_argument(
-        "--llamaguard", required=False, default="openrouter/meta-llama/llama-guard-4-12b",
-        help="LlamaGuard model for adversarial harm scoring (default: openrouter/meta-llama/llama-guard-4-12b)."
-    )
-    args.add_argument(
-        "--max-tasks", required=False, type=int, default=None,
-        help="Leaf tasks to run in parallel (default: inspect's 10). Each task already "
-             "fans out over its samples, so this mostly matters for a many-leaf run.")
-    args.add_argument(
-        "--limit", "-l", required=False, type=int, default=None,
-        help="Randomly sample this many examples per task (default: run the full dataset). WARNING: if limit is present, results will not be saved. They can still be accessed in logs/MODEL_NAME/"
-    )
-    args.add_argument(
-        "--only", "-o", required=False, nargs="+", metavar="RISK",
-        help="Run only these leaf datasets (e.g. --only cbrn cyber_operational_use). "
-             "Other existing results are preserved. A finished log in the run dir is reused, not re-run."
-    )
-    args.add_argument(
-        "--perturb", required=False, nargs="+", default=sorted(ALL_PERTURB_FAMILIES), choices=sorted(ALL_PERTURB_FAMILIES),
+
+    stages = args.add_argument_group("stages")
+    stages.add_argument(
+        "--perturb", nargs="+", default=sorted(ALL_PERTURB_FAMILIES), choices=sorted(ALL_PERTURB_FAMILIES),
         metavar="FAMILY",
-        help="Run surface-perturbation auditing for these families (paraphrase register past_tense "
-             "multilingual framing persona reconsideration; default: all). Replays datasets/generated/ "
-             "(run generate.py first); reconsideration runs live."
+        help=f"Stage-2 families to run (default: all of {', '.join(sorted(ALL_PERTURB_FAMILIES))}). "
+             "Every family but reconsideration replays datasets/generated/ (run generate.py first)."
     )
-    args.add_argument(
-        "--no-perturb", required=False, action='store_true',
-        help="Skip stage-2 perturbation auditing entirely (e.g. for a --simulate-only run — "
-             "--perturb is on by default)."
+    stages.add_argument("--no-perturb", action="store_true", help="Skip stage 2 entirely.")
+    stages.add_argument(
+        "--perturb-k", type=int, default=1,
+        help="Stored variants per item for paraphrase/register/past_tense (default: 1; at most the k generated)."
     )
-    args.add_argument(
-        "--perturb-k", required=False, type=int, default=1,
-        help="Use up to this many stored variants per item for the rewrite families "
-             "(paraphrase, register, past_tense); default=1. Must not exceed the k the "
-             "artifacts were generated with."
+    stages.add_argument(
+        "--simulate", action="store_true",
+        help="Run stage 3: the target walks the pregenerated deployment-scenario trees (up to 3 turns); "
+             "composes with stage 2 in one run and one log per leaf."
     )
-    args.add_argument(
-        "--simulate", required=False, action='store_true',
-        help="Run stage-3 scenario simulation (see pipeline/stage3_simulation/) on top of every "
-             "benchmark in --only (or all benchmarks if --only is omitted): the target walks the "
-             "pregenerated deployment-scenario trees (up to 3 turns; branch chosen by --sim-classifier) "
-             "from datasets/generated/ "
-             "(run generate.py --simulate first). Composes with --perturb in one run/one log: "
-             "the panel reports safety_scenario next to stage 2's safety_<family>/stability_under_attack."
-    )
-    args.add_argument(
-        "--sim-k", required=False, type=int, default=2,
-        help="Use up to this many stored scenario trees per item under --simulate; default=2."
-    )
-    args.add_argument(
-        "--sim-classifier", required=False, default=DEFAULT_CLASSIFIER,
-        help="Model that labels each target reply refuse/hedge/comply to choose the next stored "
-             "turn under --simulate (pipeline/stage3_simulation/classify.py). Regex-prefiltered, "
-             "disk-cached with no expiry, canaried with the graders. "
-             f"Default: {DEFAULT_CLASSIFIER}."
-    )
-    args.add_argument(
-        "--max-connections", required=False, type=int, default=100,
-        help="Max concurrent model connections Inspect opens (default: 100)."
-    )
-    args.add_argument(
-        "--max-retries", required=False, type=int, default=10,
-        help="Give up on a model request after this many retries (default: 10). Inspect's own "
-             "default is to retry transient provider errors forever, and the backoff sleep is "
-             "reported as waiting time so --working-limit never ends it — which turns a provider "
-             "outage into an unattended batch that hangs instead of failing the model and moving "
-             "on to the next one. Raise it for a run against a heavily rate-limited provider."
-    )
-    args.add_argument(
-        "--attempt-timeout", required=False, type=int, default=600,
-        help="Abandon a single model request after this many seconds and retry it "
-             "(default: 600). Bounds a connection that has stopped responding; unset, one "
-             "wedged request waits indefinitely because --working-limit excludes time spent "
-             "waiting on retries."
-    )
-    args.add_argument(
-        "--timeout", required=False, type=int, default=1800,
-        help="Give up on a model request this many seconds after its first attempt, however "
-             "many retries are left (default: 1800). --max-retries bounds the number of "
-             "attempts but not their duration: backoff caps at 30 minutes a wait, so a "
-             "handful of retries can hold a sample for hours. Whichever bound is hit first "
-             "ends the request."
-    )
-    args.add_argument(
-        "--working-limit", required=False, type=int, default=900,
-        help="Max working seconds per sample before it fails and retries; bounds a "
-             "hung provider connection so one stuck request can't wedge the whole "
-             "run (default: 900). Excludes time spent waiting on rate limits/retries."
-    )
-    args.add_argument(
-        "--max-price", required=False, nargs="+", metavar="KEY=VALUE", default=None,
-        help="Cap what OpenRouter is allowed to pay for the target model, as one or more of "
-             "prompt/completion/request/image in USD per million tokens "
-             "(e.g. --max-price prompt=1.25 completion=4.25). Endpoints above the cap are "
-             "dropped from routing, and a request with no qualifying endpoint fails outright "
-             "rather than falling back to a pricier one — so a cap under the model's floor "
-             "price errors every sample. openrouter/ models only, and the target only: the "
-             "graders and --llamaguard route unconstrained."
+    stages.add_argument("--sim-k", type=int, default=2, help="Stored scenario trees per item (default: 2).")
+    stages.add_argument(
+        "--sim-classifier", default=DEFAULT_CLASSIFIER,
+        help="Model labelling each target reply refuse/hedge/comply to pick the next stored turn "
+             f"(regex-prefiltered, disk-cached, canaried with the graders; default: {DEFAULT_CLASSIFIER})."
     )
 
-    args.add_argument(
-        "--cheapest", required=False, action='store_true',
-        help="Route every target call to the cheapest OpenRouter endpoint that still serves the "
-             "model's most capable configuration — full weight precision, longest context, widest "
-             "parameter support (see pipeline/utils/routing.py). Falls back only to other equally "
-             "capable endpoints, never onto a degraded one, and fails the run rather than guess "
-             "when the endpoint list cannot be read. Every endpoint considered is recorded per "
-             "benchmark in models.json. Composes with --max-price. openrouter/ models only, and "
-             "the target only: the graders and --llamaguard route unconstrained."
+    run = args.add_argument_group("run control")
+    run.add_argument(
+        "--only", "-o", nargs="+", metavar="LEAF",
+        help="Run only these leaf datasets (e.g. --only cbrn cyber_operational_use); other results are kept."
+    )
+    run.add_argument(
+        "--limit", "-l", type=int, default=None,
+        help="Sample this many items per leaf. Smoke-test mode: models/results is NOT written, logs are."
+    )
+    run.add_argument("--epochs", "-e", type=int, default=1, help="Generations per sample to average over (default: 1).")
+    run.add_argument(
+        "--rerun", action="store_true",
+        help="Re-run every requested leaf even if certified, moving logs/MODEL/RUN_ID aside under a timestamp."
+    )
+    run.add_argument(
+        "--run-id", default="current",
+        help="Log directory under logs/MODEL/ to write to and resume from (default: current). A finished "
+             "leaf in it is skipped, an unfinished one re-runs its missing samples; --limit appends -limitN."
+    )
+    run.add_argument(
+        "--max-tasks", type=int, default=None,
+        help="Leaf tasks to run in parallel (default: inspect's 10)."
     )
 
-    return args.parse_args()
+    limits = args.add_argument_group(
+        "inspect limits",
+        "Bounds so an unattended batch fails a stuck model instead of hanging. Inspect's own defaults "
+        "retry forever and count backoff as waiting, which --working-limit never ends."
+    )
+    limits.add_argument("--max-connections", type=int, default=100, help="Concurrent model connections (default: 100).")
+    limits.add_argument("--max-retries", type=int, default=10, help="Retries per model request (default: 10).")
+    limits.add_argument(
+        "--attempt-timeout", type=int, default=600,
+        help="Seconds before one request attempt is abandoned and retried (default: 600)."
+    )
+    limits.add_argument(
+        "--timeout", type=int, default=1800,
+        help="Seconds after the first attempt before a request is given up regardless of retries left (default: 1800)."
+    )
+    limits.add_argument(
+        "--working-limit", type=int, default=900,
+        help="Working seconds per sample before it fails and retries, excluding time waiting on retries (default: 900)."
+    )
+
+    routing = args.add_argument_group(
+        "openrouter routing", "openrouter/ targets only; the graders and classifier route unconstrained."
+    )
+    routing.add_argument(
+        "--max-price", nargs="+", metavar="KEY=VALUE", default=None,
+        help="Price ceiling per token class in USD per million tokens, KEY one of prompt/completion/request/image "
+             "(e.g. --max-price prompt=1.25 completion=4.25). Endpoints above the cap are dropped; a cap under "
+             "the model's floor errors every sample."
+    )
+    routing.add_argument(
+        "--cheapest", action="store_true",
+        help="Pin the cheapest endpoints that still serve the model's most capable configuration (full precision, "
+             "longest context; see pipeline/utils/routing.py). Endpoints considered are recorded in models.json."
+    )
+
+    return args.parse_args(argv)
+
 
 # Share of a benchmark's samples that may come back with an empty completion
 # before the run stops counting as a clean one. Matches eval()'s fail_on_error:
@@ -536,7 +495,7 @@ def completed_risks(entry: dict) -> set[str]:
 
 
 RUN_OWNED_FIELDS = ("scores", "results", "status", "aggregate")
-IDENTITY_FIELDS = ("id", "name", "company", "region", "specialty")
+IDENTITY_FIELDS = ("id", "name", "company", "region")
 
 
 def update(results):
@@ -582,9 +541,8 @@ def update(results):
 
 # ----- main ------
 
-if __name__ == "__main__":
-
-    args = parse()
+def main(argv: list[str] | None = None):
+    args = parse(argv)
 
     # A provider content-filter refusal is a decision about the prompt, not a
     # blip: without this each refused sample burns the full retry ladder before
@@ -632,7 +590,7 @@ if __name__ == "__main__":
     print(f"Log Directory: {log_dir}")
 
     # ----- task master list -----
-    BENCHMARKS = init_benchmarks(grader, llamaguard_model=args.llamaguard)  # see pipeline/registry.py for all tasks
+    BENCHMARKS = init_benchmarks(grader)  # see pipeline/registry.py for all tasks
 
     # Stage 2 and stage 3 compose in one run: both layer condition families
     # onto the same Task (one control generation, one log), and the wrapped
@@ -792,7 +750,6 @@ if __name__ == "__main__":
             "name": args.name,
             "company": args.provider,
             "region": args.region,
-            "specialty": args.specialty,
             "scores": scores,
             "aggregate": results_tree.model_aggregate(results_by_risk),
             "results": results_by_risk,
@@ -800,3 +757,7 @@ if __name__ == "__main__":
         }
 
         update(results)
+
+
+if __name__ == "__main__":
+    main()

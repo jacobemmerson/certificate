@@ -11,8 +11,9 @@ Practice taxonomy, one dataset per taxonomy leaf (`datasets/prepare/cluster/leav
 leaf dataset is a subset of the benchmarks annotated with that leaf, hardened by frozen surface
 perturbations (stage 2) and a multi-turn deployment scenario (stage 3), judged by a two-model
 ensemble, and rolled up to one headline per leaf. Grouping leaves into systemic risks is a
-human mapping still to come. How it is built and what the numbers mean:
-[`pipeline/README.md`](pipeline/README.md). What is in the data:
+human mapping still to come. One-page orientation on the conditions and metrics:
+[`docs/conditions-and-metrics.md`](docs/conditions-and-metrics.md). How it is built and what the
+numbers mean: [`pipeline/README.md`](pipeline/README.md). What is in the data:
 [`datasets/BENCHMARKS.md`](datasets/BENCHMARKS.md). Adding a benchmark:
 [CONTRIBUTE.md](CONTRIBUTE.md).
 
@@ -91,6 +92,9 @@ uv run python3 scripts/reaggregate_from_logs.py <model_id>
 
 # smoke test: results are NOT written, logs are
 uv run python3 certify.py -m openrouter/<slug> --only cbrn --limit 3 --simulate
+
+# offline smoke test, no API keys: both CLIs end to end against inspect's mock model (~10 s)
+uv run python3 -m unittest tests.test_smoke
 ```
 
 Before any eval starts `certify.py` validates artifacts, prints the estimated target /
@@ -154,213 +158,154 @@ the full tree, `status.<risk>` completion and token usage. Logs are in
 
 <!-- certify-help -->
 ```
-usage: certify.py [-h] --model MODEL [--grader GRADER [GRADER ...]] [--name NAME]
-                  [--provider PROVIDER] [--region REGION]
-                  [--specialty SPECIALTY] [--epochs EPOCHS] [--rerun]
-                  [--run-id RUN_ID] [--llamaguard LLAMAGUARD] [--limit LIMIT]
-                  [--only RISK [RISK ...]] [--perturb FAMILY [FAMILY ...]]
-                  [--no-perturb] [--perturb-k PERTURB_K] [--simulate]
-                  [--sim-k SIM_K] [--sim-classifier SIM_CLASSIFIER]
-                  [--max-connections MAX_CONNECTIONS]
-                  [--max-retries MAX_RETRIES]
+usage: certify.py [-h] --model MODEL [--name NAME] [--provider PROVIDER] [--region REGION]
+                  [--grader MODEL [MODEL ...]] [--perturb FAMILY [FAMILY ...]] [--no-perturb]
+                  [--perturb-k PERTURB_K] [--simulate] [--sim-k SIM_K]
+                  [--sim-classifier SIM_CLASSIFIER] [--only LEAF [LEAF ...]] [--limit LIMIT]
+                  [--epochs EPOCHS] [--rerun] [--run-id RUN_ID] [--max-tasks MAX_TASKS]
+                  [--max-connections MAX_CONNECTIONS] [--max-retries MAX_RETRIES]
                   [--attempt-timeout ATTEMPT_TIMEOUT] [--timeout TIMEOUT]
-                  [--working-limit WORKING_LIMIT]
-                  [--max-price KEY=VALUE [KEY=VALUE ...]] [--cheapest]
+                  [--working-limit WORKING_LIMIT] [--max-price KEY=VALUE [KEY=VALUE ...]]
+                  [--cheapest]
+
+Certify one target model: stage 1 (control) on every leaf dataset, stage 2 (surface perturbations,
+replayed from datasets/generated/) by default, stage 3 (scenario trees) under --simulate. Writes
+models/results/<model_id>.json unless --limit is set.
 
 options:
   -h, --help            show this help message and exit
+
+target and identity:
   --model MODEL, -m MODEL
-                        The model to be evaluated using AISI inspect.
-  --grader GRADER [GRADER ...], -g GRADER [GRADER ...]
-                        Grader model(s) overriding GRADERS.md. If omitted,
-                        loads from GRADERS.md
-  --name NAME, -n NAME  The name of the model for formatting the certificate
-                        table.
+                        Inspect model id of the target, e.g. openrouter/<slug> or openai-
+                        api/bifrost/<model>.
+  --name NAME, -n NAME  Display name for the certificate table.
   --provider PROVIDER, -p PROVIDER
-                        The provider of the model for formatting the
-                        certificate table.
+                        Company behind the model.
   --region REGION, -r REGION
-                        The region of the world where the model is developed
-                        and data is sourced.
-  --specialty SPECIALTY, -s SPECIALTY
-                        What the model has been tuned or designated to do
-                        (i.e. coding, math, etc).
-  --epochs EPOCHS, -e EPOCHS
-                        The number of turns to generate a response per sample
-                        and average over.
-  --rerun               Rerun every requested risk even if it already has
-                        results, and move the run's log directory
-                        (logs/MODEL/RUN_ID) aside under a timestamp first, so
-                        the resume logic cannot pick up its old logs.
-  --run-id RUN_ID       Name of the log directory under logs/MODEL/ this run
-                        writes to and resumes from (default: current). A
-                        finished task in it is skipped and an unfinished one
-                        re-runs only its missing samples; a --limit run uses
-                        RUN_ID-limitN.
-  --llamaguard LLAMAGUARD
-                        LlamaGuard model for adversarial harm scoring
-                        (default: openrouter/meta-llama/llama-guard-4-12b).
-  --limit LIMIT, -l LIMIT
-                        Randomly sample this many examples per task (default:
-                        run the full dataset). WARNING: if limit is present,
-                        results will not be saved. They can still be accessed
-                        in logs/MODEL_NAME/
-  --only RISK [RISK ...], -o RISK [RISK ...]
-                        Run only these systemic-risk clusters (e.g. --only
-                        cyber manipulation). Other existing results are
-                        preserved. A finished log in the run dir is reused,
-                        not re-run.
+                        Region the model is developed in (US, EU, China).
+  --grader MODEL [MODEL ...], -g MODEL [MODEL ...]
+                        Judge model(s) overriding GRADERS.md, e.g. -g openai-api/bifrost/gpt-4.1
+                        openai-api/bifrost/claude-sonnet-5.
+
+stages:
   --perturb FAMILY [FAMILY ...]
-                        Run surface-perturbation auditing for these families
-                        (paraphrase register past_tense multilingual framing
-                        persona reconsideration; default: all). Replays
-                        datasets/generated/ (run generate.py first);
-                        reconsideration runs live.
-  --no-perturb          Skip stage-2 perturbation auditing entirely (e.g. for
-                        a --simulate-only run — --perturb is on by default).
+                        Stage-2 families to run (default: all of framing, multilingual,
+                        paraphrase, past_tense, persona, reconsideration, register). Every family
+                        but reconsideration replays datasets/generated/ (run generate.py first).
+  --no-perturb          Skip stage 2 entirely.
   --perturb-k PERTURB_K
-                        Use up to this many stored variants per item for the
-                        rewrite families (paraphrase, register, past_tense);
-                        default=1. Must not exceed the k the artifacts were
-                        generated with.
-  --simulate            Run stage-3 scenario simulation (see
-                        pipeline/stage3_simulation/) on top of every benchmark
-                        in --only (or all benchmarks if --only is omitted):
-                        the target walks the pregenerated deployment-scenario
-                        trees (up to 3 turns; branch chosen by --sim-
-                        classifier) from datasets/generated/ (run generate.py
-                        --simulate first). Composes with --perturb in one
-                        run/one log: the panel reports safety_scenario next to
-                        stage 2's safety_<family>/stability_under_attack.
-  --sim-k SIM_K         Use up to this many stored scenario trees per item
-                        under --simulate; default=2.
+                        Stored variants per item for paraphrase/register/past_tense (default: 1;
+                        at most the k generated).
+  --simulate            Run stage 3: the target walks the pregenerated deployment-scenario trees
+                        (up to 3 turns); composes with stage 2 in one run and one log per leaf.
+  --sim-k SIM_K         Stored scenario trees per item (default: 2).
   --sim-classifier SIM_CLASSIFIER
-                        Model that labels each target reply
-                        refuse/hedge/comply to choose the next stored turn
-                        under --simulate
-                        (pipeline/stage3_simulation/classify.py). Regex-
-                        prefiltered, disk-cached with no expiry, canaried with
-                        the graders. Default:
-                        openrouter/google/gemini-3-flash-preview.
+                        Model labelling each target reply refuse/hedge/comply to pick the next
+                        stored turn (regex-prefiltered, disk-cached, canaried with the graders;
+                        default: openrouter/google/gemini-3-flash-preview).
+
+run control:
+  --only LEAF [LEAF ...], -o LEAF [LEAF ...]
+                        Run only these leaf datasets (e.g. --only cbrn cyber_operational_use);
+                        other results are kept.
+  --limit LIMIT, -l LIMIT
+                        Sample this many items per leaf. Smoke-test mode: models/results is NOT
+                        written, logs are.
+  --epochs EPOCHS, -e EPOCHS
+                        Generations per sample to average over (default: 1).
+  --rerun               Re-run every requested leaf even if certified, moving logs/MODEL/RUN_ID
+                        aside under a timestamp.
+  --run-id RUN_ID       Log directory under logs/MODEL/ to write to and resume from (default:
+                        current). A finished leaf in it is skipped, an unfinished one re-runs its
+                        missing samples; --limit appends -limitN.
+  --max-tasks MAX_TASKS
+                        Leaf tasks to run in parallel (default: inspect's 10).
+
+inspect limits:
+  Bounds so an unattended batch fails a stuck model instead of hanging. Inspect's own defaults
+  retry forever and count backoff as waiting, which --working-limit never ends.
+
   --max-connections MAX_CONNECTIONS
-                        Max concurrent model connections Inspect opens
-                        (default: 100).
+                        Concurrent model connections (default: 100).
   --max-retries MAX_RETRIES
-                        Give up on a model request after this many retries
-                        (default: 10). Inspect's own default is to retry
-                        transient provider errors forever, and the backoff
-                        sleep is reported as waiting time so --working-limit
-                        never ends it — which turns a provider outage into an
-                        unattended batch that hangs instead of failing the
-                        model and moving on to the next one. Raise it for a
-                        run against a heavily rate-limited provider.
+                        Retries per model request (default: 10).
   --attempt-timeout ATTEMPT_TIMEOUT
-                        Abandon a single model request after this many seconds
-                        and retry it (default: 600). Bounds a connection that
-                        has stopped responding; unset, one wedged request
-                        waits indefinitely because --working-limit excludes
-                        time spent waiting on retries.
-  --timeout TIMEOUT     Give up on a model request this many seconds after its
-                        first attempt, however many retries are left (default:
-                        1800). --max-retries bounds the number of attempts but
-                        not their duration: backoff caps at 30 minutes a wait,
-                        so a handful of retries can hold a sample for hours.
-                        Whichever bound is hit first ends the request.
+                        Seconds before one request attempt is abandoned and retried (default:
+                        600).
+  --timeout TIMEOUT     Seconds after the first attempt before a request is given up regardless of
+                        retries left (default: 1800).
   --working-limit WORKING_LIMIT
-                        Max working seconds per sample before it fails and
-                        retries; bounds a hung provider connection so one
-                        stuck request can't wedge the whole run (default:
-                        900). Excludes time spent waiting on rate
-                        limits/retries.
+                        Working seconds per sample before it fails and retries, excluding time
+                        waiting on retries (default: 900).
+
+openrouter routing:
+  openrouter/ targets only; the graders and classifier route unconstrained.
+
   --max-price KEY=VALUE [KEY=VALUE ...]
-                        Cap what OpenRouter is allowed to pay for the target
-                        model, as one or more of
-                        prompt/completion/request/image in USD per million
-                        tokens (e.g. --max-price prompt=1.25 completion=4.25).
-                        Endpoints above the cap are dropped from routing, and
-                        a request with no qualifying endpoint fails outright
-                        rather than falling back to a pricier one — so a cap
-                        under the model's floor price errors every sample.
-                        openrouter/ models only, and the target only: the
-                        graders and --llamaguard route unconstrained.
-  --cheapest            Route every target call to the cheapest OpenRouter
-                        endpoint that still serves the model's most capable
-                        configuration — full weight precision, longest
-                        context, widest parameter support (see
-                        pipeline/utils/routing.py). Falls back only to other
-                        equally capable endpoints, never onto a degraded one,
-                        and fails the run rather than guess when the endpoint
-                        list cannot be read. Every endpoint considered is
-                        recorded per benchmark in models.json. Composes with
-                        --max-price. openrouter/ models only, and the target
-                        only: the graders and --llamaguard route
-                        unconstrained.
+                        Price ceiling per token class in USD per million tokens, KEY one of
+                        prompt/completion/request/image (e.g. --max-price prompt=1.25
+                        completion=4.25). Endpoints above the cap are dropped; a cap under the
+                        model's floor errors every sample.
+  --cheapest            Pin the cheapest endpoints that still serve the model's most capable
+                        configuration (full precision, longest context; see
+                        pipeline/utils/routing.py). Endpoints considered are recorded in
+                        models.json.
 ```
 <!-- /certify-help -->
 
 <!-- generate-help -->
 ```
-usage: generate.py [-h] [--attacker ATTACKER] [-M KEY=VALUE]
-                   [--model-base-url MODEL_BASE_URL]
-                   [--max-connections MAX_CONNECTIONS]
-                   [--perturb FAMILY [FAMILY ...]] [--no-perturb]
-                   [--perturb-k PERTURB_K] [--simulate] [--sim-k SIM_K]
-                   [--reasoning] [--only LEAF [LEAF ...]] [--missing-only]
-                   [--force] [--limit LIMIT]
+usage: generate.py [-h] [--attacker ATTACKER] [-M KEY=VALUE] [--model-base-url MODEL_BASE_URL]
+                   [--max-connections MAX_CONNECTIONS] [--perturb FAMILY [FAMILY ...]]
+                   [--no-perturb] [--perturb-k PERTURB_K] [--simulate] [--sim-k SIM_K]
+                   [--reasoning] [--only LEAF [LEAF ...]] [--missing-only] [--force]
+                   [--limit LIMIT]
 
 Generate the frozen perturbation/simulation artifacts certify.py replays.
 
 options:
   -h, --help            show this help message and exit
   --attacker ATTACKER, -a ATTACKER
-                        Rewrite/reframing model for the generative families
-                        (default: openrouter/nousresearch/hermes-4-70b). Any
-                        inspect API provider, or vllm/<repo> pointed at a
-                        running vLLM server via --model-base-url.
-  -M KEY=VALUE          Model argument forwarded to inspect's get_model()
-                        (repeatable), e.g. -M tensor_parallel_size=8 -M
-                        device=cuda. Values are YAML-parsed.
+                        Rewrite/reframing model for the generative families (default:
+                        openrouter/nousresearch/hermes-4-70b). Any inspect API provider, or
+                        vllm/<repo> pointed at a running vLLM server via --model-base-url.
+  -M KEY=VALUE          Model argument forwarded to inspect's get_model() (repeatable), e.g. -M
+                        tensor_parallel_size=8 -M device=cuda. Values are YAML-parsed.
   --model-base-url MODEL_BASE_URL
-                        Base URL of an already-running inference server (e.g.
-                        a vLLM server launched in a separate slurm job).
+                        Base URL of an already-running inference server (e.g. a vLLM server
+                        launched in a separate slurm job).
   --max-connections MAX_CONNECTIONS
-                        Concurrent attacker generations (default: 20). Tune
-                        down for a self-hosted server, up for a large API
-                        quota.
+                        Concurrent attacker generations (default: 20). Tune down for a self-hosted
+                        server, up for a large API quota.
   --perturb FAMILY [FAMILY ...]
-                        Stage-2 families to generate (default: all
-                        pregenerated families). reconsideration has no
-                        artifacts — it runs live in certify.py.
-  --no-perturb          Skip stage-2 families entirely (e.g. to generate only
-                        --simulate artifacts).
+                        Stage-2 families to generate (default: all pregenerated families).
+                        reconsideration has no artifacts — it runs live in certify.py.
+  --no-perturb          Skip stage-2 families entirely (e.g. to generate only --simulate
+                        artifacts).
   --perturb-k PERTURB_K
-                        Variants per item for the repeat rewrite families
-                        (paraphrase, register, past_tense); default=1.
-  --simulate            Also generate stage-3 scenario trees (scenario.jsonl,
-                        prompt v4).
-  --sim-k SIM_K         Scenario trees per item under --simulate; default=2.
-                        Variant 2 is prompted to use a different deployment
-                        (role, sector, asker) from variant 1.
-  --reasoning           Request reasoning mode from the attacker for scenario
-                        reframings (thinking=True via vLLM's
-                        chat_template_kwargs, e.g. Hermes-4); the <think>
-                        block is stripped before parsing. Models/servers
-                        without the flag ignore it, but plain API providers
-                        (e.g. OpenRouter) may reject the extra body — leave it
-                        off for those.
+                        Variants per item for the repeat rewrite families (paraphrase, register,
+                        past_tense); default=1.
+  --simulate            Also generate stage-3 scenario trees (scenario.jsonl, prompt v4).
+  --sim-k SIM_K         Scenario trees per item under --simulate; default=2. Variant 2 is prompted
+                        to use a different deployment (role, sector, asker) from variant 1.
+  --reasoning           Request reasoning mode from the attacker for scenario reframings
+                        (thinking=True via vLLM's chat_template_kwargs, e.g. Hermes-4); the
+                        <think> block is stripped before parsing. Models/servers without the flag
+                        ignore it, but plain API providers (e.g. OpenRouter) may reject the extra
+                        body — leave it off for those.
   --only LEAF [LEAF ...], -o LEAF [LEAF ...]
-                        Generate only for these leaf datasets (e.g. --only
-                        cbrn cyber_operational_use).
-  --missing-only        Fill gaps in existing artifact files (missing
-                        samples/variants, e.g. failed reframings) and merge,
-                        instead of skipping files that already exist.
-  --force               Regenerate every requested family from scratch,
-                        overwriting existing artifacts.
+                        Generate only for these leaf datasets (e.g. --only cbrn
+                        cyber_operational_use).
+  --missing-only        Fill gaps in existing artifact files (missing samples/variants, e.g.
+                        failed reframings) and merge, instead of skipping files that already
+                        exist.
+  --force               Regenerate every requested family from scratch, overwriting existing
+                        artifacts.
   --limit LIMIT, -l LIMIT
-                        Generate for only the first N samples per task.
-                        WARNING: produces partial artifacts (marked partial in
-                        the meta sidecar) that fail certify.py's full-run
-                        validation — smoke-testing only.
+                        Generate for only the first N samples per task. WARNING: produces partial
+                        artifacts (marked partial in the meta sidecar) that fail certify.py's
+                        full-run validation — smoke-testing only.
 ```
 <!-- /generate-help -->
 
