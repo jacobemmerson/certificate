@@ -53,4 +53,5 @@ exec uv run python3 certify.py \
   --region "$region" \
   --simulate \
   --cheapest \
+  --max-tasks 21 \
   --max-connections "${MAX_CONN:-128}"

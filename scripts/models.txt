@@ -13,7 +13,8 @@ google/gemini-3.6-flash|Gemini 3.6 Flash|Google|US
 meta-llama/llama-3.1-8b-instruct|Llama 3.1 8B Instruct|Meta|US
 z-ai/glm-5.2|GLM 5.2|Z.ai|China
 z-ai/glm-5|GLM 5|Z.ai|China
-qwen/qwen3.8-max|Qwen 3.8 Max|Alibaba|China
+# qwen3.8-max alone is not an OpenRouter slug (checked 2026-11-08); -0902 is the dated release
+qwen/qwen3.8-max-0902|Qwen 3.8 Max|Alibaba|China
 qwen/qwen3.7-flash|Qwen 3.7 Flash|Alibaba|China
 x-ai/grok-4.5|Grok 4.5|xAI|US
 x-ai/grok-4.3|Grok 4.3|xAI|US
