@@ -114,8 +114,7 @@ Modal volumes `hf-cache` (weights) and `vllm-cache` (compile artifacts) make res
 - No source-specific branch in `pipeline/`; every source has a polarity exemplar.
 - Cluster builds are deterministic for a fixed cache; the `families` column is present.
 - Committed artifacts match the committed CSV ids and the current prompt versions
-  (`tests/test_artifacts_current.py`; two checks are `expectedFailure` until the next
-  full regeneration).
+  (`tests/test_artifacts_current.py`).
 - Results JSON never contains `-1`; unmeasured is `null`/NaN.
 
 ## Where to look first when something breaks

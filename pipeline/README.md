@@ -30,8 +30,7 @@ are all fallbacks counts as covered, with a warning, and replays as a `missing` 
 with `uv run python3 -m datasets.prepare.cluster.prepare`), which blocks stage-1-only runs
 too. `tests/test_artifacts_current.py` is the stricter offline check: it also fails on
 rewrite rows whose `query` is not the template re-rendered around `text`, and on framing/persona files the templates no longer reproduce, so stale artifacts
-fail the suite rather than a run. (Its two file checks are `expectedFailure` until the
-artifacts are regenerated; see [docs/family-pilot.md](../docs/family-pilot.md).)
+fail the suite rather than a run (regeneration recipe: [docs/family-pilot.md](../docs/family-pilot.md)).
 
 ## Stages
 
@@ -196,10 +195,10 @@ files):
 | Field | Definition |
 |---|---|
 | `scores.<risk>` | **the headline: `aggregate.tail`** when `status.<risk>.status == "success"`, else `null` |
-| `aggregate` | `{average, worst, tail}`, each a mean over the systemic risks (`HEADLINE_RISKS`) with a non-null value; provisional clusters are scored per risk but excluded |
+| `aggregate` | `{average, worst, tail}`, each a plain mean over the leaves with a non-null value (`utils/results.py::model_aggregate`; no leaf-to-risk mapping exists yet) |
 | `results.<risk>` | the tree above |
 | `status.<risk>` | `{status, completed_samples, total_samples, empty_completions, refusals, usage: {model: {input_tokens, output_tokens, total_cost}}, run_id}`, plus `endpoints` under `--cheapest`; `status` is `success`, `partial` or `failed` (a run that never produced a log has only `status` and `error`) |
-| `id`, `name`, `company`, `region`, `specialty` | identity, from the CLI args where the stored record has none; a stored value wins |
+| `id`, `name`, `company`, `region` | identity, from the CLI args where the stored record has none; a stored value wins |
 | `aa_intelligence_index`, `aa_model_match` | added by `scripts/match_aa_index.py`; a certification keeps them |
 
 A partial or failed run writes `scores.<risk> = null`; when it produced a log the tree is

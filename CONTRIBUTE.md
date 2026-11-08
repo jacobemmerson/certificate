@@ -218,7 +218,7 @@ ship.
 # build the leaves your benchmark serves (every leaf if you omit --leaf)
 uv run python3 -m datasets.prepare.cluster.prepare --leaf cyber_operational_use
 
-# the suite: polarity, template invariants, dedup, doc consistency
+# the suite: polarity, template invariants, dedup, doc consistency, offline end-to-end smoke
 uv run python3 -m unittest discover tests
 
 # cheap smoke run — no model calls at all

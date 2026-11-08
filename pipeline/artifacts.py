@@ -17,6 +17,7 @@ to run) before any eval spends money.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from inspect_ai import Task
@@ -28,7 +29,8 @@ from pipeline.stage3_simulation.prompts import SCENARIO_FAMILY, TREE_PATHS
 from pipeline.utils.replay import family_applies
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-GENERATED_DIR = REPO_ROOT / "datasets" / "generated"
+# CERTIFICATE_GENERATED_DIR redirects the store (smoke tests); the default is the committed one
+GENERATED_DIR = Path(os.environ.get("CERTIFICATE_GENERATED_DIR") or REPO_ROOT / "datasets" / "generated")
 
 # Current prompt/template version per family — compared against each artifact's
 # meta sidecar so a stale artifact set produces a loud warning (never a silent
