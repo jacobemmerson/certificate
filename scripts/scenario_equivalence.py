@@ -15,7 +15,7 @@ reuses the cluster scorer's own judge plumbing — `ask_judge` and `match_label`
 a list of the failures to read, not a pass/fail gate: a low rate means stage 3
 needs prompt work before its numbers mean anything.
 
-    uv run python3 scripts/scenario_equivalence.py --risk manipulation -n 50
+    uv run python3 scripts/scenario_equivalence.py --leaf cbrn -n 50
 
 First run (PROMPT_VERSION 3 manipulation artifacts, gemini-3-flash judge, n=50):
 50/50 content-equivalent. The judge was calibrated against a hand-built
@@ -38,6 +38,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from pipeline.stage1_evaluation.evals.clusters import LEAVES
 from pipeline.stage1_evaluation.scorers.cluster import ask_judge, match_label
 from pipeline.utils.graders import load_graders
 
@@ -80,10 +81,10 @@ Answer:"""
 LABELS = ["same", "softened", "different"]
 
 
-def sample_rows(risk: str, n: int, seed: int) -> list[dict]:
+def sample_rows(leaf: str, n: int, seed: int) -> list[dict]:
     """A deterministic hash-stable sample joining each scenario to its original
     ask, so the same subset is checked across runs (same rule the sampler uses)."""
-    csv_path = REPO_ROOT / "datasets" / "public" / f"{risk}.csv"
+    csv_path = REPO_ROOT / "datasets" / "public" / f"{leaf}.csv"
     # The reframing is judged against what it was actually built from — which is
     # `scenario_item` where a source defines one (persusafety), and `item_text`
     # otherwise. See adapters.py::scenario_source.
@@ -92,7 +93,7 @@ def sample_rows(risk: str, n: int, seed: int) -> list[dict]:
         meta = json.loads(r.get("metadata") or "{}")
         originals[r["sample_id"]] = meta.get("scenario_item") or r["item_text"]
 
-    scenario_path = REPO_ROOT / "datasets" / "generated" / risk / "scenario.jsonl"
+    scenario_path = REPO_ROOT / "datasets" / "generated" / leaf / "scenario.jsonl"
     rows = []
     for line in open(scenario_path):
         row = json.loads(line)
@@ -120,7 +121,7 @@ async def judge_one(model: str, row: dict) -> str | None:
 
 async def main() -> None:
     args = argparse.ArgumentParser(description=__doc__)
-    args.add_argument("--risk", default="manipulation")
+    args.add_argument("--leaf", required=True, choices=LEAVES, metavar="LEAF", help="Leaf dataset whose scenario trees to check.")
     args.add_argument("-n", "--samples", type=int, default=50)
     args.add_argument("--grader", "-g", default=None,
                       help="Judge model; defaults to the first in GRADERS.md.")
@@ -128,8 +129,8 @@ async def main() -> None:
     opts = args.parse_args()
 
     grader = opts.grader or load_graders()[0]
-    rows = sample_rows(opts.risk, opts.samples, opts.seed)
-    print(f"checking {len(rows)} {opts.risk} scenarios against {grader}\n")
+    rows = sample_rows(opts.leaf, opts.samples, opts.seed)
+    print(f"checking {len(rows)} {opts.leaf} scenarios against {grader}\n")
 
     verdicts = await asyncio.gather(*(judge_one(grader, r) for r in rows))
 

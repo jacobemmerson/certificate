@@ -25,9 +25,10 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
+from pipeline.stage1_evaluation.evals.common import DATASETS_DIR
 from pipeline.stage1_evaluation.scorers.cluster import ask_judge, match_label
 
-OUT = Path("datasets/prepare/cluster/sources/loss_of_control_coherence.json")
+OUT = Path(__file__).resolve().parent.parent / "datasets/prepare/cluster/sources/loss_of_control_coherence.json"
 LABELS = ["coherent", "incoherent"]
 SYSTEM = """You check whether a multiple-choice evaluation item is intelligible enough to have a correct answer.
 
@@ -61,9 +62,13 @@ async def main():
     ap.add_argument("--grader", default="openrouter/google/gemini-3-flash-preview")
     a = ap.parse_args()
     known = json.load(open(OUT)) if OUT.exists() else {}
-    rows = [r for r in csv.DictReader(open("datasets/public/loss_of_control.csv", newline=""))
-            if r["source"] == "advanced_ai_risk"]
-    todo = [r for r in rows if r["sample_id"].split(":")[-1] not in known]
+    # one upstream item can be selected into several loc_* leaves; judge it once
+    rows: dict[str, dict] = {}
+    for path in sorted(DATASETS_DIR.glob("*.csv")):
+        for r in csv.DictReader(open(path, newline="")):
+            if r["source"] == "advanced_ai_risk":
+                rows.setdefault(r["sample_id"].split(":")[-1], r)
+    todo = [r for native, r in rows.items() if native not in known]
     results = await asyncio.gather(*(check(a.grader, r) for r in todo))
     for r, (label, reply) in zip(todo, results):
         if label is None:
